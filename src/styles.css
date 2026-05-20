@@ -177,6 +177,19 @@ button { cursor: pointer; }
 .action.primary, .action.dark { background: #159c8f; color: #fff; border-color: #159c8f; }
 .topbar-right { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 .toast { color: #67e4d8; font-size: 12px; font-weight: 800; }
+.status-toast {
+  position: fixed;
+  top: 78px;
+  right: 18px;
+  z-index: 80;
+  background: #159c8f;
+  color: #fff;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 14px 34px rgba(21,156,143,.28);
+}
 .plan-badge {
   display: inline-flex;
   align-items: center;
@@ -264,6 +277,35 @@ button { cursor: pointer; }
 .field { display: grid; gap: 6px; }
 .field span { color: #5d554d; font-size: 12px; font-weight: 850; }
 .field b { margin-left: 8px; color: #c74444; font-size: 11px; }
+.volume-input {
+  display: grid;
+  gap: 8px;
+}
+.volume-input input {
+  width: 100%;
+}
+.unit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.unit-tabs button {
+  border: 1px solid #d8d0c7;
+  border-radius: 999px;
+  background: #fff;
+  color: #514a43;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+.unit-tabs button.selected {
+  background: #1b1b2f;
+  border-color: #1b1b2f;
+  color: #fff;
+}
+.date-tabs button {
+  background: #f8f5f1;
+}
 .field.invalid span::after {
   content: " 要確認";
   color: #c74444;
@@ -450,8 +492,12 @@ button:disabled {
   color: #14723b;
 }
 .check-warn b {
-  background: #fff3d1;
-  color: #8b6500;
+  background: #ffe5e1;
+  color: #b42318;
+}
+.check-list > .check-warn {
+  border-color: #f2aaa2;
+  background: #fff5f3;
 }
 .wide-input { width: 100%; }
 .preview-panel {

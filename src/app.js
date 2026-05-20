@@ -132,12 +132,12 @@ function emptyProduct() {
     updatedAt: new Date().toLocaleDateString("ja-JP"),
   };
 }
-function sampleProduct() {
-  return { ...emptyProduct(), id: "demo1", name: "油菓子", volume: "6個", bestBefore: "2026.8.31", storage: "冷凍保存（-18℃以下）", serving: "解凍後は当日中にお召し上がりください。", ingredients: [{ id: "s1", name: "木綿豆腐（国産）", weight: "120" }, { id: "s2", name: "小麦粉", weight: "80" }, { id: "s3", name: "ショートニング", weight: "40" }, { id: "s4", name: "砂糖", weight: "30" }, { id: "s5", name: "食塩", weight: "3" }, { id: "s6", name: "膨張剤", weight: "2" }, { id: "s7", name: "乳化剤", weight: "1" }], manufacturerName: "㈱APW", manufacturerPostal: "657-0051", manufacturerAddress: "神戸市灘区森後町2-2-12", manufacturerPhone: "078-771-6371", updatedAt: "2026/5/17" };
-}
 function loadProducts() {
-  try { return JSON.parse(safeGet("food-label-products-static")) || [sampleProduct()]; }
-  catch { return [sampleProduct()]; }
+  try {
+    const saved = JSON.parse(safeGet("food-label-products-static"));
+    return Array.isArray(saved) ? saved.filter((p) => p.id !== "demo1") : [];
+  }
+  catch { return []; }
 }
 function saveProducts() { safeSet("food-label-products-static", JSON.stringify(products)); }
 function estimateNutrition(name) {
@@ -243,13 +243,11 @@ function formatExportDate(dateText, countryId) {
 function translateBusinessAddress(address) {
   const text = String(address || "").trim();
   if (!text) return "";
-  if (text.includes("神戸市灘区森後町2-2-12")) return "2-2-12 Morigo-cho, Nada-ku, Kobe, Hyogo, Japan";
   return text
     .replace(/日本/g, "Japan")
     .replace(/兵庫県/g, "Hyogo, ")
     .replace(/神戸市/g, "Kobe, ")
-    .replace(/灘区/g, "Nada-ku, ")
-    .replace(/森後町/g, "Morigo-cho ");
+    .replace(/灘区/g, "Nada-ku, ");
 }
 function exportProductName(p) {
   return p.exportName?.trim() || translateProductName(p.name);

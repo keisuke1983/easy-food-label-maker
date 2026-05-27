@@ -695,7 +695,10 @@ function copyHtmlContent(p, d) {
   const labelHeading = overseas ? `${c.label} Product Label` : "表示ラベル";
   const nutritionHeading = overseas ? c.nutritionTitle : "栄養成分表示";
   const labelStyle = `style="width:${escapeHtml(printCfg.w || "90")}mm;${printCfg.h ? `min-height:${escapeHtml(printCfg.h)}mm;` : ""}font-size:${escapeHtml(printCfg.fs || "7.5")}pt;"`;
-  return `<!doctype html><html><head><meta charset="UTF-8"><style>${copyHtmlStyles()}</style></head><body>${printablePreviewHtml(p, d, labelHeading, nutritionHeading, labelStyle, true)}</body></html>`;
+  return `<style>${copyHtmlStyles()}</style>${printablePreviewHtml(p, d, labelHeading, nutritionHeading, labelStyle, true)}`;
+}
+function copyHtmlDocument(html) {
+  return `<!doctype html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
 }
 function basicLabelHtml(p, d) {
   if (isGlobalExport()) return overseasLabelHtml(p, d);
@@ -1011,6 +1014,35 @@ function printLabels() {
   setTimeout(() => document.getElementById("print-style")?.remove(), 1200);
 }
 
+function copyRichHtml(html, text) {
+  const box = document.createElement("div");
+  box.setAttribute("contenteditable", "true");
+  box.style.position = "fixed";
+  box.style.left = "-10000px";
+  box.style.top = "0";
+  box.style.width = "1000px";
+  box.style.background = "#fff";
+  box.innerHTML = html;
+  document.body.appendChild(box);
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(box);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  selection.removeAllRanges();
+  box.remove();
+  if (ok) return Promise.resolve();
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  prompt("コピーしてください", text);
+  return Promise.resolve();
+}
+
 function copyLabels() {
   const p = currentProduct();
   const d = derive(p);
@@ -1063,24 +1095,16 @@ function copyLabels() {
   if (navigator.clipboard?.write && window.ClipboardItem) {
     navigator.clipboard.write([
       new ClipboardItem({
-        "text/html": new Blob([html], { type: "text/html" }),
+        "text/html": new Blob([copyHtmlDocument(html)], { type: "text/html" }),
         "text/plain": new Blob([text], { type: "text/plain" }),
       }),
     ])
-      .then(() => showStatus("コピーしました"))
+      .then(() => showStatus("枠ごとコピーしました"))
       .catch(() => {
-        if (navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(text).then(() => showStatus("コピーしました"));
-        } else {
-          prompt("コピーしてください", text);
-          showStatus("コピーしました");
-        }
+        copyRichHtml(html, text).then(() => showStatus("枠ごとコピーしました"));
       });
-  } else if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(() => showStatus("コピーしました"));
   } else {
-    prompt("コピーしてください", text);
-    showStatus("コピーしました");
+    copyRichHtml(html, text).then(() => showStatus("枠ごとコピーしました"));
   }
 }
 

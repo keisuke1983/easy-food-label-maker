@@ -641,7 +641,7 @@ function previewHtml(p, d) {
     <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
     <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
     ${previewNote}
-    <div class="output-actions"><button class="action" data-action="copy-output">${overseas ? "Copy" : "コピーする"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷前確認を開く"}</button></div>
+    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Copy image for printer app" : "画像コピー（P-touch用）"}</button><button class="action" data-action="copy-output">${overseas ? "Copy table" : "表コピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷前確認を開く"}</button></div>
     <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
   </aside>`;
@@ -981,6 +981,9 @@ function bindEvents() {
   document.querySelectorAll("[data-action='copy-output']").forEach((el) => el.addEventListener("click", () => {
     copyLabels();
   }));
+  document.querySelectorAll("[data-action='copy-image-output']").forEach((el) => el.addEventListener("click", () => {
+    copyImageLabels();
+  }));
   document.querySelectorAll("[data-action='open-print-preview']").forEach((el) => el.addEventListener("click", () => {
     printPreviewOpen = true;
     render();
@@ -1041,6 +1044,53 @@ function copyRichHtml(html, text) {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
   prompt("コピーしてください", text);
   return Promise.resolve();
+}
+
+function copyImageLabels() {
+  const p = currentProduct();
+  const d = derive(p);
+  const html = copyHtmlContent(p, d);
+  const holder = document.createElement("div");
+  holder.style.position = "fixed";
+  holder.style.left = "-10000px";
+  holder.style.top = "0";
+  holder.style.background = "#fff";
+  holder.style.padding = `${Number(printCfg.margin || 3) * 3.78}px`;
+  holder.innerHTML = html;
+  document.body.appendChild(holder);
+  const rect = holder.getBoundingClientRect();
+  const width = Math.ceil(Math.max(holder.scrollWidth, rect.width, 320));
+  const height = Math.ceil(Math.max(holder.scrollHeight, rect.height, 120));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;width:${width}px;min-height:${height}px;">${html}</div></foreignObject></svg>`;
+  const image = new Image();
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(2, 2);
+    ctx.drawImage(image, 0, 0);
+    URL.revokeObjectURL(url);
+    holder.remove();
+    canvas.toBlob((blob) => {
+      if (!blob || !navigator.clipboard?.write || !window.ClipboardItem) {
+        showStatus("画像コピー非対応です");
+        return;
+      }
+      navigator.clipboard.write([new ClipboardItem({ "image/png": blob })])
+        .then(() => showStatus("画像としてコピーしました"))
+        .catch(() => showStatus("画像コピーが許可されませんでした"));
+    }, "image/png");
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
+    holder.remove();
+    showStatus("画像コピーに失敗しました");
+  };
+  image.src = url;
 }
 
 function copyLabels() {

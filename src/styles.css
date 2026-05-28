@@ -251,7 +251,7 @@ button { cursor: pointer; }
   align-items: start;
 }
 .form-column { display: grid; gap: 16px; }
-.preview-column { position: sticky; top: 86px; }
+.preview-column { position: sticky; top: 104px; }
 .section {
   background: #fff;
   border: 1px solid #ded7ce;
@@ -511,6 +511,29 @@ button:disabled {
 }
 .preview-toolbar, .print-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .print-controls select { flex: 1 1 150px; }
+.target-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  background: #f8f5f1;
+  border: 1px solid #ded7ce;
+  border-radius: 8px;
+}
+.target-tabs button {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #554d45;
+  font-size: 12px;
+  font-weight: 900;
+}
+.target-tabs button.selected {
+  background: #1b1b2f;
+  color: #fff;
+  border-color: #1b1b2f;
+}
 .output-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -592,15 +615,15 @@ button:disabled {
 .print-preview-modal {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 2000;
   background: rgba(20, 20, 24, .62);
   display: grid;
-  place-items: center;
-  padding: 24px;
+  place-items: start center;
+  padding: 92px 24px 24px;
 }
 .print-preview-card {
   width: min(1100px, 96vw);
-  max-height: 92vh;
+  max-height: calc(100vh - 116px);
   background: #fff;
   border-radius: 8px;
   border: 1px solid #d8d0c7;
@@ -802,6 +825,7 @@ button:disabled {
   .mfr-choice { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .country-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .size-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .target-tabs { grid-template-columns: 1fr; }
   .output-actions { grid-template-columns: 1fr; }
   .ing-row { grid-template-columns: 24px minmax(0, 1fr) 80px 38px; }
   .badges { grid-column: 2 / -1; }

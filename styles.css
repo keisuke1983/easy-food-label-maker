@@ -251,7 +251,14 @@ button { cursor: pointer; }
   align-items: start;
 }
 .form-column { display: grid; gap: 16px; }
-.preview-column { position: sticky; top: 104px; }
+.preview-column {
+  position: sticky;
+  top: 80px;
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
 .section {
   background: #fff;
   border: 1px solid #ded7ce;
@@ -508,6 +515,7 @@ button:disabled {
   display: grid;
   gap: 12px;
   box-shadow: 0 12px 30px rgba(30,30,30,.08);
+  min-height: 0;
 }
 .preview-toolbar, .print-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .print-controls select { flex: 1 1 150px; }
@@ -816,7 +824,12 @@ button:disabled {
   .plan-grid { grid-template-columns: 1fr; }
   .home-card { min-height: 170px; }
   .editor-shell { padding-bottom: 90px; }
-  .preview-column { position: static; }
+  .preview-column {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+    padding-right: 0;
+  }
   .hide-mobile { display: none; }
   .mobile-switch { display: block; }
   .topbar { grid-template-columns: auto 1fr auto; }

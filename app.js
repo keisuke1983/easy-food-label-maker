@@ -1159,6 +1159,16 @@ function canvasToPngBlob(canvas) {
   return new Blob([bytes], { type: "image/png" });
 }
 
+function downloadCanvasImage(canvas) {
+  const link = document.createElement("a");
+  link.href = canvas.toDataURL("image/png");
+  link.download = `food-label-${new Date().toISOString().slice(0, 10)}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showStatus("\u753b\u50cf\u3092\u4fdd\u5b58\u3057\u307e\u3057\u305f");
+}
+
 function copyImageLabels() {
   try {
     const p = currentProduct();
@@ -1206,14 +1216,14 @@ function copyImageLabels() {
     trimmed.height = finalH;
     trimmed.getContext("2d").drawImage(canvas, 0, 0);
     if (!navigator.clipboard?.write || !window.ClipboardItem) {
-      showStatus("画像コピーは公開URLで使えます");
+      downloadCanvasImage(trimmed);
       return;
     }
     navigator.clipboard.write([new ClipboardItem({ "image/png": canvasToPngBlob(trimmed) })])
-      .then(() => showStatus("画像としてコピーしました"))
-      .catch(() => showStatus("画像コピーが許可されませんでした"));
+      .then(() => showStatus("\u753b\u50cf\u3068\u3057\u3066\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f"))
+      .catch(() => downloadCanvasImage(trimmed));
   } catch {
-    showStatus("画像コピーに失敗しました");
+    showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
   }
 }
 
@@ -1269,17 +1279,22 @@ function copyLabels() {
 
 function copyPlainText(text) {
   const success = () => showStatus("\u6587\u5b57\u3060\u3051\u30b3\u30d4\u30fc\u3067\u304d\u307e\u3057\u305f");
-  const failure = () => showStatus("\u6587\u5b57\u3060\u3051\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+  const manual = () => showStatus("\u30b3\u30d4\u30fc\u6b04\u3092\u958b\u304d\u307e\u3057\u305f");
   const fallbackCopy = () => {
     const area = document.createElement("textarea");
     area.value = text;
     area.setAttribute("readonly", "readonly");
     area.style.position = "fixed";
-    area.style.left = "-10000px";
-    area.style.top = "0";
+    area.style.left = "8px";
+    area.style.top = "8px";
+    area.style.width = "2px";
+    area.style.height = "2px";
+    area.style.opacity = "0.01";
+    area.style.zIndex = "9999";
     document.body.appendChild(area);
     area.focus();
     area.select();
+    area.setSelectionRange(0, area.value.length);
     let ok = false;
     try {
       ok = document.execCommand("copy");
@@ -1294,16 +1309,17 @@ function copyPlainText(text) {
     return false;
   };
 
-  if (fallbackCopy()) return;
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).then(success).catch(() => {
+      if (fallbackCopy()) return;
       prompt("\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044", text);
-      failure();
+      manual();
     });
     return;
   }
+  if (fallbackCopy()) return;
   prompt("\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044", text);
-  failure();
+  manual();
 }
 
 render();

@@ -1243,13 +1243,7 @@ function copyImageLabels() {
     trimmed.width = canvas.width;
     trimmed.height = finalH;
     trimmed.getContext("2d").drawImage(canvas, 0, 0);
-    if (!navigator.clipboard?.write || !window.ClipboardItem) {
-      downloadCanvasImage(trimmed);
-      return;
-    }
-    navigator.clipboard.write([new ClipboardItem({ "image/png": canvasToPngBlob(trimmed) })])
-      .then(() => showStatus("\u753b\u50cf\u3068\u3057\u3066\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f"))
-      .catch(() => downloadCanvasImage(trimmed));
+    downloadCanvasImage(trimmed);
   } catch {
     showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
   }

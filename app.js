@@ -641,7 +641,7 @@ function previewHtml(p, d) {
     <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
     <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
     ${previewNote}
-    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Copy as image" : "画像でコピー"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
+    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Save image" : "\u753b\u50cf\u4fdd\u5b58"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
     <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
   </aside>`;
@@ -1193,12 +1193,45 @@ function showImageSavePanel(dataUrl) {
   showStatus("\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f");
 }
 
+function openImageSaveWindow(dataUrl) {
+  const win = window.open("", "_blank");
+  if (!win) return false;
+  win.document.open();
+  win.document.write(`<!doctype html>
+    <html lang="ja">
+      <head>
+        <meta charset="UTF-8">
+        <title>\u753b\u50cf\u4fdd\u5b58</title>
+        <style>
+          body{font-family:system-ui,-apple-system,"Yu Gothic",sans-serif;margin:24px;background:#f7f4ef;color:#1f1b2d;}
+          .bar{display:flex;gap:12px;align-items:center;margin-bottom:16px;}
+          a{background:#159c8f;color:white;text-decoration:none;border-radius:10px;padding:12px 18px;font-weight:800;}
+          p{margin:0;color:#554f46;}
+          img{display:block;max-width:100%;height:auto;background:white;border:1px solid #ddd;box-shadow:0 10px 30px rgba(0,0,0,.12);}
+        </style>
+      </head>
+      <body>
+        <div class="bar">
+          <a href="${dataUrl}" download="food-label-${new Date().toISOString().slice(0, 10)}.png">\u753b\u50cf\u3092\u4fdd\u5b58</a>
+          <p>\u4fdd\u5b58\u30dc\u30bf\u30f3\u304c\u52d5\u304b\u306a\u3044\u5834\u5408\u306f\u3001\u753b\u50cf\u3092\u53f3\u30af\u30ea\u30c3\u30af\u3057\u3066\u4fdd\u5b58\u3057\u3066\u304f\u3060\u3055\u3044\u3002</p>
+        </div>
+        <img src="${dataUrl}" alt="\u98df\u54c1\u8868\u793a\u30e9\u30d9\u30eb">
+      </body>
+    </html>`);
+  win.document.close();
+  return true;
+}
+
 function downloadCanvasImage(canvas) {
-  showImageSavePanel(canvas.toDataURL("image/png"));
+  const dataUrl = canvas.toDataURL("image/png");
+  const opened = openImageSaveWindow(dataUrl);
+  showImageSavePanel(dataUrl);
+  showStatus(opened ? "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f" : "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u8868\u793a\u3057\u307e\u3057\u305f");
 }
 
 function copyImageLabels() {
   try {
+    showStatus("\u753b\u50cf\u3092\u4f5c\u6210\u4e2d\u3067\u3059");
     const p = currentProduct();
     const d = derive(p);
     const scale = 2;
@@ -1245,7 +1278,7 @@ function copyImageLabels() {
     trimmed.getContext("2d").drawImage(canvas, 0, 0);
     downloadCanvasImage(trimmed);
   } catch {
-    showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+    showStatus("\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u3051\u307e\u305b\u3093\u3067\u3057\u305f");
   }
 }
 

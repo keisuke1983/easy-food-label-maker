@@ -1159,14 +1159,42 @@ function canvasToPngBlob(canvas) {
   return new Blob([bytes], { type: "image/png" });
 }
 
-function downloadCanvasImage(canvas) {
+function downloadImageDataUrl(dataUrl) {
   const link = document.createElement("a");
-  link.href = canvas.toDataURL("image/png");
+  link.href = dataUrl;
   link.download = `food-label-${new Date().toISOString().slice(0, 10)}.png`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   showStatus("\u753b\u50cf\u3092\u4fdd\u5b58\u3057\u307e\u3057\u305f");
+}
+
+function showImageSavePanel(dataUrl) {
+  document.querySelector(".image-save-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "print-preview-modal image-save-modal";
+  modal.innerHTML = `
+    <div class="print-preview-card">
+      <div class="print-preview-head">
+        <div>
+          <b>\u753b\u50cf\u3092\u4fdd\u5b58</b>
+          <span>\u753b\u50cf\u30b3\u30d4\u30fc\u304c\u8a31\u53ef\u3055\u308c\u306a\u3044\u5834\u5408\u306f\u3001\u3053\u3053\u304b\u3089PNG\u753b\u50cf\u3068\u3057\u3066\u4fdd\u5b58\u3067\u304d\u307e\u3059\u3002</span>
+        </div>
+        <button class="action" data-image-close>\u9589\u3058\u308b</button>
+        <button class="action primary" data-image-save>\u753b\u50cf\u3092\u4fdd\u5b58</button>
+      </div>
+      <div class="print-preview-sheet">
+        <img src="${dataUrl}" alt="\u98df\u54c1\u8868\u793a\u30e9\u30d9\u30eb\u753b\u50cf" style="max-width:100%;height:auto;background:#fff;border:1px solid #ddd;">
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("[data-image-close]").addEventListener("click", () => modal.remove());
+  modal.querySelector("[data-image-save]").addEventListener("click", () => downloadImageDataUrl(dataUrl));
+  showStatus("\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f");
+}
+
+function downloadCanvasImage(canvas) {
+  showImageSavePanel(canvas.toDataURL("image/png"));
 }
 
 function copyImageLabels() {

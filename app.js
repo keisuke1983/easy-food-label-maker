@@ -641,7 +641,7 @@ function previewHtml(p, d) {
     <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
     <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
     ${previewNote}
-    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Save image" : "\u753b\u50cf\u4fdd\u5b58"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
+    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Save image" : "\u753b\u50cf\u3092\u4fdd\u5b58"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
     <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
   </aside>`;
@@ -1178,7 +1178,7 @@ function showImageSavePanel(dataUrl) {
       <div class="print-preview-head">
         <div>
           <b>\u753b\u50cf\u3092\u4fdd\u5b58</b>
-          <span>\u753b\u50cf\u30b3\u30d4\u30fc\u304c\u8a31\u53ef\u3055\u308c\u306a\u3044\u5834\u5408\u306f\u3001\u3053\u3053\u304b\u3089PNG\u753b\u50cf\u3068\u3057\u3066\u4fdd\u5b58\u3067\u304d\u307e\u3059\u3002</span>
+          <span>PNG\u753b\u50cf\u3068\u3057\u3066\u4fdd\u5b58\u3067\u304d\u307e\u3059\u3002P-touch\u306b\u53d6\u308a\u8fbc\u3080\u5834\u5408\u306f\u3001\u4fdd\u5b58\u3057\u305f\u753b\u50cf\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002</span>
         </div>
         <button class="action" data-image-close>\u9589\u3058\u308b</button>
         <button class="action primary" data-image-save>\u753b\u50cf\u3092\u4fdd\u5b58</button>

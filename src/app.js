@@ -641,7 +641,7 @@ function previewHtml(p, d) {
     <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
     <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
     ${previewNote}
-    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Copy as image" : "画像でコピー"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
+    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Save image" : "\u753b\u50cf\u3092\u4fdd\u5b58"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
     <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
   </aside>`;
@@ -1046,70 +1046,239 @@ function copyRichHtml(html, text) {
   return Promise.resolve();
 }
 
+function imageCopyRows(p, d) {
+  if (isGlobalExport()) {
+    const c = selectedCountry(p);
+    const maker = [p.manufacturerName, p.manufacturerPostal ? `ZIP ${p.manufacturerPostal}` : "", exportAddress(p), p.manufacturerPhone].filter(Boolean).join(" ");
+    const rows = [
+      ["Destination", c.label],
+      ["Product name", exportProductName(p)],
+      [p.exportCountry === "ca" ? "Ingredients / Ingredients" : "Ingredients", buildEnglishIngLabel(p.ingredients) || "-"],
+      ["Net contents", exportNetContent(p)],
+      ["Best before", formatExportDate(p.bestBefore, p.exportCountry || "us")],
+      ["Country of origin", p.originCountry || "Japan"],
+      ["Storage", translateStorage(p, d)],
+      ["Business operator / Importer", maker || "-"],
+    ];
+    const importer = [p.importerName, p.importerAddress].filter(Boolean).join(" ");
+    if (importer) rows.push(["Importer / Distributor", importer]);
+    if (d.allergens.length) rows.push(["Allergens", `${c.allergenLead}: ${translateAllergens(d.allergens).join(", ")}`]);
+    return rows;
+  }
+  const maker = [p.manufacturerName, p.manufacturerPostal ? `〒${p.manufacturerPostal}` : "", p.manufacturerAddress, p.manufacturerPhone].filter(Boolean).join(" ");
+  const rows = [["名称", p.name || "ー"], ["原材料名", d.ingLabel || "ー"], ["内容量", p.volume || "ー"], ["賞味期限", p.bestBefore || "ー"], ["保存方法", d.storage || "ー"]];
+  selectedMfrTypes(p).forEach((type) => rows.push([type, maker || "ー"]));
+  if (d.allergens.length) rows.push(["アレルゲン", `${d.allergens.join("・")}を含む`]);
+  return rows;
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  const chars = String(text || "").split("");
+  const lines = [];
+  let line = "";
+  chars.forEach((ch) => {
+    const next = line + ch;
+    if (line && ctx.measureText(next).width > maxWidth) {
+      lines.push(line);
+      line = ch;
+    } else {
+      line = next;
+    }
+  });
+  if (line) lines.push(line);
+  return lines.length ? lines : ["ー"];
+}
+
+function drawTextLines(ctx, lines, x, y, lineHeight) {
+  lines.forEach((line, idx) => ctx.fillText(line, x, y + idx * lineHeight));
+}
+
+function drawTableImage(ctx, x, y, width, title, rows, fs) {
+  const keyW = Math.min(112, Math.max(78, width * 0.26));
+  const pad = 8;
+  const lineH = fs * 1.45;
+  ctx.strokeStyle = "#000";
+  ctx.fillStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
+  let cy = y;
+  if (title) {
+    ctx.font = `700 ${fs + 2}px "Yu Mincho","MS PMincho",serif`;
+    ctx.textAlign = "left";
+    ctx.fillText(title, x, cy + fs + 2);
+    cy += fs + 12;
+    ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
+  }
+  rows.forEach(([key, value]) => {
+    const valueLines = wrapCanvasText(ctx, value, width - keyW - pad * 3);
+    const rowH = Math.max(28, valueLines.length * lineH + pad * 1.4);
+    ctx.strokeRect(x, cy, width, rowH);
+    ctx.beginPath();
+    ctx.moveTo(x + keyW, cy);
+    ctx.lineTo(x + keyW, cy + rowH);
+    ctx.stroke();
+    ctx.font = `700 ${fs}px "Yu Mincho","MS PMincho",serif`;
+    ctx.fillText(String(key || ""), x + pad, cy + pad + fs);
+    ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
+    drawTextLines(ctx, valueLines, x + keyW + pad, cy + pad + fs, lineH);
+    cy += rowH;
+  });
+  return cy;
+}
+
+function drawNutritionImage(ctx, x, y, width, d, fs) {
+  const n = d.nutrition;
+  if (isGlobalExport()) {
+    const c = selectedCountry(currentProduct());
+    return drawTableImage(ctx, x, y, width, c.nutritionTitle, [
+      [c.per, ""],
+      [c.calories, `${n.kcal}kcal`],
+      ["Protein", `${n.protein}g`],
+      ["Total fat", `${n.fat}g`],
+      [c.carb, `${n.carbs}g`],
+      [c.salt, `${n.salt}g`],
+      ["Note", `Estimated values. Verify rules for ${c.label}.`],
+    ], fs);
+  }
+  return drawTableImage(ctx, x, y, width, "栄養成分表示", [
+    ["100g当たり", ""],
+    ["エネルギー", `${n.kcal}kcal`],
+    ["たんぱく質", `${n.protein}g`],
+    ["脂質", `${n.fat}g`],
+    ["炭水化物", `${n.carbs}g`],
+    ["食塩相当量", `${n.salt}g`],
+    ["備考", `この表示値は目安です。${d.autoNutrition.hasEst ? "一部推定値を含みます。" : ""}`],
+  ], fs);
+}
+
+function canvasToPngBlob(canvas) {
+  const dataUrl = canvas.toDataURL("image/png");
+  const bin = atob(dataUrl.split(",")[1]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: "image/png" });
+}
+
+function downloadImageDataUrl(dataUrl) {
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = `food-label-${new Date().toISOString().slice(0, 10)}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showStatus("\u753b\u50cf\u3092\u4fdd\u5b58\u3057\u307e\u3057\u305f");
+}
+
+function showImageSavePanel(dataUrl) {
+  document.querySelector(".image-save-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "print-preview-modal image-save-modal";
+  modal.innerHTML = `
+    <div class="print-preview-card">
+      <div class="print-preview-head">
+        <div>
+          <b>\u753b\u50cf\u3092\u4fdd\u5b58</b>
+          <span>PNG\u753b\u50cf\u3068\u3057\u3066\u4fdd\u5b58\u3067\u304d\u307e\u3059\u3002P-touch\u306b\u53d6\u308a\u8fbc\u3080\u5834\u5408\u306f\u3001\u4fdd\u5b58\u3057\u305f\u753b\u50cf\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044\u3002</span>
+        </div>
+        <button class="action" data-image-close>\u9589\u3058\u308b</button>
+        <button class="action primary" data-image-save>\u753b\u50cf\u3092\u4fdd\u5b58</button>
+      </div>
+      <div class="print-preview-sheet">
+        <img src="${dataUrl}" alt="\u98df\u54c1\u8868\u793a\u30e9\u30d9\u30eb\u753b\u50cf" style="max-width:100%;height:auto;background:#fff;border:1px solid #ddd;">
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("[data-image-close]").addEventListener("click", () => modal.remove());
+  modal.querySelector("[data-image-save]").addEventListener("click", () => downloadImageDataUrl(dataUrl));
+  showStatus("\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f");
+}
+
+function openImageSaveWindow(dataUrl) {
+  const win = window.open("", "_blank");
+  if (!win) return false;
+  win.document.open();
+  win.document.write(`<!doctype html>
+    <html lang="ja">
+      <head>
+        <meta charset="UTF-8">
+        <title>\u753b\u50cf\u4fdd\u5b58</title>
+        <style>
+          body{font-family:system-ui,-apple-system,"Yu Gothic",sans-serif;margin:24px;background:#f7f4ef;color:#1f1b2d;}
+          .bar{display:flex;gap:12px;align-items:center;margin-bottom:16px;}
+          a{background:#159c8f;color:white;text-decoration:none;border-radius:10px;padding:12px 18px;font-weight:800;}
+          p{margin:0;color:#554f46;}
+          img{display:block;max-width:100%;height:auto;background:white;border:1px solid #ddd;box-shadow:0 10px 30px rgba(0,0,0,.12);}
+        </style>
+      </head>
+      <body>
+        <div class="bar">
+          <a href="${dataUrl}" download="food-label-${new Date().toISOString().slice(0, 10)}.png">\u753b\u50cf\u3092\u4fdd\u5b58</a>
+          <p>\u4fdd\u5b58\u30dc\u30bf\u30f3\u304c\u52d5\u304b\u306a\u3044\u5834\u5408\u306f\u3001\u753b\u50cf\u3092\u53f3\u30af\u30ea\u30c3\u30af\u3057\u3066\u4fdd\u5b58\u3057\u3066\u304f\u3060\u3055\u3044\u3002</p>
+        </div>
+        <img src="${dataUrl}" alt="\u98df\u54c1\u8868\u793a\u30e9\u30d9\u30eb">
+      </body>
+    </html>`);
+  win.document.close();
+  return true;
+}
+
+function downloadCanvasImage(canvas) {
+  const dataUrl = canvas.toDataURL("image/png");
+  const opened = openImageSaveWindow(dataUrl);
+  showImageSavePanel(dataUrl);
+  showStatus(opened ? "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f" : "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u8868\u793a\u3057\u307e\u3057\u305f");
+}
+
 function copyImageLabels() {
-  showStatus("画像コピーを準備中です");
   try {
+    showStatus("\u753b\u50cf\u3092\u4f5c\u6210\u4e2d\u3067\u3059");
     const p = currentProduct();
     const d = derive(p);
-    const html = copyHtmlContent(p, d);
-    const holder = document.createElement("div");
-    holder.style.position = "fixed";
-    holder.style.left = "-10000px";
-    holder.style.top = "0";
-    holder.style.background = "#fff";
-    holder.style.padding = `${Number(printCfg.margin || 3) * 3.78}px`;
-    holder.innerHTML = html;
-    document.body.appendChild(holder);
-    const rect = holder.getBoundingClientRect();
-    const width = Math.ceil(Math.max(holder.scrollWidth, rect.width, 320));
-    const height = Math.ceil(Math.max(holder.scrollHeight, rect.height, 120));
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;width:${width}px;min-height:${height}px;">${html}</div></foreignObject></svg>`;
-    const image = new Image();
-    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      holder.remove();
-    };
-    image.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = width * 2;
-        canvas.height = height * 2;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.scale(2, 2);
-        ctx.drawImage(image, 0, 0);
-        cleanup();
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            showStatus("画像作成に失敗しました");
-            return;
-          }
-          if (!navigator.clipboard?.write || !window.ClipboardItem) {
-            showStatus("この画面では画像コピー非対応です");
-            return;
-          }
-          try {
-            navigator.clipboard.write([new ClipboardItem({ "image/png": blob })])
-              .then(() => showStatus("画像としてコピーしました"))
-              .catch(() => showStatus("画像コピーが許可されませんでした"));
-          } catch {
-            showStatus("画像コピーが許可されませんでした");
-          }
-        }, "image/png");
-      } catch {
-        cleanup();
-        showStatus("画像コピーに失敗しました");
+    const scale = 2;
+    const pxPerMm = 3.8;
+    const margin = Math.max(8, Number(printCfg.margin || 3) * pxPerMm);
+    const contentW = Math.max(260, Number(printCfg.w || 90) * pxPerMm);
+    const fs = Math.max(10, Number(printCfg.fs || 7.5) * 1.45);
+    const canvas = document.createElement("canvas");
+    const roughRows = imageCopyRows(p, d).length + (printTarget !== "label" ? 8 : 0);
+    canvas.width = Math.ceil((contentW + margin * 2) * scale);
+    canvas.height = Math.ceil((Math.max(180, roughRows * 42 + margin * 2 + 80)) * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width / scale, canvas.height / scale);
+    let y = margin;
+    if (printTarget !== "nutrition") {
+      y = drawTableImage(ctx, margin, y, contentW, isGlobalExport() ? `${selectedCountry(p).label} Product Label` : "表示ラベル", imageCopyRows(p, d), fs);
+      const jan = normalizedJan(p.janCode);
+      if (canUseJanCode() && jan) {
+        y += 10;
+        ctx.strokeRect(margin, y, contentW, 38);
+        ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
+        ctx.fillStyle = "#000";
+        ctx.fillText(`${isGlobalExport() ? "JAN code" : "JANコード"}: ${jan}`, margin + 8, y + 24);
+        y += 48;
       }
-    };
-    image.onerror = () => {
-      cleanup();
-      showStatus("画像コピーに失敗しました");
-    };
-    image.src = url;
+      if (d.contamination) {
+        ctx.font = `${Math.max(10, fs * 0.82)}px "Yu Mincho","MS PMincho",serif`;
+        const note = `${isGlobalExport() ? "※ Cross-contact: " : "※"}${d.contamination}`;
+        const lines = wrapCanvasText(ctx, note, contentW);
+        drawTextLines(ctx, lines, margin, y + fs, fs * 1.25);
+        y += lines.length * fs * 1.25 + 12;
+      }
+    }
+    if (printTarget !== "label") {
+      if (printTarget === "both") y += 22;
+      y = drawNutritionImage(ctx, margin, y, contentW, d, fs);
+    }
+    const finalH = Math.ceil((y + margin) * scale);
+    const trimmed = document.createElement("canvas");
+    trimmed.width = canvas.width;
+    trimmed.height = finalH;
+    trimmed.getContext("2d").drawImage(canvas, 0, 0);
+    downloadCanvasImage(trimmed);
   } catch {
-    showStatus("画像コピーに失敗しました");
+    showStatus("\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u3051\u307e\u305b\u3093\u3067\u3057\u305f");
   }
 }
 
@@ -1160,18 +1329,52 @@ function copyLabels() {
       parts.push(`栄養成分表示（100g当たり）\nエネルギー：${n.kcal}kcal\nたんぱく質：${n.protein}g\n脂質：${n.fat}g\n炭水化物：${n.carbs}g\n食塩相当量：${n.salt}g`);
     }
   }
-  const text = parts.join("\n\n");
+  copyPlainText(parts.join("\n\n"));
+}
+
+function copyPlainText(text) {
+  const success = () => showStatus("\u6587\u5b57\u3060\u3051\u30b3\u30d4\u30fc\u3067\u304d\u307e\u3057\u305f");
+  const manual = () => showStatus("\u30b3\u30d4\u30fc\u6b04\u3092\u958b\u304d\u307e\u3057\u305f");
+  const fallbackCopy = () => {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "readonly");
+    area.style.position = "fixed";
+    area.style.left = "8px";
+    area.style.top = "8px";
+    area.style.width = "2px";
+    area.style.height = "2px";
+    area.style.opacity = "0.01";
+    area.style.zIndex = "9999";
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    area.setSelectionRange(0, area.value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    if (ok) {
+      success();
+      return true;
+    }
+    return false;
+  };
+
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text)
-      .then(() => showStatus("文字だけコピーしました"))
-      .catch(() => {
-        prompt("コピーしてください", text);
-        showStatus("自動コピーに失敗しました");
-      });
-  } else {
-    prompt("コピーしてください", text);
-    showStatus("自動コピーに失敗しました");
+    navigator.clipboard.writeText(text).then(success).catch(() => {
+      if (fallbackCopy()) return;
+      prompt("\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044", text);
+      manual();
+    });
+    return;
   }
+  if (fallbackCopy()) return;
+  prompt("\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044", text);
+  manual();
 }
 
 render();

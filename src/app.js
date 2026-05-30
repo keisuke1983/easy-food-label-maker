@@ -641,7 +641,7 @@ function previewHtml(p, d) {
     <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
     <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
     ${previewNote}
-    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Save image" : "\u753b\u50cf\u3092\u4fdd\u5b58"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
+    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Copy image" : "\u753b\u50cf\u3067\u30b3\u30d4\u30fc"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
     <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
   </aside>`;
@@ -1276,9 +1276,18 @@ function copyImageLabels() {
     trimmed.width = canvas.width;
     trimmed.height = finalH;
     trimmed.getContext("2d").drawImage(canvas, 0, 0);
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+      navigator.clipboard.write([new ClipboardItem({ "image/png": canvasToPngBlob(trimmed) })])
+        .then(() => showStatus("\u753b\u50cf\u3068\u3057\u3066\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f"))
+        .catch(() => {
+          downloadCanvasImage(trimmed);
+          showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u304c\u8a31\u53ef\u3055\u308c\u306a\u3044\u305f\u3081\u3001\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f");
+        });
+      return;
+    }
     downloadCanvasImage(trimmed);
   } catch {
-    showStatus("\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u3051\u307e\u305b\u3093\u3067\u3057\u305f");
+    showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
   }
 }
 

@@ -1234,8 +1234,8 @@ function copyImageLabels() {
     showStatus("\u753b\u50cf\u3092\u4f5c\u6210\u4e2d\u3067\u3059");
     const p = currentProduct();
     const d = derive(p);
-    const scale = 2;
-    const pxPerMm = 3.8;
+    const scale = 4;
+    const pxPerMm = 4;
     const margin = Math.max(8, Number(printCfg.margin || 3) * pxPerMm);
     const contentW = Math.max(260, Number(printCfg.w || 90) * pxPerMm);
     const fs = Math.max(10, Number(printCfg.fs || 7.5) * 1.45);

@@ -1,4 +1,4 @@
-const NUTRITION_DB = {
+﻿const NUTRITION_DB = {
   "米粉": { kcal: 356, protein: 6.0, fat: 0.7, carbs: 79.8, salt: 0 },
   "砂糖": { kcal: 384, protein: 0, fat: 0, carbs: 99.2, salt: 0 },
   "きび糖": { kcal: 382, protein: 0.1, fat: 0.1, carbs: 98.4, salt: 0 },
@@ -28,10 +28,44 @@ const NUTRITION_DB = {
   "豆乳": { kcal: 46, protein: 3.6, fat: 2, carbs: 3.1, salt: 0 },
   "乳化剤": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0 },
   "増粘剤": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0 },
+  "味噌": { kcal: 198, protein: 12.5, fat: 6.0, carbs: 21.9, salt: 12.4 },
+  "醤油": { kcal: 71, protein: 7.7, fat: 0, carbs: 7.9, salt: 14.5 },
+  "しょうゆ": { kcal: 71, protein: 7.7, fat: 0, carbs: 7.9, salt: 14.5 },
+  "みりん": { kcal: 241, protein: 0.3, fat: 0, carbs: 43.2, salt: 0 },
+  "酒": { kcal: 109, protein: 0.4, fat: 0, carbs: 5.0, salt: 0 },
+  "料理酒": { kcal: 109, protein: 0.4, fat: 0, carbs: 5.0, salt: 0 },
+  "酢": { kcal: 25, protein: 0.1, fat: 0, carbs: 2.4, salt: 0 },
+  "米酢": { kcal: 46, protein: 0.2, fat: 0, carbs: 7.4, salt: 0 },
+  "コーンスターチ": { kcal: 354, protein: 0.8, fat: 0.7, carbs: 86.3, salt: 0 },
+  "抹茶": { kcal: 324, protein: 29.6, fat: 5.3, carbs: 39.5, salt: 0 },
+  "ココアパウダー": { kcal: 271, protein: 18.5, fat: 21.6, carbs: 18.5, salt: 0 },
+  "チョコレート": { kcal: 558, protein: 6.9, fat: 34.1, carbs: 55.8, salt: 0.1 },
+  "クリームチーズ": { kcal: 346, protein: 8.2, fat: 33.0, carbs: 2.3, salt: 0.7 },
+  "コンデンスミルク": { kcal: 331, protein: 7.7, fat: 8.7, carbs: 56.3, salt: 0.3 },
+  "ヨーグルト": { kcal: 62, protein: 3.6, fat: 3.0, carbs: 4.9, salt: 0.1 },
+  "サワークリーム": { kcal: 260, protein: 2.4, fat: 25.0, carbs: 3.5, salt: 0.1 },
+  "マーガリン": { kcal: 769, protein: 0.4, fat: 83.1, carbs: 0.5, salt: 1.3 },
+  "ラード": { kcal: 898, protein: 0, fat: 99.7, carbs: 0, salt: 0 },
+  "ごま油": { kcal: 921, protein: 0, fat: 100, carbs: 0, salt: 0 },
+  "バニラエッセンス": { kcal: 230, protein: 0.1, fat: 0, carbs: 12.5, salt: 0 },
+  "シナモン": { kcal: 364, protein: 3.9, fat: 1.2, carbs: 79.9, salt: 0 },
+  "塩麹": { kcal: 65, protein: 2.0, fat: 0.5, carbs: 13.4, salt: 8.5 },
+  "レモン汁": { kcal: 26, protein: 0.4, fat: 0.2, carbs: 8.6, salt: 0 },
+  "りんごジュース": { kcal: 44, protein: 0.1, fat: 0.1, carbs: 10.9, salt: 0 },
+  "くるみ": { kcal: 674, protein: 14.6, fat: 68.8, carbs: 11.7, salt: 0 },
+  "カシューナッツ": { kcal: 576, protein: 19.8, fat: 47.6, carbs: 26.7, salt: 0 },
+  "干しぶどう": { kcal: 301, protein: 2.7, fat: 0.2, carbs: 80.3, salt: 0 },
+  "レーズン": { kcal: 301, protein: 2.7, fat: 0.2, carbs: 80.3, salt: 0 },
+  "小豆": { kcal: 304, protein: 20.3, fat: 2.2, carbs: 40.9, salt: 0 },
+  "こしあん": { kcal: 155, protein: 9.0, fat: 0.6, carbs: 32.5, salt: 0 },
+  "粒あん": { kcal: 239, protein: 5.6, fat: 0.6, carbs: 54.0, salt: 0 },
+  "白玉粉": { kcal: 369, protein: 6.3, fat: 1.0, carbs: 80.0, salt: 0 },
+  "もち粉": { kcal: 369, protein: 6.3, fat: 1.0, carbs: 80.0, salt: 0 },
+  "きな粉": { kcal: 437, protein: 36.7, fat: 25.7, carbs: 26.4, salt: 0 },
 };
 
 const FUZZY = [["上白糖", "砂糖"], ["グラニュー糖", "砂糖"], ["てんさい糖", "きび糖"], ["製菓用米粉", "米粉"], ["上新粉", "米粉"], ["アーモンド粉", "アーモンドパウダー"], ["菜種油", "なたね油"], ["サラダ油", "なたね油"], ["植物油", "なたね油"], ["マーガリン", "ショートニング"], ["小麦", "小麦粉"], ["卵白", "卵"], ["卵黄", "卵"], ["鶏卵", "卵"], ["蜂蜜", "はちみつ"], ["胡麻", "ごま"], ["脱脂粉乳", "牛乳"], ["スキムミルク", "牛乳"]];
-const ADDITIVE_KW = ["ベーキングパウダー", "膨張剤", "膨脹剤", "乳化剤", "香料", "酸化防止剤", "着色料", "保存料", "増粘剤", "甘味料", "酸味料", "pH調整剤", "トレハロース", "ソルビトール", "加工澱粉", "加工でんぷん"];
+const ADDITIVE_KW = ["ベーキングパウダー", "膨張剤", "膨脹剤", "乳化剤", "香料", "酸化防止剤", "着色料", "保存料", "増粘剤", "甘味料", "酸味料", "pH調整剤", "トレハロース", "ソルビトール", "加工澱粉", "加工でんぷん", "凝固剤", "安定剤", "ゲル化剤", "漂白剤", "防かび剤", "防カビ剤", "発色剤", "光沢剤", "豆腐用凝固剤", "にがり", "塩化マグネシウム", "グルコノデルタラクトン", "硫酸カルシウム", "調味料", "酵素", "苦味料", "軟化剤"];
 const ALLERGEN_RULES = [
   ["えび", ["えび", "エビ", "海老"]], ["かに", ["かに", "カニ", "蟹"]], ["くるみ", ["くるみ", "クルミ", "胡桃"]],
   ["小麦", ["小麦", "薄力粉", "強力粉", "中力粉", "小麦粉", "全粒粉"]], ["そば", ["そば", "蕎麦"]],
@@ -58,53 +92,14 @@ const SIZE_PRESETS = [
   { label: "100×70mm", w: "100", h: "70", margin: "4", fs: "8" },
   { label: "自由入力", w: "90", h: "", margin: "3", fs: "7.5" },
 ];
-const EN_INGREDIENTS = [
-  ["木綿豆腐", "firm tofu"], ["絹ごし豆腐", "silken tofu"], ["豆腐", "tofu"], ["米粉", "rice flour"],
-  ["小麦粉", "wheat flour"], ["薄力粉", "cake flour"], ["強力粉", "bread flour"], ["砂糖", "sugar"],
-  ["きび糖", "raw cane sugar"], ["食塩", "salt"], ["塩", "salt"], ["ショートニング", "shortening"],
-  ["なたね油", "canola oil"], ["オリーブ油", "olive oil"], ["バター", "butter"], ["卵", "egg"],
-  ["牛乳", "milk"], ["生クリーム", "cream"], ["はちみつ", "honey"], ["片栗粉", "potato starch"],
-  ["ごま", "sesame"], ["きな粉", "soybean flour"], ["豆乳", "soy milk"], ["膨張剤", "raising agent"],
-  ["乳化剤", "emulsifier"], ["増粘剤", "thickener"], ["ベーキングパウダー", "baking powder"],
-  ["アーモンドパウダー", "almond powder"], ["タピオカ粉", "tapioca starch"],
-];
-const EN_ALLERGENS = {
-  "えび": "shrimp", "かに": "crab", "くるみ": "walnut", "小麦": "wheat", "そば": "buckwheat",
-  "卵": "egg", "乳": "milk", "落花生": "peanut", "アーモンド": "almond", "オレンジ": "orange",
-  "カシューナッツ": "cashew nut", "キウイフルーツ": "kiwifruit", "牛肉": "beef", "ごま": "sesame",
-  "さけ": "salmon", "さば": "mackerel", "大豆": "soybean", "鶏肉": "chicken", "バナナ": "banana",
-  "豚肉": "pork", "もも": "peach", "やまいも": "yam", "りんご": "apple", "ゼラチン": "gelatin",
-};
-const EN_STORAGE = {
-  "直射日光・高温多湿を避けて保存": "Store away from direct sunlight, high temperature and humidity.",
-  "高温多湿を避けて保存": "Store away from high temperature and humidity.",
-  "常温保存": "Store at room temperature.",
-  "冷蔵保存（10℃以下）": "Keep refrigerated at 10°C or below.",
-  "冷凍保存（-18℃以下）": "Keep frozen at -18°C or below.",
-};
-const EN_PRODUCTS = [
-  ["油菓子", "Fried confectionery"],
-  ["クッキー", "Cookies"],
-  ["ケーキ", "Cake"],
-  ["焼菓子", "Baked confectionery"],
-  ["焼き菓子", "Baked confectionery"],
-  ["パン", "Bread"],
-];
 const PLANS = {
-  free: { label: "無料", price: "0円/月", limit: 3, note: "月3つまで" },
-  starter: { label: "スタンダード", price: "980円/月", limit: 10, note: "月10個まで" },
-  pro: { label: "プロ", price: "1980円/月", limit: Infinity, note: "国内ラベル無制限" },
-  global: { label: "グローバル", price: "2980円/月", limit: Infinity, note: "海外用ラベル対応" },
-};
-const COUNTRIES = {
-  domestic: { label: "国内", lang: "Japanese", nutritionTitle: "栄養成分表示", per: "100g当たり", calories: "エネルギー", carb: "炭水化物", salt: "食塩相当量", allergenLead: "アレルゲン", ingredientsNote: "国内向けの食品表示ラベルを作成します。" },
-  us: { label: "United States", lang: "English", nutritionTitle: "Nutrition Facts", per: "Per 100g", calories: "Calories", carb: "Total Carbohydrate", salt: "Sodium / Salt equivalent", allergenLead: "Contains", ingredientsNote: "Major allergens must be declared by food source name. Sesame is included." },
-  eu: { label: "EU", lang: "English", nutritionTitle: "Nutrition declaration", per: "per 100g", calories: "Energy", carb: "Carbohydrate", salt: "Salt", allergenLead: "Allergens", ingredientsNote: "Allergens should be emphasized in the ingredients list." },
-  ca: { label: "Canada", lang: "English / French", nutritionTitle: "Nutrition Facts / Valeur nutritive", per: "Per 100g / par 100 g", calories: "Calories", carb: "Carbohydrate / Glucides", salt: "Sodium", allergenLead: "Contains / Contient", ingredientsNote: "English and French bilingual labelling is generally required." },
-  au_nz: { label: "Australia / New Zealand", lang: "English", nutritionTitle: "Nutrition Information", per: "Average quantity per 100g", calories: "Energy", carb: "Carbohydrate", salt: "Sodium / Salt equivalent", allergenLead: "Contains", ingredientsNote: "Nutrition Information Panel format commonly uses per serving and per 100g columns." },
+  free: { label: "無料", price: "0円/月", limit: 1, note: "1商品まで無料" },
+  starter: { label: "スタンダード", price: "980円/月", limit: 10, note: "月10商品まで保存・PDF出力" },
+  pro: { label: "プロ", price: "1980円/月", limit: Infinity, note: "無制限" },
 };
 
 let products = loadProducts();
+let draft = null;
 let currentPlan = safeGet("food-label-plan") || "free";
 let view = "home";
 let editId = null;
@@ -144,9 +139,6 @@ function emptyProduct() {
     nutritionMode: "auto", nutritionManual: { kcal: "", protein: "", fat: "", carbs: "", salt: "" },
     allergensMode: "auto", allergensManual: "",
     contaminationEnabled: false, contaminationAllergens: "", contaminationText: "",
-    labelMode: "domestic", exportCountry: "us",
-    exportName: "", exportAddress: "", originCountry: "Japan", exportNetContent: "",
-    importerName: "", importerAddress: "",
     manufacturerType: "製造者", manufacturerTypes: ["製造者"], manufacturerName: "", manufacturerPostal: "", manufacturerAddress: "", manufacturerPhone: "",
     updatedAt: new Date().toLocaleDateString("ja-JP"),
   };
@@ -196,7 +188,10 @@ function detectAllergens(names) {
   return [...found];
 }
 function buildIngLabel(ingredients) {
-  const sorted = ingredients.filter((i) => i.name.trim() && (parseFloat(i.weight) || 0) > 0).sort((a, b) => (parseFloat(b.weight) || 0) - (parseFloat(a.weight) || 0));
+  const named = ingredients.filter((i) => i.name.trim());
+  const withW = named.filter((i) => (parseFloat(i.weight) || 0) > 0).sort((a, b) => (parseFloat(b.weight) || 0) - (parseFloat(a.weight) || 0));
+  const noW = named.filter((i) => !((parseFloat(i.weight) || 0) > 0));
+  const sorted = [...withW, ...noW];
   const normal = sorted.filter((i) => !isAdditive(i.name)).map((i) => i.name).join("、");
   const add = sorted.filter((i) => isAdditive(i.name)).map((i) => i.name).join("、");
   if (!normal && !add) return "";
@@ -206,119 +201,6 @@ function buildIngLabel(ingredients) {
 }
 function stripOrigin(text) {
   return String(text || "").replace(/[（(][^）)]*[）)]/g, "").trim();
-}
-function translateIngredientName(name) {
-  const clean = stripOrigin(name);
-  for (const [jp, en] of EN_INGREDIENTS) {
-    if (clean.includes(jp)) return en;
-  }
-  return clean || "-";
-}
-function buildEnglishIngLabel(ingredients) {
-  const sorted = ingredients.filter((i) => i.name.trim() && (parseFloat(i.weight) || 0) > 0).sort((a, b) => (parseFloat(b.weight) || 0) - (parseFloat(a.weight) || 0));
-  const normal = sorted.filter((i) => !isAdditive(i.name)).map((i) => translateIngredientName(i.name)).join(", ");
-  const additives = sorted.filter((i) => isAdditive(i.name)).map((i) => translateIngredientName(i.name)).join(", ");
-  if (!normal && !additives) return "";
-  if (!additives) return normal;
-  if (!normal) return `Additives: ${additives}`;
-  return `${normal}; Additives: ${additives}`;
-}
-function translateStorage(p, d) {
-  if (p.storage === "自由入力") return d.storage || "-";
-  return EN_STORAGE[p.storage] || d.storage || "-";
-}
-function translateAllergens(allergens) {
-  return allergens.map((a) => EN_ALLERGENS[a] || a);
-}
-function translateProductName(name) {
-  const clean = stripOrigin(name);
-  for (const [jp, en] of EN_PRODUCTS) {
-    if (clean.includes(jp)) return en;
-  }
-  return clean || "-";
-}
-function translateVolume(volume) {
-  return String(volume || "-")
-    .replace(/個/g, " pieces")
-    .replace(/本/g, " pieces")
-    .replace(/枚/g, " pieces")
-    .replace(/袋/g, " bags")
-    .replace(/箱/g, " boxes")
-    .replace(/約/g, "approx. ");
-}
-function formatExportDate(dateText, countryId) {
-  const raw = String(dateText || "").trim();
-  const m = raw.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/);
-  if (!m) return raw || "-";
-  const y = m[1];
-  const mo = m[2].padStart(2, "0");
-  const d = m[3].padStart(2, "0");
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  if (countryId === "us") return `${mo}/${d}/${y}`;
-  if (countryId === "eu" || countryId === "au_nz") return `${d} ${monthNames[Number(mo) - 1]} ${y}`;
-  if (countryId === "ca") return `${y}-${mo}-${d}`;
-  return `${y}-${mo}-${d}`;
-}
-function translateBusinessAddress(address) {
-  const text = String(address || "").trim();
-  if (!text) return "";
-  return text
-    .replace(/日本/g, "Japan")
-    .replace(/兵庫県/g, "Hyogo, ")
-    .replace(/神戸市/g, "Kobe, ")
-    .replace(/灘区/g, "Nada-ku, ");
-}
-function exportProductName(p) {
-  return p.exportName?.trim() || translateProductName(p.name);
-}
-function exportAddress(p) {
-  return p.exportAddress?.trim() || translateBusinessAddress(p.manufacturerAddress);
-}
-function exportNetContent(p) {
-  return p.exportNetContent?.trim() || translateVolume(p.volume);
-}
-function selectedCountry(p) {
-  return COUNTRIES[p?.exportCountry || "us"] || COUNTRIES.us;
-}
-function isGlobalPlan() {
-  return currentPlan === "global";
-}
-function isGlobalExport() {
-  const p = currentProduct();
-  return isGlobalPlan() && (p?.exportCountry || "us") !== "domestic";
-}
-function hasJapanese(text) {
-  return /[ぁ-んァ-ヶ一-龠]/.test(String(text || ""));
-}
-function countryCheckListHtml(p, d) {
-  if (!isGlobalPlan()) return "";
-  if ((p.exportCountry || "us") === "domestic") return `<div class="compliance-box"><h3>国内ラベル確認</h3><div class="ok-box">国内向けラベルを表示しています。</div><p>通常の食品表示内容を確認してください。</p></div>`;
-  const c = selectedCountry(p);
-  const missing = [];
-  const warnings = [];
-  if (!exportProductName(p) || exportProductName(p) === "-") missing.push("English product name");
-  if (!buildEnglishIngLabel(p.ingredients)) missing.push("Ingredients");
-  if (!exportNetContent(p) || exportNetContent(p) === "-") missing.push("Net contents");
-  if (!p.bestBefore) missing.push("Best before date");
-  if (!p.originCountry) missing.push("Country of origin");
-  if (!exportAddress(p)) missing.push("Business address");
-  if (!p.importerName?.trim()) missing.push("Importer / distributor name");
-  if (!p.importerAddress?.trim()) missing.push("Importer / distributor address");
-  [["Product name", exportProductName(p)], ["Net contents", exportNetContent(p)], ["Business address", exportAddress(p)], ["Importer name", p.importerName], ["Importer address", p.importerAddress]].forEach(([label, value]) => {
-    if (hasJapanese(value)) warnings.push(`${label} contains Japanese text`);
-  });
-  const checks = [
-    `Destination: ${c.label}`,
-    `Language: ${c.lang}`,
-    c.ingredientsNote,
-    "Confirm product name, net contents, date marking, storage statement and business/importer details.",
-    "Confirm serving size, rounding rules, nutrition calculation basis and package-size exemptions before sale.",
-  ];
-  if ((p.exportCountry || "us") === "ca") checks.push("Canada often requires bilingual English/French label text.");
-  if ((p.exportCountry || "us") === "eu") checks.push("EU allergen names should be highlighted within the ingredient list.");
-  if ((p.exportCountry || "us") === "au_nz") checks.push("AU/NZ Nutrition Information Panel commonly needs serving size plus per 100g values.");
-  if (d.autoNutrition.hasEst) checks.push("Some nutrition values are estimated. Verify with analysis or authoritative data.");
-  return `<div class="compliance-box"><h3>Compliance checklist</h3>${missing.length ? `<div class="missing-box"><b>Missing / confirm:</b> ${missing.map(escapeHtml).join(", ")}</div>` : `<div class="ok-box">Required draft fields are filled.</div>`}${warnings.length ? `<div class="missing-box"><b>Japanese text warning:</b> ${warnings.map(escapeHtml).join(", ")}</div>` : ""}<ul>${checks.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul><p>This is a label-drafting aid, not legal certification.</p></div>`;
 }
 function derive(p) {
   const autoNutrition = calcNutrition(p.ingredients);
@@ -425,38 +307,59 @@ function normalizeLabelText(p) {
     next.ingredients = nextIngredients;
     changes.push("原材料を重量の多い順に整理");
   }
-  if (isGlobalPlan() && (p.exportCountry || "us") !== "domestic") {
-    if (!p.exportName?.trim() && translateProductName(next.name) !== "-") {
-      next.exportName = translateProductName(next.name);
-      changes.push("海外用商品名を候補入力");
-    }
-    if (!p.exportNetContent?.trim() && translateVolume(next.volume) !== "-") {
-      next.exportNetContent = translateVolume(next.volume);
-      changes.push("海外用内容量を候補入力");
-    }
-    if (!p.exportAddress?.trim() && translateBusinessAddress(p.manufacturerAddress)) {
-      next.exportAddress = translateBusinessAddress(p.manufacturerAddress);
-      changes.push("海外用住所を候補入力");
-    }
-    if (!p.originCountry?.trim()) {
-      next.originCountry = "Japan";
-      changes.push("原産国を追加");
-    }
-  }
   return { next, changes };
 }
 
+function showModal({ message, confirmLabel = "OK", cancelLabel = null, onConfirm, onCancel }) {
+  document.querySelector(".app-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "app-modal";
+  modal.innerHTML = `
+    <div class="app-modal-card">
+      <p class="app-modal-msg">${escapeHtml(message)}</p>
+      <div class="app-modal-actions">
+        ${cancelLabel ? `<button class="action app-modal-cancel">${escapeHtml(cancelLabel)}</button>` : ""}
+        <button class="action primary app-modal-confirm">${escapeHtml(confirmLabel)}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  modal.querySelector(".app-modal-confirm").addEventListener("click", () => { close(); onConfirm?.(); });
+  modal.querySelector(".app-modal-cancel")?.addEventListener("click", () => { close(); onCancel?.(); });
+  modal.addEventListener("click", (e) => { if (e.target === modal) { close(); onCancel?.(); } });
+}
+
+function focusKey(el) {
+  if (!el) return null;
+  if (el.dataset.field) return `[data-field="${el.dataset.field}"]`;
+  if (el.dataset.ingField && el.closest("[data-ing-id]")) return `[data-ing-id="${el.closest("[data-ing-id]").dataset.ingId}"] [data-ing-field="${el.dataset.ingField}"]`;
+  if (el.id) return `#${el.id}`;
+  return null;
+}
 function render() {
   clearTimeout(renderTimer);
+  const active = document.activeElement;
+  const key = focusKey(active);
+  const selStart = active?.selectionStart ?? null;
+  const selEnd = active?.selectionEnd ?? null;
   const pageHtml = view === "home" ? homeHtml() : view === "menu" ? menuHtml() : view === "saved" ? savedHtml() : editorHtml(currentProduct());
   document.getElementById("root").innerHTML = `${pageHtml}${statusMessage ? `<div class="status-toast">${escapeHtml(statusMessage)}</div>` : ""}`;
   bindEvents();
+  if (key) {
+    const next = document.querySelector(key);
+    if (next) {
+      next.focus({ preventScroll: true });
+      if (selStart !== null && next.setSelectionRange) {
+        try { next.setSelectionRange(selStart, selEnd); } catch (_) {}
+      }
+    }
+  }
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
   renderTimer = setTimeout(render, 250);
 }
-function currentProduct() { return editId === "new" ? window.draft : products.find((p) => p.id === editId); }
+function currentProduct() { return editId === "new" ? draft : products.find((p) => p.id === editId); }
 function planInfo() { return PLANS[currentPlan] || PLANS.free; }
 function canCreateMore() { return products.length < planInfo().limit; }
 function canUseJanCode() { return currentPlan !== "free"; }
@@ -508,26 +411,117 @@ function ean8Svg(digits) {
   bits += "101";
   return bitsToSvg(bits, digits);
 }
+function janBarcodeBits(digits) {
+  const L = ["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"];
+  const G = ["0100111","0110011","0011011","0100001","0011101","0111001","0000101","0010001","0001001","0010111"];
+  const R = ["1110010","1100110","1101100","1000010","1011100","1001110","1010000","1000100","1001000","1110100"];
+  if (digits.length === 13) {
+    const parity = ["LLLLLL","LLGLGG","LLGGLG","LLGGGL","LGLLGG","LGGLLG","LGGGLL","LGLGLG","LGLGGL","LGGLGL"][Number(digits[0])];
+    let bits = "101";
+    for (let i = 1; i <= 6; i++) bits += parity[i-1] === "L" ? L[Number(digits[i])] : G[Number(digits[i])];
+    bits += "01010";
+    for (let i = 7; i <= 12; i++) bits += R[Number(digits[i])];
+    return bits + "101";
+  }
+  if (digits.length === 8) {
+    let bits = "101";
+    for (let i = 0; i < 4; i++) bits += L[Number(digits[i])];
+    bits += "01010";
+    for (let i = 4; i < 8; i++) bits += R[Number(digits[i])];
+    return bits + "101";
+  }
+  return null;
+}
+function drawBarcodeOnCanvas(ctx, digits, x, y, maxW, fs) {
+  const bits = janBarcodeBits(digits);
+  if (!bits) return 0;
+  const moduleW = maxW / bits.length;
+  const barH = fs * 3.5;
+  const textH = fs * 1.4;
+  ctx.fillStyle = "#000";
+  for (let i = 0; i < bits.length; i++) {
+    if (bits[i] === "1") ctx.fillRect(x + i * moduleW, y, moduleW + 0.5, barH);
+  }
+  ctx.font = `${fs * 0.85}px "Courier New",monospace`;
+  ctx.textAlign = "center";
+  ctx.fillText(digits, x + maxW / 2, y + barH + textH * 0.85);
+  ctx.textAlign = "left";
+  return barH + textH + 6;
+}
 function homeHtml() {
   return `<main class="home">
-    <div class="brand"><img class="brand-mark app-icon" src="./assets/app-icon.svg" alt="ラベルプリンター"><div><h1>かんたん食品表示ラベルメーカー</h1><p>食品表示ラベルをかんたん作成・印刷</p></div></div>
+    <div class="home-hero">
+      <div class="home-hero-logo"><img class="brand-mark app-icon" src="./assets/app-icon.svg" alt="ラベルプリンター"></div>
+      <h1 class="home-hero-title">食品表示ラベルを<br>かんたん作成</h1>
+      <p class="home-hero-sub">食品表示ラベルの作成・保存・再印刷を一元管理</p>
+    </div>
     ${planHtml()}
-    <button class="home-next" data-action="menu">このプランで始める</button>
-    <div class="recent-strip"><b>選択中</b><span>${planInfo().label}プラン / ${planInfo().note}</span></div>
+    <div class="home-cta-wrap">
+      <button class="home-next" data-action="menu">このプランで始める →</button>
+    </div>
+    <div class="recent-strip"><span class="recent-label">選択中</span><span>${planInfo().label}プラン・${planInfo().note}</span></div>
   </main>`;
 }
 function planHtml() {
-  return `<section class="plan-panel"><div class="plan-title"><b>プラン設定</b><span>作成できるラベル数を切り替えます</span></div><div class="plan-grid">${Object.entries(PLANS).map(([id, p]) => `<button class="${currentPlan === id ? "selected" : ""}" data-plan="${id}"><strong>${p.label}</strong><em>${p.price}</em><small>${p.note}</small></button>`).join("")}</div></section>`;
+  const POPULAR = "pro";
+  return `<section class="plan-panel">
+    <div class="plan-title"><b>プランを選択</b><span>いつでも変更できます</span></div>
+    <div class="plan-grid">${Object.entries(PLANS).map(([id, p]) => `
+      <button class="plan-card${currentPlan === id ? " selected" : ""}${id === POPULAR ? " popular" : ""}" data-plan="${id}">
+        ${id === POPULAR ? `<span class="popular-badge">人気</span>` : ""}
+        <strong class="plan-name">${p.label}</strong>
+        <em class="plan-price">${p.price}</em>
+        <small class="plan-note">${p.note}</small>
+        ${currentPlan === id ? `<span class="plan-check">✓ 選択中</span>` : ""}
+      </button>`).join("")}
+    </div>
+  </section>`;
 }
 function menuHtml() {
   return `<main class="home menu-page">
-    <div class="menu-head"><button class="back" data-action="plan-page">プラン変更</button><span class="plan-badge">${planInfo().label}</span></div>
-    <div class="brand"><img class="brand-mark app-icon" src="./assets/app-icon.svg" alt="ラベルプリンター"><div><h1>作業を選んでください</h1><p>新しく作るか、保存済みラベルを開きます</p></div></div>
-    <div class="home-actions">
-      <button class="home-card primary" data-action="new"><span>新商品ラベル作成</span><small>新しい商品情報を入力してラベルを作ります</small></button>
-      <button class="home-card" data-action="saved"><span>以前作ったラベルを印刷する</span><small>保存済みラベルを選んで表示・印刷します</small></button>
+    <div class="menu-head"><button class="back" data-action="plan-page">← プラン変更</button><span class="plan-badge">${planInfo().label}プラン</span></div>
+    <div class="home-hero">
+      <h1 class="home-hero-title">食品表示ラベルを<br>かんたん作成</h1>
+      <p class="home-hero-sub">食品表示ラベルの作成・保存・再印刷を一元管理</p>
     </div>
-    <div class="recent-strip"><b>保存済み</b><span>${products.length}件のラベルがあります</span></div>
+    <div class="how-steps">
+      <div class="how-step">
+        <span class="how-num">1</span>
+        <div class="how-step-body">
+          <span class="how-step-title">商品情報を入力</span>
+          <small>商品名・原材料・栄養成分など</small>
+        </div>
+      </div>
+      <div class="how-arrow">▶</div>
+      <div class="how-step">
+        <span class="how-num">2</span>
+        <div class="how-step-body">
+          <span class="how-step-title">ラベルを確認</span>
+          <small>右側にリアルタイムで表示</small>
+        </div>
+      </div>
+      <div class="how-arrow">▶</div>
+      <div class="how-step">
+        <span class="how-num">3</span>
+        <div class="how-step-body">
+          <span class="how-step-title">印刷・保存</span>
+          <small>PDF印刷または画像コピー</small>
+        </div>
+      </div>
+    </div>
+    <div class="home-actions">
+      <button class="home-card" data-action="new">
+        <div class="home-card-icon">＋</div>
+        <div class="home-card-body"><span>新しいラベルを作成</span><small>商品情報を入力してラベルを作ります</small></div>
+        <span class="home-card-arrow">→</span>
+      </button>
+      <button class="home-card" data-action="saved">
+        <div class="home-card-icon">📋</div>
+        <div class="home-card-body"><span>保存済みラベルを開く</span><small>保存済みラベルを選んで表示・印刷します</small></div>
+        <span class="home-card-arrow">→</span>
+      </button>
+    </div>
+    <div class="recent-strip"><span class="recent-label">保存済み</span><span>${products.length}件のラベル</span></div>
   </main>`;
 }
 function headerHtml(title, showSave = true) {
@@ -552,7 +546,6 @@ function editorHtml(p) {
         ${allergenEditorHtml(p, d)}
         ${contaminationEditorHtml(p)}
         ${labelAssistHtml(p, d)}
-        ${labelModeHtml(p)}
         ${manufacturerEditorHtml(p)}
       </div>
       <div class="preview-column">${previewHtml(p, d)}</div>
@@ -617,42 +610,28 @@ function labelChecklist(p, d) {
     { label: "JANコードは8桁または13桁", ok: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) },
   ];
 }
-function labelModeHtml(p) {
-  const locked = !isGlobalPlan();
-  const country = p.exportCountry || "us";
-  const exporting = country !== "domestic";
-  const invalid = (value) => exporting && (!String(value || "").trim() || hasJapanese(value)) ? " invalid" : "";
-  const exportFields = exporting ? `<div class="export-fields"><label class="field${invalid(exportProductName(p))}"><span>海外用商品名</span><input data-field="exportName" value="${escapeHtml(p.exportName || "")}" placeholder="例：Fried confectionery"></label><label class="field${invalid(exportAddress(p))}"><span>海外用住所</span><input data-field="exportAddress" value="${escapeHtml(p.exportAddress || "")}" placeholder="例：2-2-12 Morigo-cho, Nada-ku, Kobe, Hyogo, Japan"></label><div class="two-col"><label class="field${!p.originCountry ? " invalid" : ""}"><span>原産国</span><input data-field="originCountry" value="${escapeHtml(p.originCountry || "Japan")}" placeholder="Japan"></label><label class="field${invalid(exportNetContent(p))}"><span>海外用内容量</span><input data-field="exportNetContent" value="${escapeHtml(p.exportNetContent || "")}" placeholder="例：6 pieces / 180 g"></label></div><div class="two-col"><label class="field${invalid(p.importerName)}"><span>輸入者 / Distributor</span><input data-field="importerName" value="${escapeHtml(p.importerName || "")}" placeholder="例：ABC Foods Inc."></label><label class="field${invalid(p.importerAddress)}"><span>輸入者住所</span><input data-field="importerAddress" value="${escapeHtml(p.importerAddress || "")}" placeholder="例：123 Market St, Los Angeles, CA"></label></div></div><p class="notice">赤い欄は未入力、または日本語が残っています。商品名・住所・内容量・輸入者情報は手入力を優先します。</p>` : `<p class="notice">国内を選択中です。グローバルプラン内でも国内向けラベルを確認できます。</p>`;
-  return section("グローバル設定", `${locked ? `<p class="notice">グローバル設定は2980円/月のグローバルプランで使えます。プランをグローバルにすると国別ラベルに自動で切り替わります。</p>` : `<div class="country-grid">${Object.entries(COUNTRIES).map(([id, c]) => `<button class="${country === id ? "selected" : ""}" data-country="${id}">${c.label}<small>${c.lang}</small></button>`).join("")}</div>${exportFields}`}`);
-}
 function previewHtml(p, d) {
-  const overseas = isGlobalExport();
-  const c = selectedCountry(p);
-  const labelHeading = overseas ? `${c.label} Product Label` : "表示ラベル";
-  const nutritionHeading = overseas ? c.nutritionTitle : "栄養成分表示";
-  const targetChoices = overseas
-    ? [["label", "Product label"], ["nutrition", "Nutrition"], ["both", "Both"]]
-    : [["label", "表示ラベルのみ"], ["nutrition", "栄養成分表示のみ"], ["both", "両方"]];
+  const targetChoices = [["label", "表示ラベルのみ"], ["nutrition", "栄養成分表示のみ"], ["both", "両方"]];
   const labelStyle = `style="width:${escapeHtml(printCfg.w || "90")}mm;${printCfg.h ? `min-height:${escapeHtml(printCfg.h)}mm;` : ""}font-size:${escapeHtml(printCfg.fs || "7.5")}pt;"`;
   const previewNote = printPreviewSupportHtml();
-  const printable = printablePreviewHtml(p, d, labelHeading, nutritionHeading, labelStyle, true);
+  const printable = printablePreviewHtml(p, d, labelStyle, true);
   return `<aside class="preview-panel">
     <div class="print-controls"><select data-size>${SIZE_PRESETS.map((s) => `<option ${s.label === printCfg.label ? "selected" : ""}>${s.label}</option>`).join("")}</select></div>
     <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
     <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
     ${previewNote}
-    <div class="output-actions"><button class="action primary" data-action="copy-image-output">${overseas ? "Save image" : "\u753b\u50cf\u3092\u4fdd\u5b58"}</button><button class="action" data-action="copy-output">${overseas ? "Copy text only" : "文字だけコピー"}</button><button class="action dark" data-action="open-print-preview">${overseas ? "Print preview" : "印刷プレビュー"}</button></div>
+    <div class="output-actions"><button class="action print-btn" data-action="open-print-preview">🖨 印刷プレビュー</button><button class="action secondary" data-action="copy-image-output">画像でコピー</button><button class="action" data-action="copy-output">文字だけコピー</button></div>
+    <p class="label-disclaimer">※ 表示内容の最終確認・法令適合の判断は事業者様の責任で行ってください。</p>
     <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
   </aside>`;
 }
-function printablePreviewHtml(p, d, labelHeading, nutritionHeading, labelStyle, showHeadings) {
-  return `<div class="print-stack">${printTarget !== "nutrition" ? `<div>${showHeadings ? `<h2 class="preview-heading">${labelHeading}</h2>` : ""}<div class="print-sized" ${labelStyle}>${basicLabelHtml(p, d)}${contaminationNoteHtml(d)}</div></div>` : ""}${printTarget !== "label" ? `<div>${showHeadings ? `<h2 class="preview-heading">${nutritionHeading}</h2>` : ""}<div class="print-sized" ${labelStyle}>${nutritionLabelHtml(d)}</div></div>` : ""}${countryCheckListHtml(p, d)}</div>`;
+function printablePreviewHtml(p, d, labelStyle, showHeadings) {
+  return `<div class="print-stack">${printTarget !== "nutrition" ? `<div>${showHeadings ? `<h2 class="preview-heading">表示ラベル</h2>` : ""}<div class="print-sized" ${labelStyle}>${basicLabelHtml(p, d)}${contaminationNoteHtml(d)}</div></div>` : ""}${printTarget !== "label" ? `<div>${showHeadings ? `<h2 class="preview-heading">栄養成分表示</h2>` : ""}<div class="print-sized" ${labelStyle}>${nutritionLabelHtml(d)}</div></div>` : ""}</div>`;
 }
 function contaminationNoteHtml(d) {
   if (!d.contamination) return "";
-  const label = isGlobalExport() ? "※ Cross-contact: " : "※";
-  return `<div class="contamination-note">${label}${escapeHtml(d.contamination)}</div>`;
+  return `<div class="contamination-note">※${escapeHtml(d.contamination)}</div>`;
 }
 function printPreviewModalHtml(printable) {
   return `<div class="print-preview-modal"><div class="print-preview-card"><div class="print-preview-head"><div><b>印刷前確認</b><span>ブラウザの印刷ダイアログで表示されない場合も、ここでサイズ感を確認できます。</span></div><button class="action" data-action="close-print-preview">閉じる</button><button class="action primary" data-action="confirm-print">この内容で印刷</button></div><div class="print-preview-sheet" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div></div></div>`;
@@ -690,50 +669,27 @@ function copyHtmlStyles() {
   `;
 }
 function copyHtmlContent(p, d) {
-  const overseas = isGlobalExport();
-  const c = selectedCountry(p);
-  const labelHeading = overseas ? `${c.label} Product Label` : "表示ラベル";
-  const nutritionHeading = overseas ? c.nutritionTitle : "栄養成分表示";
   const labelStyle = `style="width:${escapeHtml(printCfg.w || "90")}mm;${printCfg.h ? `min-height:${escapeHtml(printCfg.h)}mm;` : ""}font-size:${escapeHtml(printCfg.fs || "7.5")}pt;"`;
-  return `<style>${copyHtmlStyles()}</style>${printablePreviewHtml(p, d, labelHeading, nutritionHeading, labelStyle, true)}`;
+  return `<style>${copyHtmlStyles()}</style>${printablePreviewHtml(p, d, labelStyle, true)}`;
 }
 function copyHtmlDocument(html) {
   return `<!doctype html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
 }
 function basicLabelHtml(p, d) {
-  if (isGlobalExport()) return overseasLabelHtml(p, d);
-  const maker = [p.manufacturerName, p.manufacturerPostal ? `〒${p.manufacturerPostal}` : "", p.manufacturerAddress, p.manufacturerPhone].filter(Boolean).join(" ");
+  const makerLines = [
+    [p.manufacturerName, p.manufacturerPostal ? `〒${p.manufacturerPostal}` : ""].filter(Boolean).join(" "),
+    p.manufacturerAddress,
+    p.manufacturerPhone,
+  ].filter(Boolean);
+  const maker = makerLines.map((l) => escapeHtml(l)).join("<br>");
   const rows = [["名称", p.name || "ー"], ["原材料名", d.ingLabel || "ー"], ["内容量", p.volume || "ー"], ["賞味期限", p.bestBefore || "ー"], ["保存方法", d.storage || "ー"]];
   selectedMfrTypes(p).forEach((type) => rows.push([type, maker || "ー"]));
   if (d.allergens.length) rows.push(["アレルゲン", `${d.allergens.join("・")}を含む`]);
   const barcode = canUseJanCode() ? janBarcodeSvg(p.janCode) : "";
   return `<div class="label-paper basic-label"><table><tbody>${rows.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join("")}</tbody></table>${barcode ? `<div class="label-barcode-footer"><div class="barcode-title">JANコード</div>${barcode}</div>` : ""}</div>`;
 }
-function overseasLabelHtml(p, d) {
-  const c = selectedCountry(p);
-  const maker = [p.manufacturerName, p.manufacturerPostal ? `ZIP ${p.manufacturerPostal}` : "", exportAddress(p), p.manufacturerPhone].filter(Boolean).join(" ");
-  const importer = [p.importerName, p.importerAddress].filter(Boolean).join(" ");
-  const ingredientsLabel = p.exportCountry === "ca" ? "Ingredients / Ingrédients" : "Ingredients";
-  const containsLabel = c.allergenLead;
-  const rows = [["Destination", c.label], ["Product name", exportProductName(p)], [ingredientsLabel, buildEnglishIngLabel(p.ingredients) || "-"], ["Net contents", exportNetContent(p)], ["Best before", formatExportDate(p.bestBefore, p.exportCountry || "us")], ["Country of origin", p.originCountry || "Japan"], ["Storage", translateStorage(p, d)], ["Business operator / Importer", maker || "-"]];
-  if (importer) rows.push(["Importer / Distributor", importer]);
-  if (d.allergens.length) rows.push(["Allergens", `${containsLabel}: ${translateAllergens(d.allergens).join(", ")}`]);
-  const barcode = canUseJanCode() ? janBarcodeSvg(p.janCode) : "";
-  return `<div class="label-paper basic-label overseas"><table><tbody>${rows.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join("")}</tbody></table>${barcode ? `<div class="label-barcode-footer"><div class="barcode-title">JAN code</div>${barcode}</div>` : ""}</div>`;
-}
 function nutritionLabelHtml(d) {
   const n = d.nutrition;
-  const p = currentProduct();
-  if (isGlobalExport()) {
-    const c = selectedCountry(p);
-    return `<div class="label-paper nutrition-label overseas"><h3>${escapeHtml(c.nutritionTitle)}</h3><p>${escapeHtml(c.per)}</p><table><tbody>
-      <tr><th>${escapeHtml(c.calories)}</th><td>${escapeHtml(n.kcal)}kcal</td></tr>
-      <tr><th>Protein</th><td>${escapeHtml(n.protein)}g</td></tr>
-      <tr><th>Total fat</th><td>${escapeHtml(n.fat)}g</td></tr>
-      <tr><th>${escapeHtml(c.carb)}</th><td>${escapeHtml(n.carbs)}g</td></tr>
-      <tr><th>${escapeHtml(c.salt)}</th><td>${escapeHtml(n.salt)}g</td></tr>
-    </tbody></table><small>Estimated values. Verify rounding, serving size and exemptions for ${escapeHtml(c.label)}.</small></div>`;
-  }
   return `<div class="label-paper nutrition-label"><h3>栄養成分表示</h3><p>100g当たり</p><table><tbody>
     <tr><th>エネルギー</th><td>${escapeHtml(n.kcal)}kcal</td></tr>
     <tr><th>たんぱく質</th><td>${escapeHtml(n.protein)}g</td></tr>
@@ -753,9 +709,10 @@ function saveCurrent() {
   const p = currentProduct();
   const exists = products.some((x) => x.id === p.id);
   if (!exists && !canCreateMore()) {
-    alert(`${planInfo().label}プランは${planInfo().note}です。プランを変更すると追加できます。`);
-    view = "home";
-    render();
+    showModal({
+      message: `${planInfo().label}プランは${planInfo().note}です。プランを変更すると追加できます。`,
+      onConfirm: () => { view = "home"; render(); },
+    });
     return;
   }
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
@@ -763,18 +720,18 @@ function saveCurrent() {
   saveProducts();
   view = "edit";
   editId = p.id;
-  window.draft = null;
+  draft = null;
   showStatus("保存しました");
 }
 
 function bindEvents() {
   document.querySelectorAll("[data-action='new']").forEach((el) => el.addEventListener("click", () => {
     if (!canCreateMore()) {
-      alert(`${planInfo().label}プランは${planInfo().note}です。プランを変更してください。`);
+      showModal({ message: `${planInfo().label}プランは${planInfo().note}です。プランを変更してください。` });
       return;
     }
     assistMessage = "";
-    window.draft = emptyProduct();
+    draft = emptyProduct();
     editId = "new";
     view = "edit";
     render();
@@ -787,13 +744,13 @@ function bindEvents() {
   document.querySelectorAll("[data-action='menu']").forEach((el) => el.addEventListener("click", () => {
     view = "menu";
     editId = null;
-    window.draft = null;
+    draft = null;
     render();
   }));
   document.querySelectorAll("[data-action='plan-page']").forEach((el) => el.addEventListener("click", () => {
     view = "home";
     editId = null;
-    window.draft = null;
+    draft = null;
     render();
   }));
   document.querySelectorAll("[data-action='saved']").forEach((el) => el.addEventListener("click", () => {
@@ -803,7 +760,7 @@ function bindEvents() {
   document.querySelectorAll("[data-action='home']").forEach((el) => el.addEventListener("click", () => {
     view = "menu";
     editId = null;
-    window.draft = null;
+    draft = null;
     assistMessage = "";
     render();
   }));
@@ -821,7 +778,7 @@ function bindEvents() {
   }));
   document.querySelectorAll("[data-dup]").forEach((el) => el.addEventListener("click", () => {
     if (!canCreateMore()) {
-      alert(`${planInfo().label}プランは${planInfo().note}です。プランを変更してください。`);
+      showModal({ message: `${planInfo().label}プランは${planInfo().note}です。プランを変更してください。` });
       return;
     }
     const source = products.find((p) => p.id === el.dataset.dup);
@@ -831,10 +788,16 @@ function bindEvents() {
     render();
   }));
   document.querySelectorAll("[data-del]").forEach((el) => el.addEventListener("click", () => {
-    if (!confirm("削除してよろしいですか？")) return;
-    products = products.filter((p) => p.id !== el.dataset.del);
-    saveProducts();
-    render();
+    showModal({
+      message: "削除してよろしいですか？",
+      confirmLabel: "削除",
+      cancelLabel: "キャンセル",
+      onConfirm: () => {
+        products = products.filter((p) => p.id !== el.dataset.del);
+        saveProducts();
+        render();
+      },
+    });
   }));
   document.querySelectorAll("[data-field]").forEach((el) => el.addEventListener("input", () => {
     const p = currentProduct();
@@ -955,12 +918,9 @@ function bindEvents() {
     const p = currentProduct();
     const { next, changes } = normalizeLabelText(p);
     assistMessage = changes.length ? `整えました：${changes.slice(0, 4).join("、")}${changes.length > 4 ? " ほか" : ""}` : "すでに食品表示向けに整っています。";
-    if (editId === "new") window.draft = next;
+    if (editId === "new") draft = next;
     else products = products.map((x) => (x.id === p.id ? next : x));
     render();
-  }));
-  document.querySelectorAll("[data-country]").forEach((el) => el.addEventListener("click", () => {
-    updateCurrent("exportCountry", el.dataset.country);
   }));
   document.querySelector("[data-size]")?.addEventListener("change", (e) => {
     printCfg = { ...(SIZE_PRESETS.find((s) => s.label === e.target.value) || SIZE_PRESETS[1]) };
@@ -1018,54 +978,21 @@ function printLabels() {
 }
 
 function copyRichHtml(html, text) {
-  const box = document.createElement("div");
-  box.setAttribute("contenteditable", "true");
-  box.style.position = "fixed";
-  box.style.left = "-10000px";
-  box.style.top = "0";
-  box.style.width = "1000px";
-  box.style.background = "#fff";
-  box.innerHTML = html;
-  document.body.appendChild(box);
-  const selection = window.getSelection();
-  const range = document.createRange();
-  range.selectNodeContents(box);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  let ok = false;
-  try {
-    ok = document.execCommand("copy");
-  } catch {
-    ok = false;
+  if (navigator.clipboard?.write && window.ClipboardItem) {
+    const blob = new Blob([html], { type: "text/html" });
+    const textBlob = new Blob([text], { type: "text/plain" });
+    return navigator.clipboard.write([new ClipboardItem({ "text/html": blob, "text/plain": textBlob })]);
   }
-  selection.removeAllRanges();
-  box.remove();
-  if (ok) return Promise.resolve();
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-  prompt("コピーしてください", text);
   return Promise.resolve();
 }
 
 function imageCopyRows(p, d) {
-  if (isGlobalExport()) {
-    const c = selectedCountry(p);
-    const maker = [p.manufacturerName, p.manufacturerPostal ? `ZIP ${p.manufacturerPostal}` : "", exportAddress(p), p.manufacturerPhone].filter(Boolean).join(" ");
-    const rows = [
-      ["Destination", c.label],
-      ["Product name", exportProductName(p)],
-      [p.exportCountry === "ca" ? "Ingredients / Ingredients" : "Ingredients", buildEnglishIngLabel(p.ingredients) || "-"],
-      ["Net contents", exportNetContent(p)],
-      ["Best before", formatExportDate(p.bestBefore, p.exportCountry || "us")],
-      ["Country of origin", p.originCountry || "Japan"],
-      ["Storage", translateStorage(p, d)],
-      ["Business operator / Importer", maker || "-"],
-    ];
-    const importer = [p.importerName, p.importerAddress].filter(Boolean).join(" ");
-    if (importer) rows.push(["Importer / Distributor", importer]);
-    if (d.allergens.length) rows.push(["Allergens", `${c.allergenLead}: ${translateAllergens(d.allergens).join(", ")}`]);
-    return rows;
-  }
-  const maker = [p.manufacturerName, p.manufacturerPostal ? `〒${p.manufacturerPostal}` : "", p.manufacturerAddress, p.manufacturerPhone].filter(Boolean).join(" ");
+  const maker = [
+    [p.manufacturerName, p.manufacturerPostal ? `〒${p.manufacturerPostal}` : ""].filter(Boolean).join(" "),
+    p.manufacturerAddress,
+    p.manufacturerPhone,
+  ].filter(Boolean).join("\n");
   const rows = [["名称", p.name || "ー"], ["原材料名", d.ingLabel || "ー"], ["内容量", p.volume || "ー"], ["賞味期限", p.bestBefore || "ー"], ["保存方法", d.storage || "ー"]];
   selectedMfrTypes(p).forEach((type) => rows.push([type, maker || "ー"]));
   if (d.allergens.length) rows.push(["アレルゲン", `${d.allergens.join("・")}を含む`]);
@@ -1073,19 +1000,18 @@ function imageCopyRows(p, d) {
 }
 
 function wrapCanvasText(ctx, text, maxWidth) {
-  const chars = String(text || "").split("");
-  const lines = [];
-  let line = "";
-  chars.forEach((ch) => {
-    const next = line + ch;
-    if (line && ctx.measureText(next).width > maxWidth) {
-      lines.push(line);
-      line = ch;
-    } else {
-      line = next;
-    }
+  const result = [];
+  String(text || "").split("\n").forEach((paragraph) => {
+    const chars = paragraph.split("");
+    let line = "";
+    chars.forEach((ch) => {
+      const next = line + ch;
+      if (line && ctx.measureText(next).width > maxWidth) { result.push(line); line = ch; }
+      else { line = next; }
+    });
+    result.push(line);
   });
-  if (line) lines.push(line);
+  const lines = result.filter((l) => l !== "");
   return lines.length ? lines : ["ー"];
 }
 
@@ -1093,21 +1019,22 @@ function drawTextLines(ctx, lines, x, y, lineHeight) {
   lines.forEach((line, idx) => ctx.fillText(line, x, y + idx * lineHeight));
 }
 
-function drawTableImage(ctx, x, y, width, title, rows, fs) {
+function drawTableImage(ctx, x, y, width, title, rows, fs, font) {
+  const F = font || `"Meiryo","Yu Gothic","MS Gothic",sans-serif`;
   const keyW = Math.min(112, Math.max(78, width * 0.26));
   const pad = 8;
   const lineH = fs * 1.45;
   ctx.strokeStyle = "#000";
   ctx.fillStyle = "#000";
   ctx.lineWidth = 1;
-  ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
+  ctx.font = `${fs}px ${F}`;
   let cy = y;
   if (title) {
-    ctx.font = `700 ${fs + 2}px "Yu Mincho","MS PMincho",serif`;
+    ctx.font = `700 ${fs + 2}px ${F}`;
     ctx.textAlign = "left";
     ctx.fillText(title, x, cy + fs + 2);
     cy += fs + 12;
-    ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
+    ctx.font = `${fs}px ${F}`;
   }
   rows.forEach(([key, value]) => {
     const valueLines = wrapCanvasText(ctx, value, width - keyW - pad * 3);
@@ -1117,30 +1044,18 @@ function drawTableImage(ctx, x, y, width, title, rows, fs) {
     ctx.moveTo(x + keyW, cy);
     ctx.lineTo(x + keyW, cy + rowH);
     ctx.stroke();
-    ctx.font = `700 ${fs}px "Yu Mincho","MS PMincho",serif`;
+    ctx.font = `700 ${fs}px ${F}`;
     ctx.fillText(String(key || ""), x + pad, cy + pad + fs);
-    ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
+    ctx.font = `${fs}px ${F}`;
     drawTextLines(ctx, valueLines, x + keyW + pad, cy + pad + fs, lineH);
     cy += rowH;
   });
   return cy;
 }
 
-function drawNutritionImage(ctx, x, y, width, d, fs) {
+function drawNutritionImage(ctx, x, y, width, d, fs, font) {
   const n = d.nutrition;
-  if (isGlobalExport()) {
-    const c = selectedCountry(currentProduct());
-    return drawTableImage(ctx, x, y, width, c.nutritionTitle, [
-      [c.per, ""],
-      [c.calories, `${n.kcal}kcal`],
-      ["Protein", `${n.protein}g`],
-      ["Total fat", `${n.fat}g`],
-      [c.carb, `${n.carbs}g`],
-      [c.salt, `${n.salt}g`],
-      ["Note", `Estimated values. Verify rules for ${c.label}.`],
-    ], fs);
-  }
-  return drawTableImage(ctx, x, y, width, "栄養成分表示", [
+  return drawTableImage(ctx, x, y, width, "", [
     ["100g当たり", ""],
     ["エネルギー", `${n.kcal}kcal`],
     ["たんぱく質", `${n.protein}g`],
@@ -1148,15 +1063,48 @@ function drawNutritionImage(ctx, x, y, width, d, fs) {
     ["炭水化物", `${n.carbs}g`],
     ["食塩相当量", `${n.salt}g`],
     ["備考", `この表示値は目安です。${d.autoNutrition.hasEst ? "一部推定値を含みます。" : ""}`],
-  ], fs);
+  ], fs, font);
 }
 
+function crc32(buf) {
+  let c = 0xffffffff;
+  const table = crc32.t || (crc32.t = Array.from({ length: 256 }, (_, n) => {
+    let v = n;
+    for (let k = 0; k < 8; k++) v = (v & 1) ? (0xedb88320 ^ (v >>> 1)) : (v >>> 1);
+    return v >>> 0;
+  }));
+  for (let i = 0; i < buf.length; i++) c = table[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return ((c ^ 0xffffffff) >>> 0);
+}
+function pngWith300dpi(bytes) {
+  // 300 DPI = 11811 pixels/metre (rounded)
+  const ppm = 11811;
+  const type = new TextEncoder().encode("pHYs");
+  const data = new Uint8Array(9);
+  const dv = new DataView(data.buffer);
+  dv.setUint32(0, ppm);
+  dv.setUint32(4, ppm);
+  data[8] = 1; // unit = metre
+  const payload = new Uint8Array([...type, ...data]);
+  const crc = crc32(payload);
+  const chunk = new Uint8Array(12 + 9);
+  const cdv = new DataView(chunk.buffer);
+  cdv.setUint32(0, 9); // data length
+  chunk.set(payload, 4);
+  cdv.setUint32(13, crc);
+  // Insert after IHDR (8-byte sig + 4+4+13+4 = 25 → total 33 bytes)
+  const out = new Uint8Array(bytes.length + chunk.length);
+  out.set(bytes.slice(0, 33));
+  out.set(chunk, 33);
+  out.set(bytes.slice(33), 33 + chunk.length);
+  return out;
+}
 function canvasToPngBlob(canvas) {
   const dataUrl = canvas.toDataURL("image/png");
   const bin = atob(dataUrl.split(",")[1]);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-  return new Blob([bytes], { type: "image/png" });
+  return new Blob([pngWith300dpi(bytes)], { type: "image/png" });
 }
 
 function downloadImageDataUrl(dataUrl) {
@@ -1229,39 +1177,43 @@ function downloadCanvasImage(canvas) {
   showStatus(opened ? "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f" : "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u8868\u793a\u3057\u307e\u3057\u305f");
 }
 
-function copyImageLabels() {
+async function copyImageLabels() {
   try {
     showStatus("\u753b\u50cf\u3092\u4f5c\u6210\u4e2d\u3067\u3059");
     const p = currentProduct();
     const d = derive(p);
-    const scale = 2;
-    const pxPerMm = 3.8;
+    const scale = 12;
+    const pxPerMm = 4;
     const margin = Math.max(8, Number(printCfg.margin || 3) * pxPerMm);
     const contentW = Math.max(260, Number(printCfg.w || 90) * pxPerMm);
-    const fs = Math.max(10, Number(printCfg.fs || 7.5) * 1.45);
+    const fs = Math.max(12, Number(printCfg.fs || 7.5) * 1.8);
+    const FONT = `"Meiryo","Yu Gothic","MS Gothic",sans-serif`;
     const canvas = document.createElement("canvas");
     const roughRows = imageCopyRows(p, d).length + (printTarget !== "label" ? 8 : 0);
     canvas.width = Math.ceil((contentW + margin * 2) * scale);
     canvas.height = Math.ceil((Math.max(180, roughRows * 42 + margin * 2 + 80)) * scale);
+    // フォントが確実にロードされてから描画する
+    await document.fonts.ready;
+    try { await document.fonts.load(`bold ${fs}px "Yu Mincho"`); } catch {}
+    try { await document.fonts.load(`${fs}px "Yu Mincho"`); } catch {}
+
     const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
     ctx.scale(scale, scale);
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width / scale, canvas.height / scale);
     let y = margin;
     if (printTarget !== "nutrition") {
-      y = drawTableImage(ctx, margin, y, contentW, isGlobalExport() ? `${selectedCountry(p).label} Product Label` : "表示ラベル", imageCopyRows(p, d), fs);
+      y = drawTableImage(ctx, margin, y, contentW, "", imageCopyRows(p, d), fs, FONT);
       const jan = normalizedJan(p.janCode);
       if (canUseJanCode() && jan) {
         y += 10;
-        ctx.strokeRect(margin, y, contentW, 38);
-        ctx.font = `${fs}px "Yu Mincho","MS PMincho",serif`;
-        ctx.fillStyle = "#000";
-        ctx.fillText(`${isGlobalExport() ? "JAN code" : "JANコード"}: ${jan}`, margin + 8, y + 24);
-        y += 48;
+        const barcodeH = drawBarcodeOnCanvas(ctx, jan, margin, y, contentW, fs);
+        y += barcodeH + 8;
       }
       if (d.contamination) {
-        ctx.font = `${Math.max(10, fs * 0.82)}px "Yu Mincho","MS PMincho",serif`;
-        const note = `${isGlobalExport() ? "※ Cross-contact: " : "※"}${d.contamination}`;
+        ctx.font = `${Math.max(10, fs * 0.82)}px ${FONT}`;
+        const note = `※${d.contamination}`;
         const lines = wrapCanvasText(ctx, note, contentW);
         drawTextLines(ctx, lines, margin, y + fs, fs * 1.25);
         y += lines.length * fs * 1.25 + 12;
@@ -1269,16 +1221,27 @@ function copyImageLabels() {
     }
     if (printTarget !== "label") {
       if (printTarget === "both") y += 22;
-      y = drawNutritionImage(ctx, margin, y, contentW, d, fs);
+      y = drawNutritionImage(ctx, margin, y, contentW, d, fs, FONT);
     }
     const finalH = Math.ceil((y + margin) * scale);
     const trimmed = document.createElement("canvas");
     trimmed.width = canvas.width;
     trimmed.height = finalH;
-    trimmed.getContext("2d").drawImage(canvas, 0, 0);
+    const trimCtx = trimmed.getContext("2d");
+    trimCtx.imageSmoothingEnabled = false;
+    trimCtx.drawImage(canvas, 0, 0);
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+      navigator.clipboard.write([new ClipboardItem({ "image/png": canvasToPngBlob(trimmed) })])
+        .then(() => showStatus("\u753b\u50cf\u3068\u3057\u3066\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f"))
+        .catch(() => {
+          downloadCanvasImage(trimmed);
+          showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u304c\u8a31\u53ef\u3055\u308c\u306a\u3044\u305f\u3081\u3001\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f");
+        });
+      return;
+    }
     downloadCanvasImage(trimmed);
   } catch {
-    showStatus("\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u3051\u307e\u305b\u3093\u3067\u3057\u305f");
+    showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
   }
 }
 
@@ -1288,93 +1251,32 @@ function copyLabels() {
   const parts = [];
   if (printTarget !== "nutrition") {
     const maker = [p.manufacturerName, p.manufacturerPostal ? `〒${p.manufacturerPostal}` : "", p.manufacturerAddress, p.manufacturerPhone].filter(Boolean).join(" ");
-    if (isGlobalExport()) {
-      const c = selectedCountry(p);
-      const overseasMaker = [p.manufacturerName, p.manufacturerPostal ? `ZIP ${p.manufacturerPostal}` : "", exportAddress(p), p.manufacturerPhone].filter(Boolean).join(" ");
-      const importer = [p.importerName, p.importerAddress].filter(Boolean).join(" ");
-      parts.push([
-        `Destination: ${c.label}`,
-        `Product name: ${exportProductName(p)}`,
-        `Ingredients: ${buildEnglishIngLabel(p.ingredients) || "-"}`,
-        `Net contents: ${exportNetContent(p)}`,
-        `Best before: ${formatExportDate(p.bestBefore, p.exportCountry || "us")}`,
-        `Country of origin: ${p.originCountry || "Japan"}`,
-        `Storage: ${translateStorage(p, d)}`,
-        `Business operator / Importer: ${overseasMaker || "-"}`,
-        canUseJanCode() && p.janCode ? `JAN code: ${p.janCode}` : "",
-        importer ? `Importer / Distributor: ${importer}` : "",
-        d.allergens.length ? `Allergens: ${c.allergenLead}: ${translateAllergens(d.allergens).join(", ")}` : "",
-        d.contamination ? `※ Cross-contact: ${d.contamination}` : "",
-      ].filter(Boolean).join("\n"));
-    } else {
-      parts.push([
-        `名称：${p.name || "ー"}`,
-        `原材料名：${d.ingLabel || "ー"}`,
-        `内容量：${p.volume || "ー"}`,
-        `賞味期限：${p.bestBefore || "ー"}`,
-        `保存方法：${d.storage || "ー"}`,
-        ...selectedMfrTypes(p).map((type) => `${type}：${maker || "ー"}`),
-        canUseJanCode() && p.janCode ? `JANコード：${p.janCode}` : "",
-        d.allergens.length ? `アレルゲン：${d.allergens.join("・")}を含む` : "",
-        d.contamination ? `※${d.contamination}` : "",
-      ].filter(Boolean).join("\n"));
-    }
+    parts.push([
+      `名称：${p.name || "ー"}`,
+      `原材料名：${d.ingLabel || "ー"}`,
+      `内容量：${p.volume || "ー"}`,
+      `賞味期限：${p.bestBefore || "ー"}`,
+      `保存方法：${d.storage || "ー"}`,
+      ...selectedMfrTypes(p).map((type) => `${type}：${maker || "ー"}`),
+      canUseJanCode() && p.janCode ? `JANコード：${p.janCode}` : "",
+      d.allergens.length ? `アレルゲン：${d.allergens.join("・")}を含む` : "",
+      d.contamination ? `※${d.contamination}` : "",
+    ].filter(Boolean).join("\n"));
   }
   if (printTarget !== "label") {
     const n = d.nutrition;
-    if (isGlobalExport()) {
-      const c = selectedCountry(p);
-      parts.push(`${c.nutritionTitle} (${c.per})\n${c.calories}: ${n.kcal}kcal\nProtein: ${n.protein}g\nTotal fat: ${n.fat}g\n${c.carb}: ${n.carbs}g\n${c.salt}: ${n.salt}g\n\nCompliance note: ${c.ingredientsNote}`);
-    } else {
-      parts.push(`栄養成分表示（100g当たり）\nエネルギー：${n.kcal}kcal\nたんぱく質：${n.protein}g\n脂質：${n.fat}g\n炭水化物：${n.carbs}g\n食塩相当量：${n.salt}g`);
-    }
+    parts.push(`栄養成分表示（100g当たり）\nエネルギー：${n.kcal}kcal\nたんぱく質：${n.protein}g\n脂質：${n.fat}g\n炭水化物：${n.carbs}g\n食塩相当量：${n.salt}g`);
   }
   copyPlainText(parts.join("\n\n"));
 }
 
 function copyPlainText(text) {
   const success = () => showStatus("\u6587\u5b57\u3060\u3051\u30b3\u30d4\u30fc\u3067\u304d\u307e\u3057\u305f");
-  const manual = () => showStatus("\u30b3\u30d4\u30fc\u6b04\u3092\u958b\u304d\u307e\u3057\u305f");
-  const fallbackCopy = () => {
-    const area = document.createElement("textarea");
-    area.value = text;
-    area.setAttribute("readonly", "readonly");
-    area.style.position = "fixed";
-    area.style.left = "8px";
-    area.style.top = "8px";
-    area.style.width = "2px";
-    area.style.height = "2px";
-    area.style.opacity = "0.01";
-    area.style.zIndex = "9999";
-    document.body.appendChild(area);
-    area.focus();
-    area.select();
-    area.setSelectionRange(0, area.value.length);
-    let ok = false;
-    try {
-      ok = document.execCommand("copy");
-    } catch {
-      ok = false;
-    }
-    area.remove();
-    if (ok) {
-      success();
-      return true;
-    }
-    return false;
-  };
-
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(success).catch(() => {
-      if (fallbackCopy()) return;
-      prompt("\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044", text);
-      manual();
-    });
+    navigator.clipboard.writeText(text).then(success).catch(() => showStatus("\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f"));
     return;
   }
-  if (fallbackCopy()) return;
-  prompt("\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044", text);
-  manual();
+  showStatus("\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
 }
 
 render();

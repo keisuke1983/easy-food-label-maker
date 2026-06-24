@@ -93,8 +93,8 @@ const SIZE_PRESETS = [
   { label: "自由入力", w: "90", h: "", margin: "3", fs: "7.5" },
 ];
 const PLANS = {
-  free: { label: "無料", price: "0円/月", limit: 3, note: "月3つまで" },
-  starter: { label: "スタンダード", price: "980円/月", limit: 10, note: "月10個まで" },
+  free: { label: "無料", price: "0円/月", limit: 1, note: "1商品まで無料" },
+  starter: { label: "スタンダード", price: "980円/月", limit: 10, note: "月10商品まで保存・PDF出力" },
   pro: { label: "プロ", price: "1980円/月", limit: Infinity, note: "無制限" },
 };
 
@@ -484,6 +484,31 @@ function menuHtml() {
       <h1 class="home-hero-title">食品表示ラベルを<br>かんたん作成</h1>
       <p class="home-hero-sub">食品表示ラベルの作成・保存・再印刷を一元管理</p>
     </div>
+    <div class="how-steps">
+      <div class="how-step">
+        <span class="how-num">1</span>
+        <div class="how-step-body">
+          <span class="how-step-title">商品情報を入力</span>
+          <small>商品名・原材料・栄養成分など</small>
+        </div>
+      </div>
+      <div class="how-arrow">▶</div>
+      <div class="how-step">
+        <span class="how-num">2</span>
+        <div class="how-step-body">
+          <span class="how-step-title">ラベルを確認</span>
+          <small>右側にリアルタイムで表示</small>
+        </div>
+      </div>
+      <div class="how-arrow">▶</div>
+      <div class="how-step">
+        <span class="how-num">3</span>
+        <div class="how-step-body">
+          <span class="how-step-title">印刷・保存</span>
+          <small>PDF印刷または画像コピー</small>
+        </div>
+      </div>
+    </div>
     <div class="home-actions">
       <button class="home-card" data-action="new">
         <div class="home-card-icon">＋</div>
@@ -595,7 +620,8 @@ function previewHtml(p, d) {
     <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
     <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
     ${previewNote}
-    <div class="output-actions"><button class="action primary" data-action="copy-image-output">画像でコピー</button><button class="action" data-action="copy-output">文字だけコピー</button><button class="action dark" data-action="open-print-preview">印刷プレビュー</button></div>
+    <div class="output-actions"><button class="action print-btn" data-action="open-print-preview">🖨 印刷プレビュー</button><button class="action secondary" data-action="copy-image-output">画像でコピー</button><button class="action" data-action="copy-output">文字だけコピー</button></div>
+    <p class="label-disclaimer">※ 表示内容の最終確認・法令適合の判断は事業者様の責任で行ってください。</p>
     <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
   </aside>`;

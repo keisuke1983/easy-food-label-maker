@@ -104,7 +104,7 @@ const PLANS = {
 let products = loadProducts();
 let draft = null;
 let currentPlan = safeGet("food-label-plan") || "free";
-let view = "home";
+let view = "saas";
 let editId = null;
 let printTarget = "both";
 let printCfg = SIZE_PRESETS[1];
@@ -131,6 +131,16 @@ let showTutorial = !safeGet("food-label-tutorial-done");
 let tutorialStep = 0;
 let showAiPanel = false;
 let highlightField = null; // ジャンプ後に強調する field selector
+
+// ── 食品商品管理クラウド 拡張状態 ──────────────────────────────────────
+let saasView = safeGet("fmcc-view") || "dashboard";
+let productDetailId = null;
+let specSheetId = null;
+let aiDescId = null;
+let aiDescChannel = "rakuten";
+let sidebarOpen = false;
+let masterSearch = "";
+let masterFilter = "all";
 
 /* ── チュートリアル ── */
 const TUTORIAL_STEPS = [
@@ -601,7 +611,24 @@ function render() {
   const scrollY = window.scrollY;
   const formScrollY = document.querySelector(".form-column")?.scrollTop ?? 0;
   const prevScrollY = document.querySelector(".preview-column")?.scrollTop ?? 0;
-  const pageHtml = view === "home" ? homeHtml() : view === "menu" ? menuHtml() : view === "saved" ? savedHtml() : editorHtml(currentProduct());
+  let pageHtml;
+  if (view === "saas") {
+    if (saasView === "dashboard") pageHtml = dashboardHtml();
+    else if (saasView === "products") pageHtml = productsListHtml();
+    else if (saasView === "product-detail") pageHtml = productDetailHtml();
+    else if (saasView === "spec-sheet-nav") pageHtml = specSheetHtml();
+    else if (saasView === "ai-descriptions-nav") pageHtml = aiDescriptionsHtml();
+    else if (saasView === "settings-nav") pageHtml = newSettingsHtml();
+    else pageHtml = dashboardHtml();
+  } else if (view === "home") {
+    pageHtml = homeHtml();
+  } else if (view === "menu") {
+    pageHtml = menuHtml();
+  } else if (view === "saved") {
+    pageHtml = savedHtml();
+  } else {
+    pageHtml = editorHtml(currentProduct());
+  }
   document.getElementById("root").innerHTML = `${pageHtml}${statusMessage ? `<div class="status-toast">${escapeHtml(statusMessage)}</div>` : ""}${tutorialHtml()}`;
   bindEvents();
   window.scrollTo({ top: scrollY, behavior: "instant" });
@@ -803,7 +830,7 @@ function menuHtml() {
 function headerHtml(title, showSave = true) {
   const saveStatusCls = autoSaveStatus === "保存済み" ? "autosave-ok" : autoSaveStatus === "保存中" ? "autosave-saving" : "autosave-editing";
   const saveStatusHtml = autoSaveStatus ? `<span class="autosave-status ${saveStatusCls}">${escapeHtml(autoSaveStatus)}</span>` : "";
-  return `<header class="topbar"><button class="back" data-action="menu">戻る</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${saveStatusHtml}${statusMessage ? `<span class="toast">${escapeHtml(statusMessage)}</span>` : ""}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
+  return `<header class="topbar"><button class="back" data-action="back-to-saas">← 商品管理</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${saveStatusHtml}${statusMessage ? `<span class="toast">${escapeHtml(statusMessage)}</span>` : ""}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
 }
 function savedHtml() {
   let filtered = products.filter((p) => {
@@ -1508,6 +1535,8 @@ function bindEvents() {
     render();
     setTimeout(printLabels, 50);
   }));
+  // SaaS拡張イベント
+  bindSaasEvents();
 }
 
 function printLabels() {
@@ -1828,6 +1857,518 @@ function copyPlainText(text) {
     return;
   }
   showStatus("\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 食品商品管理クラウド – 拡張レイヤー
+// ══════════════════════════════════════════════════════════════════════
+
+// ── 定数 ──────────────────────────────────────────────────────────────
+const PRODUCT_CATEGORIES = ["菓子","パン","惣菜","弁当","飲料","調味料","乾物","冷凍食品","スープ","デザート","その他"];
+const SALES_CHANNELS_LIST = ["自社EC","楽天","Amazon","BASE","Shopify","卸・問屋","百貨店","道の駅","直売所","その他"];
+const AI_CHANNELS = [
+  { id:"rakuten",  label:"楽天商品説明" },
+  { id:"amazon",   label:"Amazon商品説明" },
+  { id:"base",     label:"BASE/Shopify" },
+  { id:"instagram",label:"Instagram投稿文" },
+  { id:"wholesale",label:"業務用卸向け" },
+  { id:"pop",      label:"POP用短文" },
+];
+
+// ── マイグレーション ──────────────────────────────────────────────────
+function extendProductMaster(p) {
+  return {
+    code: "", category: "", price: "", imageUrl: "",
+    salesChannels: [], publishStatus: "active", memo: "",
+    createdAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
+    ...p,
+  };
+}
+(function runMigration() {
+  if (safeGet("fmcc-migrated-v1") === "1") return;
+  products = products.map(extendProductMaster);
+  saveProducts();
+  safeSet("fmcc-migrated-v1", "1");
+})();
+
+// ── ナビゲーション ────────────────────────────────────────────────────
+function sidebarHtml() {
+  const items = [
+    { id:"dashboard",         label:"ダッシュボード", ico:"⊞" },
+    { id:"products",          label:"商品管理",       ico:"⊡" },
+    { id:"label-nav",         label:"ラベル作成",     ico:"⊟" },
+    { id:"spec-sheet-nav",    label:"商品規格書",     ico:"≡" },
+    { id:"ai-descriptions-nav",label:"AI説明文",      ico:"✦" },
+  ];
+  const settingItem = { id:"settings-nav", label:"設定", ico:"⊕" };
+  const active = saasView;
+  const navLink = (it) => `<button class="nav-item${active===it.id?" active":""}" data-nav="${it.id}">
+    <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>
+  </button>`;
+  return `<nav class="sidebar${sidebarOpen?" open":""}">
+    <div class="sidebar-hd">
+      <div class="sidebar-brand">
+        <img src="./assets/app-icon.svg" alt="" class="sidebar-logo">
+        <div><div class="sidebar-name">食品商品管理</div><div class="sidebar-sub2">クラウド</div></div>
+      </div>
+      <button class="sidebar-close-btn" data-action="close-sidebar">✕</button>
+    </div>
+    <div class="nav-links">${items.map(navLink).join("")}</div>
+    <div class="nav-footer">${navLink(settingItem)}</div>
+  </nav>
+  <div class="sidebar-backdrop${sidebarOpen?" visible":""}" data-action="close-sidebar"></div>`;
+}
+
+function saasTopbar(title) {
+  return `<header class="saas-topbar">
+    <button class="saas-menu-btn" data-action="toggle-sidebar">☰</button>
+    <span class="saas-topbar-title">${escapeHtml(title)}</span>
+    <span class="plan-badge">${planInfo().label}プラン</span>
+  </header>`;
+}
+
+function saasLayout(title, content) {
+  return `<div class="saas-shell">${sidebarHtml()}
+    <div class="saas-main">${saasTopbar(title)}
+      <div class="saas-content">${content}</div>
+    </div>
+  </div>`;
+}
+
+// ── ダッシュボード ────────────────────────────────────────────────────
+function dashboardHtml() {
+  const total = products.length;
+  const incomplete = products.filter(p => {
+    const d = deriveFields(p);
+    return calcCompletion(p,d).pct < 100;
+  }).length;
+  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0,5);
+  const recentCards = recent.length ? recent.map(p => `
+    <div class="dash-product-row">
+      <div class="dash-product-info">
+        <span class="dash-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+        ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
+      </div>
+      <div class="dash-product-actions">
+        <button class="btn-sm" data-nav-product-detail="${escapeHtml(p.id)}">詳細</button>
+        <button class="btn-sm" data-label-from="${escapeHtml(p.id)}">ラベル</button>
+      </div>
+    </div>`).join("") : `<p class="empty-note">商品がまだ登録されていません。</p>`;
+
+  return saasLayout("ダッシュボード", `
+    <div class="dash-stats">
+      <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">登録商品数</div></div>
+      <div class="stat-card warn"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
+      <div class="stat-card"><div class="stat-num">${products.filter(p=>p.starred).length}</div><div class="stat-lbl">お気に入り</div></div>
+      <div class="stat-card blue"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
+    </div>
+    <div class="dash-quick-actions">
+      <button class="quick-action-btn primary" data-nav="products" data-quick-new="1">＋ 新商品を登録</button>
+      <button class="quick-action-btn" data-nav="products">商品一覧を見る</button>
+      <button class="quick-action-btn" data-nav="spec-sheet-nav">規格書を作成</button>
+      <button class="quick-action-btn" data-nav="ai-descriptions-nav">AI説明文を生成</button>
+    </div>
+    <div class="dash-section">
+      <h2 class="dash-section-title">最近の商品</h2>
+      <div class="dash-product-list">${recentCards}</div>
+    </div>
+  `);
+}
+
+// ── 商品マスター一覧 ──────────────────────────────────────────────────
+function productsListHtml() {
+  let list = [...products];
+  if (masterSearch) list = list.filter(p => (p.name||"").includes(masterSearch)||(p.code||"").includes(masterSearch)||(p.category||"").includes(masterSearch));
+  if (masterFilter==="starred") list = list.filter(p=>p.starred);
+  if (masterFilter==="active") list = list.filter(p=>p.publishStatus==="active");
+  if (masterFilter==="draft") list = list.filter(p=>p.publishStatus==="draft");
+  list.sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||""));
+
+  const statusBadge = (p) => {
+    const label = p.publishStatus==="active"?"公開中":p.publishStatus==="draft"?"下書き":"非公開";
+    const cls = p.publishStatus==="active"?"badge-active":p.publishStatus==="draft"?"badge-draft":"badge-inactive";
+    return `<span class="status-badge ${cls}">${label}</span>`;
+  };
+
+  const cards = list.length ? list.map(p => {
+    const d = deriveFields(p);
+    const comp = calcCompletion(p,d);
+    return `<div class="master-card">
+      <div class="master-card-hd">
+        <div class="master-card-title-row">
+          <span class="master-card-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+          ${statusBadge(p)}
+          <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}">${p.starred?"★":"☆"}</button>
+        </div>
+        <div class="master-card-meta">
+          ${p.code?`<span class="meta-item">品番：${escapeHtml(p.code)}</span>`:""}
+          ${p.category?`<span class="meta-item">${escapeHtml(p.category)}</span>`:""}
+          ${p.price?`<span class="meta-item">¥${escapeHtml(p.price)}</span>`:""}
+          <span class="meta-item">更新：${escapeHtml(p.updatedAt||"")}</span>
+        </div>
+        <div class="master-card-comp">
+          <div class="comp-bar-wrap"><div class="comp-bar-fill" style="width:${comp.pct}%"></div></div>
+          <span class="comp-pct">${comp.pct}%</span>
+        </div>
+      </div>
+      <div class="master-card-actions">
+        <button class="btn-action" data-nav-product-detail="${escapeHtml(p.id)}">✎ 詳細編集</button>
+        <button class="btn-action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル</button>
+        <button class="btn-action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
+        <button class="btn-action" data-ai-from="${escapeHtml(p.id)}">✦ AI説明文</button>
+        <button class="btn-action danger" data-del="${escapeHtml(p.id)}">削除</button>
+      </div>
+    </div>`;
+  }).join("") : `<div class="empty-state"><p>商品がまだ登録されていません。</p><button class="action primary" data-quick-new="1">＋ 最初の商品を登録する</button></div>`;
+
+  return saasLayout("商品管理", `
+    <div class="master-toolbar">
+      <input class="search-box" placeholder="商品名・品番・カテゴリで検索..." data-master-search value="${escapeHtml(masterSearch)}">
+      <div class="filter-btns">
+        ${["all","starred","active","draft"].map(f=>`<button class="filter-btn${masterFilter===f?" active":""}" data-master-filter="${f}">${{all:"すべて",starred:"★お気に入り",active:"公開中",draft:"下書き"}[f]}</button>`).join("")}
+      </div>
+      <button class="action primary" data-quick-new="1">＋ 新規登録</button>
+    </div>
+    <div class="master-list">${cards}</div>
+  `);
+}
+
+// ── 商品詳細（マスター編集） ───────────────────────────────────────────
+function productDetailHtml() {
+  const p = products.find(x=>x.id===productDetailId) || (editId==="new"?draft:null);
+  if (!p) return saasLayout("商品詳細", `<p>商品が見つかりません。<button class="action" data-nav="products">一覧へ戻る</button></p>`);
+  const chkd = (val) => val ? "checked" : "";
+  const channelChks = SALES_CHANNELS_LIST.map(ch=>`<label class="check-label"><input type="checkbox" data-sales-ch="${escapeHtml(ch)}" ${chkd((p.salesChannels||[]).includes(ch))}> ${escapeHtml(ch)}</label>`).join("");
+  const catOpts = ["", ...PRODUCT_CATEGORIES].map(c=>`<option value="${escapeHtml(c)}"${p.category===c?" selected":""}>${c||"カテゴリを選択"}</option>`).join("");
+  const statusOpts = [["active","公開中"],["draft","下書き"],["inactive","非公開"]].map(([v,l])=>`<option value="${v}"${p.publishStatus===v?" selected":""}>${l}</option>`).join("");
+
+  return saasLayout(`${escapeHtml(p.name||"新規商品")} – 商品詳細`, `
+    <div class="detail-breadcrumb">
+      <button class="bread-link" data-nav="products">商品管理</button>
+      <span class="bread-sep">›</span>
+      <span>${escapeHtml(p.name||"新規商品")}</span>
+    </div>
+    <div class="detail-header-actions">
+      <button class="action primary" data-action="save-master">保存する</button>
+      <button class="action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル編集</button>
+      <button class="action" data-spec-from="${escapeHtml(p.id)}">📋 規格書を作成</button>
+      <button class="action" data-ai-from="${escapeHtml(p.id)}">✦ AI説明文</button>
+    </div>
+    <div class="detail-grid">
+      <div class="detail-section">
+        <h3 class="detail-section-title">基本情報</h3>
+        <div class="field-grid">
+          <label class="field"><span>商品名<b>必須</b></span><input data-master-field="name" value="${escapeHtml(p.name||"")}"></label>
+          <label class="field"><span>品番・商品コード</span><input data-master-field="code" value="${escapeHtml(p.code||"")}" placeholder="例：SW-001"></label>
+          <label class="field"><span>カテゴリ</span><select data-master-field="category">${catOpts}</select></label>
+          <label class="field"><span>販売価格（円）</span><input type="number" data-master-field="price" value="${escapeHtml(p.price||"")}" placeholder="例：980"></label>
+          <label class="field"><span>JANコード</span><input data-master-field="janCode" value="${escapeHtml(p.janCode||"")}" placeholder="例：4901234567894"></label>
+          <label class="field"><span>内容量</span><input data-master-field="volume" value="${escapeHtml(p.volume||"")}" placeholder="例：100g"></label>
+          <label class="field"><span>賞味期限</span><input data-master-field="bestBefore" value="${escapeHtml(p.bestBefore||"")}" placeholder="例：製造日より90日"></label>
+          <label class="field"><span>保存方法</span><input data-master-field="storage" value="${escapeHtml(p.storage||"")}" placeholder="例：高温多湿を避けて保存"></label>
+        </div>
+      </div>
+      <div class="detail-section">
+        <h3 class="detail-section-title">販売・管理情報</h3>
+        <label class="field"><span>公開ステータス</span><select data-master-field="publishStatus">${statusOpts}</select></label>
+        <div class="field"><span class="field-label">販売チャネル</span><div class="check-group">${channelChks}</div></div>
+        <label class="field full"><span>メモ</span><textarea data-master-field="memo" rows="3">${escapeHtml(p.memo||"")}</textarea></label>
+      </div>
+      <div class="detail-section">
+        <h3 class="detail-section-title">原材料・アレルゲン</h3>
+        <div class="ing-summary">
+          ${(p.ingredients||[]).filter(i=>i.name).map(i=>`<span class="ing-chip">${escapeHtml(i.name)}${i.weight?` (${i.weight}g)`:""}</span>`).join("")||"<span class='empty-note'>未入力</span>"}
+        </div>
+        <button class="action mt-8" data-label-from="${escapeHtml(p.id)}">✎ 原材料・ラベルを編集する</button>
+      </div>
+      <div class="detail-section">
+        <h3 class="detail-section-title">製造者情報</h3>
+        <div class="field-grid">
+          <label class="field"><span>製造者名</span><input data-master-field="manufacturerName" value="${escapeHtml(p.manufacturerName||"")}"></label>
+          <label class="field"><span>製造者住所</span><input data-master-field="manufacturerAddress" value="${escapeHtml(p.manufacturerAddress||"")}"></label>
+          <label class="field"><span>電話番号</span><input data-master-field="manufacturerPhone" value="${escapeHtml(p.manufacturerPhone||"")}"></label>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+// ── 商品規格書 ────────────────────────────────────────────────────────
+function specSheetHtml() {
+  const productList = products.filter(p=>p.name?.trim());
+  if (!specSheetId && productList.length === 0) {
+    return saasLayout("商品規格書", `<div class="empty-state"><p>先に商品を登録してください。</p><button class="action primary" data-nav="products">商品管理へ</button></div>`);
+  }
+  const p = specSheetId ? products.find(x=>x.id===specSheetId) : productList[0];
+  if (!p) return saasLayout("商品規格書", `<p>商品が見つかりません。</p>`);
+  const d = deriveFields(p);
+  const row = (label, val) => val ? `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(String(val))}</td></tr>` : "";
+  const specHtml = `<div class="spec-doc" id="spec-print-area">
+    <div class="spec-header">
+      <h1 class="spec-title">商品規格書</h1>
+      <div class="spec-meta">作成日：${new Date().toLocaleDateString("ja-JP")}　版数：Rev.1</div>
+    </div>
+    <table class="spec-table">
+      <tbody>
+        ${row("商品名", p.name)}
+        ${row("品番・商品コード", p.code)}
+        ${row("JANコード", p.janCode)}
+        ${row("カテゴリ", p.category)}
+        ${row("内容量", p.volume)}
+        ${row("販売価格", p.price ? `¥${p.price}` : "")}
+        ${row("賞味期限", p.bestBefore)}
+        ${row("保存方法", d.storage)}
+        ${row("原材料名", d.ingLabel)}
+        ${row("アレルゲン", d.allergens.join("・"))}
+        ${p.contaminationEnabled ? row("コンタミネーション", d.contamination) : ""}
+        ${row("栄養成分（100g当たり）", `エネルギー ${d.nutrition.kcal}kcal / たんぱく質 ${d.nutrition.protein}g / 脂質 ${d.nutrition.fat}g / 炭水化物 ${d.nutrition.carbs}g / 食塩相当量 ${d.nutrition.salt}g`)}
+        ${row("製造者", [p.manufacturerName, p.manufacturerAddress].filter(Boolean).join(" "))}
+        ${row("製造者電話番号", p.manufacturerPhone)}
+        ${row("販売チャネル", (p.salesChannels||[]).join("・"))}
+        ${row("メモ・備考", p.memo)}
+      </tbody>
+    </table>
+  </div>`;
+
+  const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.name)}</option>`).join("");
+  return saasLayout("商品規格書", `
+    <div class="spec-controls">
+      <select class="spec-select" data-spec-select>${selectOpts}</select>
+      <button class="action primary" data-action="print-spec">🖨 印刷・PDF</button>
+      <button class="action" data-action="copy-spec">📋 テキストでコピー</button>
+    </div>
+    ${specHtml}
+  `);
+}
+
+// ── AI商品説明文プロンプト生成 ─────────────────────────────────────────
+function buildAiDescPrompt(p, channelId) {
+  const d = deriveFields(p);
+  const base = `商品名：${p.name||"未入力"}
+カテゴリ：${p.category||"未入力"}
+内容量：${p.volume||"未入力"}
+販売価格：${p.price ? "¥"+p.price : "未入力"}
+原材料：${d.ingLabel||"未入力"}
+アレルゲン：${d.allergens.join("・")||"なし"}
+保存方法：${d.storage||"未入力"}
+賞味期限：${p.bestBefore||"未入力"}
+製造者：${p.manufacturerName||"未入力"}
+メモ：${p.memo||"なし"}`;
+
+  const instructions = {
+    rakuten: `以下の商品情報をもとに、楽天市場用の商品説明文を作成してください。\n・見出し（h2タグ）を使って読みやすく\n・商品の魅力・特徴を3〜5点箇条書き\n・安全・品質へのこだわりをアピール\n・お客様の購買意欲を高める言葉を入れる\n・文字数：500〜800文字`,
+    amazon: `以下の商品情報をもとに、Amazon商品説明（商品紹介コンテンツ）を作成してください。\n・商品タイトルの提案も含める\n・5つの商品特徴を箇条書き（各40文字以内）\n・詳細な商品説明（300〜500文字）\n・キーワードを自然に含める`,
+    base: `以下の商品情報をもとに、BASEまたはShopify向けの商品説明を作成してください。\n・親しみやすいトーン\n・商品の背景・ストーリーを含める\n・使い方や食べ方の提案\n・300〜500文字`,
+    instagram: `以下の商品情報をもとに、Instagram投稿文を作成してください。\n・感情を動かす導入文\n・絵文字を適切に使用\n・ハッシュタグを10〜15個提案\n・200文字以内`,
+    wholesale: `以下の商品情報をもとに、業務用・卸向けの商品説明文を作成してください。\n・品質・安全性を重点的にアピール\n・数量・価格の問い合わせ誘導\n・箇条書きで仕様を整理\n・300〜500文字`,
+    pop: `以下の商品情報をもとに、店頭POP用の短い説明文を作成してください。\n・インパクトのあるキャッチコピー（20文字以内）\n・商品の最大の魅力を1〜2文で\n・合計60文字以内`,
+  };
+
+  return `【${AI_CHANNELS.find(c=>c.id===channelId)?.label||"商品説明"}の作成をお願いします】\n\n■ 商品情報\n${base}\n\n■ 依頼内容\n${instructions[channelId]||"商品説明文を作成してください。"}`;
+}
+
+function aiDescriptionsHtml() {
+  const productList = products.filter(p=>p.name?.trim());
+  if (productList.length === 0) {
+    return saasLayout("AI説明文", `<div class="empty-state"><p>先に商品を登録してください。</p><button class="action primary" data-nav="products">商品管理へ</button></div>`);
+  }
+  const p = aiDescId ? products.find(x=>x.id===aiDescId) : productList[0];
+  if (!p) return saasLayout("AI説明文", `<p>商品が見つかりません。</p>`);
+  const prompt = buildAiDescPrompt(p, aiDescChannel);
+  const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.name)}</option>`).join("");
+  const channelBtns = AI_CHANNELS.map(ch=>`<button class="ch-btn${aiDescChannel===ch.id?" active":""}" data-ai-ch="${ch.id}">${ch.label}</button>`).join("");
+
+  return saasLayout("AI説明文プロンプト生成", `
+    <div class="ai-desc-toolbar">
+      <div class="ai-desc-select-row">
+        <label>商品を選択：</label>
+        <select class="spec-select" data-ai-product-select>${selectOpts}</select>
+      </div>
+    </div>
+    <div class="ai-desc-channels">${channelBtns}</div>
+    <div class="ai-desc-info">
+      <p>下のプロンプトをコピーして、ChatGPT・Claude などのAIに貼り付けてください。</p>
+    </div>
+    <div class="ai-prompt-wrap">
+      <textarea class="ai-prompt-textarea" id="ai-desc-prompt" readonly>${escapeHtml(prompt)}</textarea>
+      <button class="action primary" data-action="copy-ai-desc">📋 プロンプトをコピー</button>
+    </div>
+    <div class="ai-desc-tips">
+      <h3>使い方</h3>
+      <ol>
+        <li>上の「商品を選択」で説明文を作りたい商品を選ぶ</li>
+        <li>作成したい説明文の種類（楽天・Amazonなど）を選ぶ</li>
+        <li>「プロンプトをコピー」ボタンをクリック</li>
+        <li>ChatGPT（chat.openai.com）やClaude（claude.ai）に貼り付けて送信</li>
+        <li>生成された文章をそのまま使用、または編集して活用する</li>
+      </ol>
+    </div>
+  `);
+}
+
+// ── 設定（新版） ──────────────────────────────────────────────────────
+function newSettingsHtml() {
+  return saasLayout("設定", `
+    <div class="settings-sections">
+      <div class="settings-card">
+        <h3>プラン</h3>
+        ${planHtml()}
+        <div class="home-cta-wrap"><button class="home-next" data-action="menu">プランを変更する</button></div>
+      </div>
+      <div class="settings-card">
+        <h3>データ管理</h3>
+        <div class="settings-actions">
+          <button class="action" data-action="export-csv">↓ CSV出力</button>
+          <label class="action secondary import-label">↑ CSVインポート<input type="file" accept=".csv" data-csv-import style="display:none"></label>
+        </div>
+        <p class="notice">データはすべてこのブラウザのlocalStorageに保存されています。</p>
+      </div>
+      <div class="settings-card">
+        <h3>チュートリアル</h3>
+        <button class="action" data-action="show-tutorial">チュートリアルを再表示</button>
+      </div>
+    </div>
+  `);
+}
+
+// ── 商品マスター保存 ──────────────────────────────────────────────────
+function saveMaster() {
+  const p = products.find(x=>x.id===productDetailId);
+  if (!p) return;
+  document.querySelectorAll("[data-master-field]").forEach(el => {
+    p[el.dataset.masterField] = el.value;
+  });
+  const chs = [];
+  document.querySelectorAll("[data-sales-ch]").forEach(el => {
+    if (el.checked) chs.push(el.dataset.salesCh);
+  });
+  p.salesChannels = chs;
+  p.updatedAt = new Date().toLocaleDateString("ja-JP");
+  saveProducts();
+  showStatus("保存しました");
+}
+
+// ── SaaSナビゲーション イベントバインド ──────────────────────────────
+function bindSaasEvents() {
+  // ラベルエディタ → 商品管理に戻る
+  document.querySelectorAll("[data-action='back-to-saas']").forEach(el => el.addEventListener("click", () => {
+    saasView = productDetailId ? "product-detail" : "products";
+    view = "saas"; render();
+  }));
+
+  // サイドバー
+  document.querySelectorAll("[data-action='toggle-sidebar']").forEach(el => el.addEventListener("click", () => { sidebarOpen = !sidebarOpen; render(); }));
+  document.querySelectorAll("[data-action='close-sidebar']").forEach(el => el.addEventListener("click", () => { sidebarOpen = false; render(); }));
+
+  // ナビリンク
+  document.querySelectorAll("[data-nav]").forEach(el => el.addEventListener("click", () => {
+    const nav = el.dataset.nav;
+    sidebarOpen = false;
+    if (nav === "label-nav") {
+      if (products.length > 0) { editId = products[0].id; view = "edit"; saasView = "label-nav"; }
+      else { view = "edit"; editId = "new"; draft = extendProductMaster(emptyProduct()); saasView = "label-nav"; }
+    } else if (nav === "spec-sheet-nav") {
+      saasView = "spec-sheet-nav"; view = "saas";
+      if (!specSheetId && products.length > 0) specSheetId = products[0].id;
+    } else if (nav === "ai-descriptions-nav") {
+      saasView = "ai-descriptions-nav"; view = "saas";
+      if (!aiDescId && products.length > 0) aiDescId = products[0].id;
+    } else if (nav === "settings-nav") {
+      saasView = "settings-nav"; view = "saas";
+    } else {
+      saasView = nav; view = "saas";
+    }
+    safeSet("fmcc-view", saasView);
+    render();
+  }));
+
+  // 新規商品作成
+  document.querySelectorAll("[data-quick-new]").forEach(el => el.addEventListener("click", () => {
+    if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
+    draft = extendProductMaster(emptyProduct());
+    editId = "new"; view = "edit"; sidebarOpen = false;
+    render();
+  }));
+
+  // 商品詳細へ
+  document.querySelectorAll("[data-nav-product-detail]").forEach(el => el.addEventListener("click", () => {
+    productDetailId = el.dataset.navProductDetail;
+    saasView = "product-detail"; view = "saas";
+    safeSet("fmcc-view", saasView);
+    render();
+  }));
+
+  // ラベル編集（商品から）
+  document.querySelectorAll("[data-label-from]").forEach(el => el.addEventListener("click", () => {
+    const pid = el.dataset.labelFrom;
+    const p = products.find(x=>x.id===pid);
+    if (!p) return;
+    editId = pid; view = "edit"; sidebarOpen = false;
+    render();
+  }));
+
+  // 規格書（商品から）
+  document.querySelectorAll("[data-spec-from]").forEach(el => el.addEventListener("click", () => {
+    specSheetId = el.dataset.specFrom;
+    saasView = "spec-sheet-nav"; view = "saas"; sidebarOpen = false;
+    safeSet("fmcc-view", saasView);
+    render();
+  }));
+
+  // AI説明文（商品から）
+  document.querySelectorAll("[data-ai-from]").forEach(el => el.addEventListener("click", () => {
+    aiDescId = el.dataset.aiFrom;
+    saasView = "ai-descriptions-nav"; view = "saas"; sidebarOpen = false;
+    safeSet("fmcc-view", saasView);
+    render();
+  }));
+
+  // 商品マスター保存
+  document.querySelectorAll("[data-action='save-master']").forEach(el => el.addEventListener("click", saveMaster));
+
+  // 商品検索
+  document.querySelectorAll("[data-master-search]").forEach(el => {
+    el.addEventListener("input", () => { masterSearch = el.value; render(); });
+  });
+
+  // フィルター
+  document.querySelectorAll("[data-master-filter]").forEach(el => el.addEventListener("click", () => { masterFilter = el.dataset.masterFilter; render(); }));
+
+  // 規格書 商品選択
+  document.querySelectorAll("[data-spec-select]").forEach(el => el.addEventListener("change", () => { specSheetId = el.value; render(); }));
+
+  // 規格書印刷
+  document.querySelectorAll("[data-action='print-spec']").forEach(el => el.addEventListener("click", () => {
+    const area = document.getElementById("spec-print-area");
+    if (!area) return;
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>商品規格書</title><style>body{font-family:sans-serif;padding:20px}.spec-table{width:100%;border-collapse:collapse}.spec-table th,.spec-table td{border:1px solid #ddd;padding:8px;text-align:left}.spec-table th{background:#f0f4ff;width:35%}.spec-header{margin-bottom:16px}.spec-title{font-size:22px;font-weight:700}.spec-meta{font-size:12px;color:#666}</style></head><body>${area.innerHTML}</body></html>`);
+    w.document.close(); w.print();
+  }));
+
+  // 規格書テキストコピー
+  document.querySelectorAll("[data-action='copy-spec']").forEach(el => el.addEventListener("click", () => {
+    const area = document.getElementById("spec-print-area");
+    if (!area) return;
+    const text = [...area.querySelectorAll("tr")].map(tr=>{
+      const th = tr.querySelector("th")?.textContent?.trim()||"";
+      const td = tr.querySelector("td")?.textContent?.trim()||"";
+      return th && td ? `${th}：${td}` : "";
+    }).filter(Boolean).join("\n");
+    copyPlainText(text);
+  }));
+
+  // AI説明文 商品選択
+  document.querySelectorAll("[data-ai-product-select]").forEach(el => el.addEventListener("change", () => { aiDescId = el.value; render(); }));
+
+  // AI説明文 チャネル選択
+  document.querySelectorAll("[data-ai-ch]").forEach(el => el.addEventListener("click", () => { aiDescChannel = el.dataset.aiCh; render(); }));
+
+  // AI説明文コピー
+  document.querySelectorAll("[data-action='copy-ai-desc']").forEach(el => el.addEventListener("click", () => {
+    const ta = document.getElementById("ai-desc-prompt");
+    if (ta) copyPlainText(ta.value);
+  }));
 }
 
 render();

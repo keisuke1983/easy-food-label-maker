@@ -87,10 +87,13 @@ const DATE_PRESETS = [
   ["3m", "3か月後", 90],
 ];
 const SIZE_PRESETS = [
-  { label: "70×40mm", w: "70", h: "40", margin: "2", fs: "6.5" },
+  { label: "70×50mm", w: "70", h: "50", margin: "2", fs: "6.5" },
   { label: "90×60mm", w: "90", h: "60", margin: "3", fs: "7.5" },
   { label: "100×70mm", w: "100", h: "70", margin: "4", fs: "8" },
-  { label: "自由入力", w: "90", h: "", margin: "3", fs: "7.5" },
+  { label: "A4シール用", w: "190", h: "277", margin: "10", fs: "10" },
+  { label: "小袋用", w: "60", h: "40", margin: "2", fs: "6" },
+  { label: "冷凍商品用", w: "90", h: "60", margin: "3", fs: "7" },
+  { label: "自由サイズ", w: "90", h: "", margin: "3", fs: "7.5" },
 ];
 const PLANS = {
   free: { label: "無料", price: "0円/月", limit: 1, note: "1商品まで無料" },
@@ -109,7 +112,259 @@ let renderTimer = null;
 let printPreviewOpen = false;
 let assistMessage = "";
 let statusMessage = "";
+let openSections = new Set(["商品情報", "原材料"]);
+let autoSaveTimer = null;
+let autoSaveStatus = "";
+let previewZoom = 100;
+let dragSrcIdx = null;
+let recentStorage = JSON.parse(safeGet("food-label-recent-storage") || "[]");
+let savedSearch = "";
+let savedSort = "updatedAt";
+let savedFilter = "all";
+let selectedForPrint = new Set();
+let ingMaster = JSON.parse(safeGet("food-label-ing-master") || "[]");
+let mfrTemplates = JSON.parse(safeGet("food-label-mfr-templates") || "[]");
+let printOffsetX = safeGet("food-label-offset-x") || "0";
+let printOffsetY = safeGet("food-label-offset-y") || "0";
+let globalHandlersBound = false;
+let showTutorial = !safeGet("food-label-tutorial-done");
+let tutorialStep = 0;
+let showAiPanel = false;
+let highlightField = null; // ジャンプ後に強調する field selector
 
+/* ── チュートリアル ── */
+const TUTORIAL_STEPS = [
+  { num: 1, title: "商品情報を入力", desc: "名称・内容量・賞味期限を入力してください。", hint: "左の「商品情報」セクションから始めましょう。" },
+  { num: 2, title: "原材料・栄養成分を確認", desc: "原材料を追加すると栄養成分が自動計算されます。", hint: "重量(g)を入力すると計算精度が上がります。" },
+  { num: 3, title: "右側でラベルを確認", desc: "入力内容がリアルタイムで右側のラベルに反映されます。", hint: "ズームボタンで拡大表示できます。" },
+  { num: 4, title: "保存・印刷する", desc: "内容確認後、「保存する」ボタンで保存し「印刷プレビュー」から印刷できます。", hint: "Ctrl+S でも保存できます。" },
+];
+function tutorialHtml() {
+  if (!showTutorial) return "";
+  const s = TUTORIAL_STEPS[tutorialStep];
+  const isLast = tutorialStep === TUTORIAL_STEPS.length - 1;
+  return `<div class="tutorial-overlay">
+    <div class="tutorial-card">
+      <div class="tutorial-steps-indicator">${TUTORIAL_STEPS.map((_, i) => `<span class="tutorial-dot${i === tutorialStep ? " active" : i < tutorialStep ? " done" : ""}"></span>`).join("")}</div>
+      <div class="tutorial-step-num">STEP ${s.num} / ${TUTORIAL_STEPS.length}</div>
+      <h2 class="tutorial-title">${escapeHtml(s.title)}</h2>
+      <p class="tutorial-desc">${escapeHtml(s.desc)}</p>
+      <p class="tutorial-hint">💡 ${escapeHtml(s.hint)}</p>
+      <div class="tutorial-actions">
+        <button class="tutorial-skip" data-tutorial="skip">スキップ</button>
+        ${tutorialStep > 0 ? `<button class="action" data-tutorial="prev">← 戻る</button>` : ""}
+        ${isLast ? `<button class="action primary" data-tutorial="done">完了 ✓</button>` : `<button class="action primary" data-tutorial="next">次へ →</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+/* ── AI相談 ── */
+function buildAiPrompt(p, d) {
+  const checks = labelChecklist(p, d);
+  const issues = checks.filter((c) => !c.ok).map((c) => `・${c.label}`).join("\n");
+  return `【食品表示ラベルのチェックをお願いします】
+
+■ 商品情報
+名称：${p.name || "未入力"}
+内容量：${p.volume || "未入力"}
+賞味期限：${p.bestBefore || "未入力"}
+保存方法：${d.storage || "未入力"}
+
+■ 原材料名
+${d.ingLabel || "未入力"}
+
+■ 栄養成分表示（100g当たり）
+エネルギー：${d.nutrition.kcal}kcal
+たんぱく質：${d.nutrition.protein}g
+脂質：${d.nutrition.fat}g
+炭水化物：${d.nutrition.carbs}g
+食塩相当量：${d.nutrition.salt}g
+
+■ アレルゲン
+${d.allergens.join("・") || "なし"}
+
+■ 製造者
+${[p.manufacturerName, p.manufacturerAddress].filter(Boolean).join(" / ") || "未入力"}
+
+■ 現在の未入力・要確認項目
+${issues || "特になし（すべて入力済み）"}`.trim();
+}
+function aiPanelHtml(p, d) {
+  const EXAMPLES = [
+    "この表示内容で不足している項目はありますか？",
+    "アレルゲン表示に注意点はありますか？",
+    "原材料表示を食品表示法に沿って整えてください",
+  ];
+  const prompt = buildAiPrompt(p, d);
+  return `<div class="ai-panel-overlay" data-action="close-ai-panel">
+    <div class="ai-panel-card" onclick="event.stopPropagation()">
+      <div class="ai-panel-head">
+        <h2>AIに相談</h2>
+        <button class="ai-close-btn" data-action="close-ai-panel">✕</button>
+      </div>
+      <p class="ai-panel-desc">下のプロンプトをコピーして ChatGPT・Claude などのAIに貼り付けてください。</p>
+      <div class="ai-examples">
+        <p class="ai-examples-label">相談例（クリックで追記）</p>
+        ${EXAMPLES.map((e) => `<button class="ai-example-btn" data-ai-example="${escapeHtml(e)}">${escapeHtml(e)}</button>`).join("")}
+      </div>
+      <div class="ai-prompt-area">
+        <textarea class="ai-prompt-textarea" id="ai-prompt-text" readonly>${escapeHtml(prompt)}</textarea>
+        <button class="action primary ai-copy-btn" data-action="copy-ai-prompt">📋 プロンプトをコピー</button>
+      </div>
+    </div>
+  </div>`;
+}
+/* ── 画像ダウンロード ── */
+async function downloadImageLabel() {
+  try {
+    showStatus("画像を生成中です...");
+    const p = currentProduct();
+    const d = derive(p);
+    const scale = 12, pxPerMm = 4;
+    const margin = Math.max(8, Number(printCfg.margin || 3) * pxPerMm);
+    const contentW = Math.max(260, Number(printCfg.w || 90) * pxPerMm);
+    const fs = Math.max(12, Number(printCfg.fs || 7.5) * 1.8);
+    const FONT = `"Meiryo","Yu Gothic","MS Gothic",sans-serif`;
+    const canvas = document.createElement("canvas");
+    const roughRows = imageCopyRows(p, d).length + (printTarget !== "label" ? 8 : 0);
+    canvas.width = Math.ceil((contentW + margin * 2) * scale);
+    canvas.height = Math.ceil((Math.max(180, roughRows * 42 + margin * 2 + 80)) * scale);
+    await document.fonts.ready;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width / scale, canvas.height / scale);
+    let y = margin;
+    if (printTarget !== "nutrition") {
+      y = drawTableImage(ctx, margin, y, contentW, "", imageCopyRows(p, d), fs, FONT);
+      const jan = normalizedJan(p.janCode);
+      if (canUseJanCode() && jan) { y += 6; y += drawBarcodeOnCanvas(ctx, jan, margin, y, contentW, fs); }
+    }
+    if (printTarget !== "label") {
+      if (printTarget === "both") y += 22;
+      y = drawNutritionImage(ctx, margin, y, contentW, d, fs, FONT);
+    }
+    const finalH = Math.ceil((y + margin) * scale);
+    const trimmed = document.createElement("canvas");
+    trimmed.width = canvas.width; trimmed.height = finalH;
+    const trimCtx = trimmed.getContext("2d");
+    trimCtx.imageSmoothingEnabled = false;
+    trimCtx.drawImage(canvas, 0, 0);
+    const pngBlob = canvasToPngBlob(trimmed);
+    const safeName = (p.name || "label").replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_");
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `${safeName}_label_${date}.png`;
+    const url = URL.createObjectURL(await pngBlob);
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    showStatus("画像を保存しました");
+  } catch { showStatus("画像保存に失敗しました"); }
+}
+/* ── チェックリストジャンプ ── */
+const CHECKLIST_JUMP_MAP = [
+  { match: "名称が未入力", section: "商品情報", field: "[data-field='name']" },
+  { match: "内容量が未入力", section: "商品情報", field: "[data-volume-amount]" },
+  { match: "賞味期限が未入力", section: "商品情報", field: "[data-date-input]" },
+  { match: "保存方法が未入力", section: "保存方法", field: null },
+  { match: "原材料名が未入力", section: "原材料", field: "[data-ing-name='0']" },
+  { match: "重量が未入力", section: "原材料", field: "[data-ing-weight='0']" },
+  { match: "製造者名が未入力", section: "製造者・製造所・加工者", field: "[data-field='manufacturerName']" },
+  { match: "製造者住所が未入力", section: "製造者・製造所・加工者", field: "[data-field='manufacturerAddress']" },
+  { match: "栄養成分表示を確認", section: "栄養成分表示", field: null },
+];
+function handleChecklistJump(label) {
+  const entry = CHECKLIST_JUMP_MAP.find((m) => label.includes(m.match));
+  if (!entry) return;
+  openSections.add(entry.section);
+  highlightField = entry.field;
+  render();
+  requestAnimationFrame(() => {
+    const sec = [...document.querySelectorAll(".section")].find((el) => el.querySelector(".section-title-text")?.textContent === entry.section);
+    if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (entry.field) {
+      const el = document.querySelector(entry.field);
+      if (el) {
+        el.focus();
+        el.classList.add("field-highlight");
+        setTimeout(() => el.classList.remove("field-highlight"), 2000);
+      }
+    }
+    highlightField = null;
+  });
+}
+function saveIngMaster(name) {
+  if (!name?.trim()) return;
+  ingMaster = [name.trim(), ...ingMaster.filter((x) => x !== name.trim())].slice(0, 120);
+  safeSet("food-label-ing-master", JSON.stringify(ingMaster));
+}
+function saveHistory(p) {
+  try {
+    const key = `food-label-history-${p.id}`;
+    const hist = JSON.parse(safeGet(key) || "[]");
+    hist.unshift({ snapshot: JSON.parse(JSON.stringify(p)), savedAt: new Date().toLocaleString("ja-JP") });
+    safeSet(key, JSON.stringify(hist.slice(0, 5)));
+  } catch {}
+}
+function loadHistory(id) {
+  try { return JSON.parse(safeGet(`food-label-history-${id}`) || "[]"); } catch { return []; }
+}
+function exportCsv() {
+  const headers = ["id", "name", "volume", "bestBefore", "storage", "storageCustom", "manufacturerName", "manufacturerAddress", "manufacturerPhone", "manufacturerPostal", "janCode", "updatedAt"];
+  const rows = products.map((p) => headers.map((h) => `"${String(p[h] || "").replace(/"/g, '""')}"`).join(","));
+  const csv = [headers.join(","), ...rows].join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "food-labels.csv"; a.click();
+  URL.revokeObjectURL(url);
+  showStatus("CSVをエクスポートしました");
+}
+function importCsvFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const text = e.target.result.replace(/^﻿/, "");
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      if (lines.length < 2) { showStatus("CSVが空または形式が不正です"); return; }
+      const headers = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim());
+      const nameIdx = headers.indexOf("name");
+      if (nameIdx === -1) { showStatus("CSVにnameカラムが必要です"); return; }
+      let added = 0;
+      lines.slice(1).forEach((line) => {
+        const cols = [];
+        let cur = ""; let inQ = false;
+        for (const ch of line) { if (ch === '"') { inQ = !inQ; } else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; } else { cur += ch; } }
+        cols.push(cur.trim());
+        const row = {};
+        headers.forEach((h, i) => { row[h] = cols[i] || ""; });
+        if (!row.name) return;
+        const p = emptyProduct();
+        Object.assign(p, row, { id: uid(), starred: false, ingredients: [{ id: uid(), name: "", weight: "" }] });
+        products = [p, ...products];
+        added++;
+      });
+      saveProducts(); render();
+      showStatus(`${added}件をインポートしました`);
+    } catch { showStatus("CSVの読み込みに失敗しました"); }
+  };
+  reader.readAsText(file, "utf-8");
+}
+function batchPrint() {
+  if (!selectedForPrint.size) return;
+  const targets = products.filter((p) => selectedForPrint.has(p.id));
+  const labelStyle = `style="width:${printCfg.w || 90}mm;${printCfg.h ? `min-height:${printCfg.h}mm;` : ""}font-size:${printCfg.fs || 7.5}pt;"`;
+  const html = targets.map((p) => {
+    const d = derive(p);
+    return `<div style="page-break-after:always;">${printablePreviewHtml(p, d, labelStyle, true)}</div>`;
+  }).join("");
+  const style = document.createElement("style");
+  style.id = "print-style";
+  style.textContent = `@media print { body>*{display:none!important} #batch-print-frame{display:block!important;position:fixed;inset:0;background:#fff;padding:${printCfg.margin||3}mm} .label-paper{width:${printCfg.w||90}mm!important;font-size:${printCfg.fs||7.5}pt!important;break-inside:avoid} }`;
+  const frame = document.createElement("div"); frame.id = "batch-print-frame"; frame.innerHTML = `<style>${style.textContent.replace(/@media print \{|\}/g,"")}</style>${html}`;
+  document.body.appendChild(frame); document.head.appendChild(style);
+  window.print();
+  setTimeout(() => { frame.remove(); style.remove(); }, 1200);
+}
 function showStatus(message) {
   statusMessage = message;
   render();
@@ -140,6 +395,7 @@ function emptyProduct() {
     allergensMode: "auto", allergensManual: "",
     contaminationEnabled: false, contaminationAllergens: "", contaminationText: "",
     manufacturerType: "製造者", manufacturerTypes: ["製造者"], manufacturerName: "", manufacturerPostal: "", manufacturerAddress: "", manufacturerPhone: "",
+    starred: false,
     updatedAt: new Date().toLocaleDateString("ja-JP"),
   };
 }
@@ -342,9 +598,17 @@ function render() {
   const key = focusKey(active);
   const selStart = active?.selectionStart ?? null;
   const selEnd = active?.selectionEnd ?? null;
+  const scrollY = window.scrollY;
+  const formScrollY = document.querySelector(".form-column")?.scrollTop ?? 0;
+  const prevScrollY = document.querySelector(".preview-column")?.scrollTop ?? 0;
   const pageHtml = view === "home" ? homeHtml() : view === "menu" ? menuHtml() : view === "saved" ? savedHtml() : editorHtml(currentProduct());
-  document.getElementById("root").innerHTML = `${pageHtml}${statusMessage ? `<div class="status-toast">${escapeHtml(statusMessage)}</div>` : ""}`;
+  document.getElementById("root").innerHTML = `${pageHtml}${statusMessage ? `<div class="status-toast">${escapeHtml(statusMessage)}</div>` : ""}${tutorialHtml()}`;
   bindEvents();
+  window.scrollTo({ top: scrollY, behavior: "instant" });
+  const fc = document.querySelector(".form-column");
+  const pc = document.querySelector(".preview-column");
+  if (fc) fc.scrollTop = formScrollY;
+  if (pc) pc.scrollTop = prevScrollY;
   if (key) {
     const next = document.querySelector(key);
     if (next) {
@@ -358,6 +622,18 @@ function render() {
 function scheduleRender() {
   clearTimeout(renderTimer);
   renderTimer = setTimeout(render, 250);
+}
+function scheduleAutoSave() {
+  if (view !== "edit") return;
+  autoSaveStatus = "編集中";
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    const p = currentProduct();
+    if (!p || !p.name?.trim()) return;
+    autoSaveStatus = "保存中";
+    render();
+    setTimeout(() => { saveCurrent(); autoSaveStatus = "保存済み"; render(); }, 300);
+  }, 3000);
 }
 function currentProduct() { return editId === "new" ? draft : products.find((p) => p.id === editId); }
 function planInfo() { return PLANS[currentPlan] || PLANS.free; }
@@ -521,41 +797,139 @@ function menuHtml() {
         <span class="home-card-arrow">→</span>
       </button>
     </div>
-    <div class="recent-strip"><span class="recent-label">保存済み</span><span>${products.length}件のラベル</span></div>
+    <div class="recent-strip"><span class="recent-label">保存済み</span><span>${products.length}件のラベル</span><button class="help-link" data-action="show-tutorial">？ 使い方を見る</button></div>
   </main>`;
 }
 function headerHtml(title, showSave = true) {
-  return `<header class="topbar"><button class="back" data-action="menu">戻る</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${statusMessage ? `<span class="toast">${escapeHtml(statusMessage)}</span>` : ""}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
+  const saveStatusCls = autoSaveStatus === "保存済み" ? "autosave-ok" : autoSaveStatus === "保存中" ? "autosave-saving" : "autosave-editing";
+  const saveStatusHtml = autoSaveStatus ? `<span class="autosave-status ${saveStatusCls}">${escapeHtml(autoSaveStatus)}</span>` : "";
+  return `<header class="topbar"><button class="back" data-action="menu">戻る</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${saveStatusHtml}${statusMessage ? `<span class="toast">${escapeHtml(statusMessage)}</span>` : ""}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
 }
 function savedHtml() {
-  return `<div class="page">${headerHtml("以前作ったラベルを印刷する", false)}<div class="content narrow"><div class="product-grid">${products.map((p) => {
-    const d = derive(p);
-    return `<article class="product-card"><div><h3>${escapeHtml(p.name || "（名称未入力）")}</h3><p>更新: ${escapeHtml(p.updatedAt)}</p><p>内容量: ${escapeHtml(p.volume || "未入力")}</p><div class="chips">${d.allergens.slice(0, 5).map((a) => `<span>${escapeHtml(a)}</span>`).join("")}</div></div><div class="card-actions"><button data-edit="${p.id}">編集</button><button data-dup="${p.id}">複製</button><button class="danger" data-del="${p.id}">削除</button></div></article>`;
-  }).join("")}</div></div></div>`;
+  let filtered = products.filter((p) => {
+    if (savedFilter === "starred" && !p.starred) return false;
+    if (savedSearch && !String(p.name || "").toLowerCase().includes(savedSearch.toLowerCase())) return false;
+    return true;
+  });
+  if (savedSort === "name") filtered = [...filtered].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ja"));
+  const batchBtn = selectedForPrint.size > 0
+    ? `<button class="action primary" data-action="batch-print">🖨 ${selectedForPrint.size}件をまとめて印刷</button>` : "";
+  return `<div class="page">${headerHtml("保存済みラベル", false)}
+    <div class="content narrow">
+      <div class="saved-toolbar">
+        <input class="search-box" placeholder="商品名で検索..." data-saved-search value="${escapeHtml(savedSearch)}">
+        <div class="saved-controls-row">
+          <div class="btn-group">
+            <button class="${savedSort === "updatedAt" ? "selected" : ""}" data-saved-sort="updatedAt">更新日順</button>
+            <button class="${savedSort === "name" ? "selected" : ""}" data-saved-sort="name">名前順</button>
+          </div>
+          <div class="btn-group">
+            <button class="${savedFilter === "all" ? "selected" : ""}" data-saved-filter="all">すべて (${products.length})</button>
+            <button class="${savedFilter === "starred" ? "selected" : ""}" data-saved-filter="starred">★ お気に入り</button>
+          </div>
+          <div class="btn-group">
+            <button class="action" data-action="export-csv">↓ CSV出力</button>
+            <label class="action csv-label">↑ CSV読込<input type="file" accept=".csv" data-csv-import style="display:none"></label>
+          </div>
+          ${batchBtn}
+        </div>
+      </div>
+      <div class="product-grid">
+        ${filtered.length === 0
+          ? `<p class="empty-msg">該当する商品がありません</p>`
+          : filtered.map((p) => {
+              const d = derive(p);
+              const sel = selectedForPrint.has(p.id);
+              return `<article class="product-card${sel ? " sel-print" : ""}">
+                <div class="card-top-row">
+                  <label class="card-check-wrap"><input type="checkbox" data-sel-print="${escapeHtml(p.id)}"${sel ? " checked" : ""}><span>選択</span></label>
+                  <button class="star-btn${p.starred ? " on" : ""}" data-toggle-star="${escapeHtml(p.id)}" title="お気に入り">${p.starred ? "★" : "☆"}</button>
+                </div>
+                <h3>${escapeHtml(p.name || "（名称未入力）")}</h3>
+                <p class="card-meta">更新: ${escapeHtml(p.updatedAt || "")} ／ 内容量: ${escapeHtml(p.volume || "未入力")}</p>
+                <div class="chips">${(d.allergens || []).slice(0, 5).map((a) => `<span>${escapeHtml(a)}</span>`).join("")}</div>
+                <div class="card-actions">
+                  <button data-edit="${escapeHtml(p.id)}">編集</button>
+                  <button data-dup="${escapeHtml(p.id)}">複製</button>
+                  <button class="danger" data-del="${escapeHtml(p.id)}">削除</button>
+                </div>
+              </article>`;
+            }).join("")}
+      </div>
+    </div>
+  </div>`;
 }
 function editorHtml(p) {
   const d = derive(p);
+  const { pct, missing } = calcCompletion(p, d);
+  const pctColor = pct >= 100 ? "#16a34a" : pct >= 60 ? "#2563eb" : "#d97706";
+  const completionHtml = `<div class="completion-bar-wrap">
+    <div class="completion-bar-head">
+      <span>入力完成度</span>
+      <strong style="color:${pctColor}">${pct}%</strong>
+      ${missing.length ? `<span class="completion-missing">未入力：${missing.join("・")}</span>` : `<span class="completion-ok">✓ すべて入力済み</span>`}
+    </div>
+    <div class="completion-bar-track"><div class="completion-bar-fill" style="width:${pct}%;background:${pctColor}"></div></div>
+  </div>`;
+  const recentStorageOpts = recentStorage.filter((s) => STORAGE_OPTS.includes(s));
+  const storageHtml = `${recentStorageOpts.length ? `<div class="recent-storage-label">よく使う保存方法</div><div class="choice-grid">${recentStorageOpts.map((s) => `<button class="${p.storage === s ? "selected" : ""}" data-storage="${escapeHtml(s)}">${p.storage === s ? "✓ " : ""}${escapeHtml(s)}</button>`).join("")}</div><div class="recent-storage-label">すべての保存方法</div>` : ""}<div class="choice-grid">${STORAGE_OPTS.map((s) => `<button class="${p.storage === s ? "selected" : ""}" data-storage="${escapeHtml(s)}">${p.storage === s ? "✓ " : ""}${escapeHtml(s)}</button>`).join("")}</div>${p.storage === "自由入力" ? `<label class="field"><span>保存方法</span><input data-field="storageCustom" value="${escapeHtml(p.storageCustom)}"></label>` : ""}`;
   return `<div class="page">${headerHtml(p.name || "新商品ラベル作成")}
     <div class="editor-shell">
       <div class="form-column">
+        ${completionHtml}
         ${section("商品情報", productInfoHtml(p))}
         ${janCodeHtml(p)}
-        ${section("保存方法", `<div class="choice-grid">${STORAGE_OPTS.map((s) => `<button class="${p.storage === s ? "selected" : ""}" data-storage="${escapeHtml(s)}">${p.storage === s ? "✓ " : ""}${escapeHtml(s)}</button>`).join("")}</div>${p.storage === "自由入力" ? `<label class="field"><span>保存方法</span><input data-field="storageCustom" value="${escapeHtml(p.storageCustom)}"></label>` : ""}`)}
-        ${section("原材料", `<div class="ing-list">${p.ingredients.map((i, idx) => ingredientHtml(i, idx)).join("")}</div><button class="action" data-action="add-ing">原材料を追加</button>`)}
+        ${section("保存方法", storageHtml)}
+        ${section("原材料", `<div class="ing-list" id="ing-list">${p.ingredients.map((i, idx) => ingredientHtml(i, idx)).join("")}</div><button class="action" data-action="add-ing">＋ 原材料を追加</button>`)}
         ${nutritionEditorHtml(p, d)}
         ${allergenEditorHtml(p, d)}
         ${contaminationEditorHtml(p)}
         ${labelAssistHtml(p, d)}
         ${manufacturerEditorHtml(p)}
+        ${historyHtml(p)}
+        <datalist id="ing-master-list">${ingMaster.map((n) => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
       </div>
       <div class="preview-column">${previewHtml(p, d)}</div>
     </div>
+    <button class="fab-save" data-action="save" title="保存する">保存する</button>
   </div>`;
 }
-function section(title, body, accent = false) { return `<section class="section ${accent ? "accent" : ""}"><div class="section-title">${title}</div><div class="section-body">${body}</div></section>`; }
+function section(title, body, accent = false) {
+  const open = openSections.has(title);
+  return `<section class="section${accent ? " accent" : ""}${open ? " open" : ""}">
+    <button class="section-header" data-toggle-section="${escapeHtml(title)}">
+      <span class="section-title-text">${escapeHtml(title)}</span>
+      <span class="section-chevron">${open ? "▲" : "▼"}</span>
+    </button>
+    <div class="section-body"${open ? "" : ' style="display:none"'}>${body}</div>
+  </section>`;
+}
+function calcCompletion(p, d) {
+  const items = [
+    { ok: !!p.name?.trim(), label: "名称" },
+    { ok: p.ingredients.some((i) => i.name?.trim() && Number(i.weight) > 0), label: "原材料（重量付き）" },
+    { ok: !!p.volume?.trim(), label: "内容量" },
+    { ok: !!p.bestBefore?.trim(), label: "賞味期限" },
+    { ok: !!d.storage?.trim(), label: "保存方法" },
+    { ok: !!p.manufacturerName?.trim(), label: "製造者名" },
+    { ok: !!p.manufacturerAddress?.trim(), label: "製造者住所" },
+  ];
+  const filled = items.filter((i) => i.ok).length;
+  const pct = Math.round((filled / items.length) * 100);
+  const missing = items.filter((i) => !i.ok).map((i) => i.label);
+  return { pct, missing };
+}
 function manufacturerEditorHtml(p) {
   const selected = selectedMfrTypes(p);
-  return section("製造者・製造所・加工者", `<div class="mfr-choice">${MFR_TYPES.map((t) => `<button class="${selected.includes(t) ? "selected" : ""}" data-mfr="${t}">${selected.includes(t) ? "✓ " : ""}${t}</button>`).join("")}</div><p class="notice">複数選択できます。表示ラベルには選んだ項目がそれぞれ表示されます。</p><label class="field"><span>名称<b>必須</b></span><input data-field="manufacturerName" value="${escapeHtml(p.manufacturerName)}" placeholder="例：株式会社APW"></label><div class="two-col"><label class="field"><span>郵便番号</span><input data-field="manufacturerPostal" value="${escapeHtml(p.manufacturerPostal)}"></label><label class="field"><span>電話番号</span><input data-field="manufacturerPhone" value="${escapeHtml(p.manufacturerPhone)}"></label></div><label class="field"><span>住所</span><input data-field="manufacturerAddress" value="${escapeHtml(p.manufacturerAddress)}"></label>`);
+  const tplHtml = mfrTemplates.length
+    ? `<div class="mfr-tpl-row"><select data-mfr-tpl-select><option value="">テンプレートを選択...</option>${mfrTemplates.map((t, i) => `<option value="${i}">${escapeHtml(t.label)}</option>`)}</select><button class="action" data-action="del-mfr-tpl">削除</button></div>`
+    : "";
+  return section("製造者・製造所・加工者", `${tplHtml}<div class="mfr-choice">${MFR_TYPES.map((t) => `<button class="${selected.includes(t) ? "selected" : ""}" data-mfr="${t}">${selected.includes(t) ? "✓ " : ""}${t}</button>`).join("")}</div><p class="notice">複数選択できます。</p><label class="field"><span>名称<b>必須</b></span><input data-field="manufacturerName" value="${escapeHtml(p.manufacturerName)}" placeholder="例：株式会社APW"></label><div class="two-col"><label class="field"><span>郵便番号</span><input data-field="manufacturerPostal" value="${escapeHtml(p.manufacturerPostal)}"></label><label class="field"><span>電話番号</span><input data-field="manufacturerPhone" value="${escapeHtml(p.manufacturerPhone)}"></label></div><label class="field"><span>住所</span><input data-field="manufacturerAddress" value="${escapeHtml(p.manufacturerAddress)}"></label><div class="mfr-tpl-save-row"><input id="mfr-tpl-name" placeholder="テンプレート名（例：本店・工場）"><button class="action" data-action="save-mfr-tpl">テンプレートとして保存</button></div>`);
+}
+function historyHtml(p) {
+  const hist = loadHistory(p.id);
+  if (!hist.length) return "";
+  return section("変更履歴", `<div class="history-list">${hist.map((h, i) => `<div class="history-row"><span class="history-date">${escapeHtml(h.savedAt)}</span><button class="action" data-restore-history="${i}" data-history-pid="${escapeHtml(p.id)}">この時点に戻す</button></div>`).join("")}</div>`);
 }
 function productInfoHtml(p) {
   const volume = splitVolume(p.volume);
@@ -570,7 +944,13 @@ function productInfoHtml(p) {
 }
 function ingredientHtml(i, idx) {
   const est = i.name && i.weight ? estimateNutrition(i.name) : null;
-  return `<div class="ing-row"><span>${idx + 1}</span><input data-ing-name="${idx}" value="${escapeHtml(i.name)}" placeholder="原材料名"><input type="number" data-ing-weight="${idx}" value="${escapeHtml(i.weight)}" placeholder="g"><div class="badges">${isAdditive(i.name) ? `<b class="violet">添加物</b>` : ""}${est ? `<b class="${est.estimated ? "amber" : "green"}">${est.estimated ? "推定" : "DB"}</b>` : ""}</div><button class="icon-btn" data-remove-ing="${idx}">×</button></div>`;
+  return `<div class="ing-row" draggable="true" data-ing-idx="${idx}">
+    <span class="drag-handle" title="ドラッグで並び替え">⠿</span>
+    <input list="ing-master-list" data-ing-name="${idx}" value="${escapeHtml(i.name)}" placeholder="原材料名">
+    <input type="number" data-ing-weight="${idx}" value="${escapeHtml(i.weight)}" placeholder="g">
+    <div class="badges">${isAdditive(i.name) ? `<b class="violet">添加物</b>` : ""}${est ? `<b class="${est.estimated ? "amber" : "green"}">${est.estimated ? "推定" : "DB"}</b>` : ""}</div>
+    <button class="icon-btn" data-remove-ing="${idx}">×</button>
+  </div>`;
 }
 function janCodeHtml(p) {
   if (!canUseJanCode()) {
@@ -594,20 +974,32 @@ function contaminationEditorHtml(p) {
 }
 function labelAssistHtml(p, d) {
   const checks = labelChecklist(p, d);
-  return section("表示チェックリスト", `<div class="assist-actions"><button class="action primary" data-action="normalize-label">食品表示向けに整える</button></div>${assistMessage ? `<p class="notice success">${escapeHtml(assistMessage)}</p>` : ""}<div class="check-list">${checks.map((item) => `<div class="${item.ok ? "check-ok" : "check-warn"}"><b>${item.ok ? "OK" : "要確認"}</b><span>${escapeHtml(item.label)}</span></div>`).join("")}</div><p class="notice">この機能は表示文を整える補助です。法令適合を保証するものではありません。</p>`);
+  const okCount = checks.filter((c) => c.ok).length;
+  return section("表示チェックリスト", `
+    <div class="assist-actions">
+      <button class="action primary" data-action="normalize-label">食品表示向けに整える</button>
+      <button class="action ai-consult-btn" data-action="open-ai-panel">💬 AIに相談</button>
+    </div>
+    ${assistMessage ? `<p class="notice success">${escapeHtml(assistMessage)}</p>` : ""}
+    <div class="checklist-summary"><span>${okCount} / ${checks.length} 項目OK</span>${okCount < checks.length ? `<span class="checklist-warn-hint">⬇ 要確認項目をクリックで該当欄へジャンプ</span>` : ""}</div>
+    <div class="check-list">${checks.map((item) => `<div class="${item.ok ? "check-ok" : "check-warn check-jumpable"}" ${!item.ok ? `data-jump-label="${escapeHtml(item.label)}" title="クリックで該当欄へ移動"` : ""}><b>${item.ok ? "✓" : "!"}</b><span>${escapeHtml(item.label)}</span></div>`).join("")}</div>
+    <p class="notice">この機能は表示補助です。法令適合の最終確認は事業者の責任で行ってください。</p>`);
 }
 function labelChecklist(p, d) {
+  const ingWithWeight = p.ingredients.filter((i) => i.name?.trim() && Number(i.weight) > 0);
+  const ingAny = p.ingredients.some((i) => i.name?.trim());
   return [
-    { label: "名称が入力されている", ok: !!p.name?.trim() },
-    { label: "原材料と重量が入力されている", ok: p.ingredients.some((i) => i.name?.trim() && Number(i.weight) > 0) },
-    { label: "内容量が入力されている", ok: !!p.volume?.trim() },
-    { label: "賞味期限が入力されている", ok: !!p.bestBefore?.trim() },
-    { label: "保存方法が入力されている", ok: !!d.storage?.trim() },
-    { label: "製造者情報が入力されている", ok: !!p.manufacturerName?.trim() && !!p.manufacturerAddress?.trim() },
-    { label: "栄養成分表示を確認済み", ok: d.nutrition.kcal > 0 },
-    { label: "アレルゲンを確認済み", ok: p.allergensMode === "manual" || d.autoAllergens.length >= 0 },
-    { label: "コンタミネーションを確認済み", ok: p.contaminationEnabled ? !!buildContaminationText(p) : true },
-    { label: "JANコードは8桁または13桁", ok: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) },
+    { label: p.name?.trim() ? "名称が入力されています" : "名称が未入力です → 商品情報で入力してください", ok: !!p.name?.trim() },
+    { label: ingAny ? (ingWithWeight.length > 0 ? "原材料と重量が入力されています" : "原材料名はありますが重量が未入力です → 重量(g)を入力すると栄養成分を自動計算できます") : "原材料名が未入力です → 原材料セクションで追加してください", ok: ingAny },
+    { label: p.volume?.trim() ? "内容量が入力されています" : "内容量が未入力です → 商品情報で入力してください", ok: !!p.volume?.trim() },
+    { label: p.bestBefore?.trim() ? "賞味期限が入力されています" : "賞味期限が未入力です → 商品情報で入力してください", ok: !!p.bestBefore?.trim() },
+    { label: d.storage?.trim() ? "保存方法が入力されています" : "保存方法が未入力です → 保存方法セクションで選択してください", ok: !!d.storage?.trim() },
+    { label: p.manufacturerName?.trim() ? "製造者名が入力されています" : "製造者名が未入力です → 製造者セクションで入力してください", ok: !!p.manufacturerName?.trim() },
+    { label: p.manufacturerAddress?.trim() ? "製造者住所が入力されています" : "製造者住所が未入力です → 製造者セクションで入力してください", ok: !!p.manufacturerAddress?.trim() },
+    { label: d.nutrition.kcal > 0 ? "栄養成分表示を確認済み" : "栄養成分表示を確認してください → 原材料に重量を入力するか、手動で入力してください", ok: d.nutrition.kcal > 0 },
+    { label: "アレルゲンを確認済み（自動検出または手動設定）", ok: p.allergensMode === "manual" || d.autoAllergens.length >= 0 },
+    { label: p.contaminationEnabled ? (buildContaminationText(p) ? "コンタミネーション表示が設定されています" : "コンタミネーションの内容が未設定です") : "コンタミネーション：表示しない設定", ok: p.contaminationEnabled ? !!buildContaminationText(p) : true },
+    { label: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) ? "JANコードの桁数が正しい" : "JANコードは8桁または13桁にしてください", ok: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) },
   ];
 }
 function previewHtml(p, d) {
@@ -615,15 +1007,41 @@ function previewHtml(p, d) {
   const labelStyle = `style="width:${escapeHtml(printCfg.w || "90")}mm;${printCfg.h ? `min-height:${escapeHtml(printCfg.h)}mm;` : ""}font-size:${escapeHtml(printCfg.fs || "7.5")}pt;"`;
   const previewNote = printPreviewSupportHtml();
   const printable = printablePreviewHtml(p, d, labelStyle, true);
+  const ZOOM_OPTS = [50, 75, 100, 150];
+  const isJissun = previewZoom === "実寸";
+  const zoomStyle = isJissun
+    ? `padding:${escapeHtml(printCfg.margin || "3")}mm;width:fit-content;`
+    : `padding:${escapeHtml(printCfg.margin || "3")}mm;transform:scale(${Number(previewZoom) / 100});transform-origin:top left;width:fit-content;`;
   return `<aside class="preview-panel">
-    <div class="print-controls"><select data-size>${SIZE_PRESETS.map((s) => `<option ${s.label === printCfg.label ? "selected" : ""}>${s.label}</option>`).join("")}</select></div>
-    <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
-    <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
-    ${previewNote}
-    <div class="output-actions"><button class="action print-btn" data-action="open-print-preview">🖨 印刷プレビュー</button><button class="action secondary" data-action="copy-image-output">画像でコピー</button><button class="action" data-action="copy-output">文字だけコピー</button></div>
+    <div class="preview-top-bar">
+      <div class="target-tabs">${targetChoices.map(([id, label]) => `<button class="${printTarget === id ? "selected" : ""}" data-target-choice="${id}">${label}</button>`).join("")}</div>
+      <div class="zoom-controls">
+        ${ZOOM_OPTS.map((z) => `<button class="zoom-btn${previewZoom === z ? " selected" : ""}" data-zoom="${z}">${z}%</button>`).join("")}
+        <button class="zoom-btn${isJissun ? " selected" : ""}" data-zoom="実寸">実寸</button>
+      </div>
+    </div>
+    ${isJissun ? `<div class="jissun-badge">📐 実寸表示中（画面解像度に依存します）</div>` : ""}
+    <div class="preview-area-wrap">
+      <div id="print-area" style="${zoomStyle}">${printable}</div>
+    </div>
+    <details class="print-settings-panel">
+      <summary>印刷・サイズ設定</summary>
+      <div class="print-settings-body">
+        <div class="print-controls"><label><span>サイズプリセット</span><select data-size>${SIZE_PRESETS.map((s) => `<option ${s.label === printCfg.label ? "selected" : ""}>${s.label}</option>`).join("")}</select></label></div>
+        <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
+        <div class="offset-controls"><span class="offset-label">印刷位置補正</span><label><span>上下(mm)</span><input type="number" step="0.5" data-print-offset="y" value="${escapeHtml(printOffsetY)}" placeholder="0"></label><label><span>左右(mm)</span><input type="number" step="0.5" data-print-offset="x" value="${escapeHtml(printOffsetX)}" placeholder="0"></label></div>
+        ${previewNote}
+      </div>
+    </details>
+    <div class="output-actions">
+      <button class="action print-btn" data-action="open-print-preview">🖨 印刷プレビュー</button>
+      <button class="action secondary" data-action="copy-image-output">画像コピー</button>
+      <button class="action" data-action="download-image">⬇ 画像保存</button>
+      <button class="action" data-action="copy-output">文字コピー</button>
+    </div>
     <p class="label-disclaimer">※ 表示内容の最終確認・法令適合の判断は事業者様の責任で行ってください。</p>
-    <div id="print-area" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div>
     ${printPreviewOpen ? printPreviewModalHtml(printable) : ""}
+    ${showAiPanel ? aiPanelHtml(p, d) : ""}
   </aside>`;
 }
 function printablePreviewHtml(p, d, labelStyle, showHeadings) {
@@ -716,11 +1134,14 @@ function saveCurrent() {
     return;
   }
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
+  if (exists) saveHistory(p);
   products = exists ? products.map((x) => (x.id === p.id ? p : x)) : [p, ...products];
   saveProducts();
+  p.ingredients.forEach((i) => { if (i.name?.trim()) saveIngMaster(i.name); });
   view = "edit";
   editId = p.id;
   draft = null;
+  autoSaveStatus = "保存済み";
   showStatus("保存しました");
 }
 
@@ -802,6 +1223,7 @@ function bindEvents() {
   document.querySelectorAll("[data-field]").forEach((el) => el.addEventListener("input", () => {
     const p = currentProduct();
     p[el.dataset.field] = el.value;
+    scheduleAutoSave();
   }));
   document.querySelectorAll("[data-field]").forEach((el) => el.addEventListener("change", () => {
     const p = currentProduct();
@@ -849,7 +1271,14 @@ function bindEvents() {
     currentProduct().bestBefore = presetDateValue(preset[2]);
     render();
   }));
-  document.querySelectorAll("[data-storage]").forEach((el) => el.addEventListener("click", () => updateCurrent("storage", el.dataset.storage)));
+  document.querySelectorAll("[data-storage]").forEach((el) => el.addEventListener("click", () => {
+    const s = el.dataset.storage;
+    updateCurrent("storage", s);
+    if (s !== "自由入力") {
+      recentStorage = [s, ...recentStorage.filter((x) => x !== s)].slice(0, 3);
+      safeSet("food-label-recent-storage", JSON.stringify(recentStorage));
+    }
+  }));
   document.querySelectorAll("[data-mfr]").forEach((el) => el.addEventListener("click", () => {
     const p = currentProduct();
     const current = selectedMfrTypes(p);
@@ -922,6 +1351,128 @@ function bindEvents() {
     else products = products.map((x) => (x.id === p.id ? next : x));
     render();
   }));
+  // チュートリアル
+  document.querySelectorAll("[data-tutorial]").forEach((el) => el.addEventListener("click", () => {
+    const act = el.dataset.tutorial;
+    if (act === "next" && tutorialStep < TUTORIAL_STEPS.length - 1) { tutorialStep++; render(); }
+    else if (act === "prev" && tutorialStep > 0) { tutorialStep--; render(); }
+    else if (act === "done" || act === "skip") { showTutorial = false; safeSet("food-label-tutorial-done", "1"); render(); }
+  }));
+  document.querySelectorAll("[data-action='show-tutorial']").forEach((el) => el.addEventListener("click", () => {
+    showTutorial = true; tutorialStep = 0; safeSet("food-label-tutorial-done", ""); render();
+  }));
+  // AI相談
+  document.querySelectorAll("[data-action='open-ai-panel']").forEach((el) => el.addEventListener("click", () => { showAiPanel = true; render(); }));
+  document.querySelectorAll("[data-action='close-ai-panel']").forEach((el) => el.addEventListener("click", () => { showAiPanel = false; render(); }));
+  document.querySelectorAll("[data-ai-example]").forEach((el) => el.addEventListener("click", () => {
+    const ta = document.getElementById("ai-prompt-text");
+    if (ta) { ta.value = ta.value + "\n\n【質問】\n" + el.dataset.aiExample; }
+  }));
+  document.querySelectorAll("[data-action='copy-ai-prompt']").forEach((el) => el.addEventListener("click", () => {
+    const ta = document.getElementById("ai-prompt-text");
+    if (ta) { navigator.clipboard?.writeText(ta.value).then(() => showStatus("プロンプトをコピーしました")).catch(() => { ta.select(); document.execCommand("copy"); showStatus("コピーしました"); }); }
+  }));
+  // 画像保存
+  document.querySelectorAll("[data-action='download-image']").forEach((el) => el.addEventListener("click", downloadImageLabel));
+  // チェックリストジャンプ
+  document.querySelectorAll(".check-jumpable[data-jump-label]").forEach((el) => el.addEventListener("click", () => handleChecklistJump(el.dataset.jumpLabel)));
+  // 実寸含むズーム（data-zoom が "実寸" の場合も対応）
+  // 既存の zoom binding を上書きしないよう、ここでは実寸だけ追加で処理（既存は数値用）
+  // 保存済み検索・ソート・フィルター
+  document.querySelectorAll("[data-saved-search]").forEach((el) => {
+    let t; el.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { savedSearch = el.value; render(); }, 200); });
+  });
+  document.querySelectorAll("[data-saved-sort]").forEach((el) => el.addEventListener("click", () => { savedSort = el.dataset.savedSort; render(); }));
+  document.querySelectorAll("[data-saved-filter]").forEach((el) => el.addEventListener("click", () => { savedFilter = el.dataset.savedFilter; render(); }));
+  // お気に入りトグル
+  document.querySelectorAll("[data-toggle-star]").forEach((el) => el.addEventListener("click", () => {
+    const p = products.find((x) => x.id === el.dataset.toggleStar);
+    if (p) { p.starred = !p.starred; saveProducts(); render(); }
+  }));
+  // 一括印刷チェック
+  document.querySelectorAll("[data-sel-print]").forEach((el) => el.addEventListener("change", () => {
+    el.checked ? selectedForPrint.add(el.dataset.selPrint) : selectedForPrint.delete(el.dataset.selPrint);
+    render();
+  }));
+  document.querySelectorAll("[data-action='batch-print']").forEach((el) => el.addEventListener("click", batchPrint));
+  // CSV
+  document.querySelectorAll("[data-action='export-csv']").forEach((el) => el.addEventListener("click", exportCsv));
+  document.querySelectorAll("[data-csv-import]").forEach((el) => el.addEventListener("change", (e) => { if (e.target.files[0]) importCsvFile(e.target.files[0]); }));
+  // 製造者テンプレート
+  document.querySelectorAll("[data-mfr-tpl-select]").forEach((el) => el.addEventListener("change", () => {
+    const idx = Number(el.value);
+    if (isNaN(idx) || !mfrTemplates[idx]) return;
+    const tpl = mfrTemplates[idx];
+    const p = currentProduct();
+    Object.assign(p, { manufacturerName: tpl.name, manufacturerPostal: tpl.postal, manufacturerAddress: tpl.address, manufacturerPhone: tpl.phone });
+    render();
+  }));
+  document.querySelectorAll("[data-action='save-mfr-tpl']").forEach((el) => el.addEventListener("click", () => {
+    const nameEl = document.getElementById("mfr-tpl-name");
+    const label = nameEl?.value?.trim();
+    if (!label) { showStatus("テンプレート名を入力してください"); return; }
+    const p = currentProduct();
+    mfrTemplates = [...mfrTemplates.filter((t) => t.label !== label), { label, name: p.manufacturerName, postal: p.manufacturerPostal, address: p.manufacturerAddress, phone: p.manufacturerPhone }];
+    safeSet("food-label-mfr-templates", JSON.stringify(mfrTemplates));
+    showStatus(`「${label}」を保存しました`);
+    render();
+  }));
+  document.querySelectorAll("[data-action='del-mfr-tpl']").forEach((el) => el.addEventListener("click", () => {
+    const sel = document.querySelector("[data-mfr-tpl-select]");
+    const idx = Number(sel?.value);
+    if (isNaN(idx) || !mfrTemplates[idx]) return;
+    mfrTemplates.splice(idx, 1);
+    safeSet("food-label-mfr-templates", JSON.stringify(mfrTemplates));
+    render();
+  }));
+  // 履歴復元
+  document.querySelectorAll("[data-restore-history]").forEach((el) => el.addEventListener("click", () => {
+    const hist = loadHistory(el.dataset.historyPid);
+    const idx = Number(el.dataset.restoreHistory);
+    if (!hist[idx]) return;
+    showModal({ message: `${hist[idx].savedAt} の状態に戻しますか？`, confirmLabel: "復元", cancelLabel: "キャンセル", onConfirm: () => {
+      const restored = { ...hist[idx].snapshot };
+      products = products.map((x) => x.id === restored.id ? restored : x);
+      saveProducts(); render(); showStatus("復元しました");
+    }});
+  }));
+  // 印刷位置オフセット
+  document.querySelectorAll("[data-print-offset]").forEach((el) => el.addEventListener("input", () => {
+    if (el.dataset.printOffset === "x") { printOffsetX = el.value; safeSet("food-label-offset-x", el.value); }
+    else { printOffsetY = el.value; safeSet("food-label-offset-y", el.value); }
+  }));
+  // セクション折りたたみ
+  document.querySelectorAll("[data-toggle-section]").forEach((el) => el.addEventListener("click", () => {
+    const title = el.dataset.toggleSection;
+    if (openSections.has(title)) openSections.delete(title); else openSections.add(title);
+    render();
+  }));
+  // ズーム
+  document.querySelectorAll("[data-zoom]").forEach((el) => el.addEventListener("click", () => {
+    const z = el.dataset.zoom;
+    previewZoom = z === "実寸" ? "実寸" : Number(z);
+    render();
+  }));
+  // ドラッグ並び替え
+  document.querySelectorAll(".ing-row[data-ing-idx]").forEach((el) => {
+    el.addEventListener("dragstart", (e) => { dragSrcIdx = Number(el.dataset.ingIdx); el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+    el.addEventListener("dragend", () => { el.classList.remove("dragging"); document.querySelectorAll(".ing-row").forEach((r) => r.classList.remove("drag-over")); });
+    el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("drag-over"); });
+    el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const p = currentProduct();
+      const destIdx = Number(el.dataset.ingIdx);
+      if (dragSrcIdx !== null && dragSrcIdx !== destIdx) {
+        const arr = [...p.ingredients];
+        const [moved] = arr.splice(dragSrcIdx, 1);
+        arr.splice(destIdx, 0, moved);
+        p.ingredients = arr;
+        dragSrcIdx = null;
+        render();
+      }
+    });
+  });
   document.querySelector("[data-size]")?.addEventListener("change", (e) => {
     printCfg = { ...(SIZE_PRESETS.find((s) => s.label === e.target.value) || SIZE_PRESETS[1]) };
     render();
@@ -965,7 +1516,7 @@ function printLabels() {
   style.textContent = `
     @media print {
       body > * { display: none !important; }
-      #print-area { display: block !important; position: fixed !important; inset: 0 auto auto 0 !important; background: #fff !important; padding: ${printCfg.margin}mm !important; }
+      #print-area { display: block !important; position: fixed !important; top: ${printOffsetY || 0}mm !important; left: ${printOffsetX || 0}mm !important; background: #fff !important; padding: ${printCfg.margin}mm !important; }
       #print-area .label-paper { width: ${printCfg.w || 90}mm !important; ${printCfg.h ? `min-height: ${printCfg.h}mm !important;` : ""} font-size: ${printCfg.fs || 7.5}pt !important; box-shadow: none !important; break-inside: avoid; }
       #print-area .label-paper th, #print-area .label-paper td { font-size: inherit !important; }
       #print-area .print-stack { display: grid !important; gap: 4mm !important; }
@@ -1280,3 +1831,27 @@ function copyPlainText(text) {
 }
 
 render();
+
+// ショートカットキー（起動時1回のみ登録）
+document.addEventListener("keydown", (e) => {
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && e.key === "s") {
+    e.preventDefault();
+    if (view === "edit") saveCurrent();
+  } else if (ctrl && e.key === "p") {
+    e.preventDefault();
+    if (view === "edit") { printPreviewOpen = true; render(); }
+  } else if (ctrl && e.key === "d") {
+    e.preventDefault();
+    if (view === "edit") {
+      const p = currentProduct();
+      if (!p) return;
+      if (!canCreateMore()) { showStatus("プランの上限に達しています"); return; }
+      products = [{ ...JSON.parse(JSON.stringify(p)), id: uid(), name: `${p.name || "商品"}（複製）`, updatedAt: new Date().toLocaleDateString("ja-JP") }, ...products];
+      saveProducts(); showStatus("複製しました"); render();
+    }
+  } else if (e.key === "Escape") {
+    if (printPreviewOpen) { printPreviewOpen = false; render(); }
+    else { document.querySelector("[data-modal-cancel]")?.click(); }
+  }
+});

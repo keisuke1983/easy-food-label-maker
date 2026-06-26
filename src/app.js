@@ -1878,17 +1878,22 @@ const AI_CHANNELS = [
 // ── マイグレーション ──────────────────────────────────────────────────
 function extendProductMaster(p) {
   return {
-    code: "", category: "", price: "", imageUrl: "",
+    code: "", category: "", price: "", imageDataUrl: "",
     salesChannels: [], publishStatus: "active", memo: "",
     createdAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
+    costItems: [],
+    specVersion: "1", specResponsible: "",
+    specCreatedAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
+    packaging: "", caseCount: "", productSize: "",
     ...p,
   };
 }
 (function runMigration() {
-  if (safeGet("fmcc-migrated-v1") === "1") return;
+  if (safeGet("fmcc-migrated-v2") === "1") return;
   products = products.map(extendProductMaster);
   saveProducts();
   safeSet("fmcc-migrated-v1", "1");
+  safeSet("fmcc-migrated-v2", "1");
 })();
 
 // ── ナビゲーション ────────────────────────────────────────────────────
@@ -1935,6 +1940,113 @@ function saasLayout(title, content) {
   </div>`;
 }
 
+// ── TODO集計 ─────────────────────────────────────────────────────────
+function calcTodo() {
+  if (!products.length) return [];
+  return [
+    { key:"incomplete",    label:"完成度100%未満の商品", count: products.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; }).length },
+    { key:"noBestBefore",  label:"賞味期限未設定",       count: products.filter(p=>!p.bestBefore?.trim()).length },
+    { key:"noIngredients", label:"原材料未入力",          count: products.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim())).length },
+    { key:"noMfr",         label:"製造者未設定",          count: products.filter(p=>!p.manufacturerName?.trim()).length },
+    { key:"noJan",         label:"JANコード未登録",       count: products.filter(p=>!p.janCode?.trim()).length },
+    { key:"noImage",       label:"商品画像未登録",        count: products.filter(p=>!p.imageDataUrl).length },
+    { key:"noCost",        label:"原価未設定",            count: products.filter(p=>!(p.costItems||[]).length).length },
+  ].filter(t=>t.count>0);
+}
+
+// ── 商品ステータスアイコン ────────────────────────────────────────────
+function productStatusBadges(p, d) {
+  const ok = (cond, label) => `<span class="status-icon ${cond?"ok":"ng"}">${cond?"🟢":"🔴"} ${label}</span>`;
+  const hasIng = (p.ingredients||[]).some(i=>i.name?.trim());
+  const hasNutr = d.nutrition.kcal > 0;
+  return `<div class="status-icons">
+    ${ok(!!p.name?.trim(),          "名称")}
+    ${ok(hasIng,                    "原材料")}
+    ${ok(!!p.bestBefore?.trim(),    "賞味期限")}
+    ${ok(!!p.manufacturerName?.trim(),"製造者")}
+    ${ok(!!p.janCode?.trim(),       "JAN")}
+    ${ok(!!p.imageDataUrl,          "画像")}
+    ${ok((p.costItems||[]).length>0,"原価")}
+  </div>`;
+}
+
+// ── 原価計算 ──────────────────────────────────────────────────────────
+function calcCosts(p) {
+  const items = p.costItems || [];
+  const rawCost = items.reduce((sum, ci) => sum + (parseFloat(ci.amount)||0) * (parseFloat(ci.unitPrice)||0), 0);
+  const price = parseFloat(p.price) || 0;
+  const gross = price - rawCost;
+  const margin = price > 0 ? Math.round(gross / price * 100) : null;
+  return { rawCost, price, gross, margin };
+}
+
+function marginClass(margin) {
+  if (margin === null) return "";
+  if (margin >= 50) return "margin-good";
+  if (margin >= 30) return "margin-warn";
+  return "margin-bad";
+}
+
+// ── 原価管理 HTML ─────────────────────────────────────────────────────
+function costEditorHtml(p) {
+  const items = p.costItems || [];
+  const costs = calcCosts(p);
+  const rows = items.map((ci, i) => {
+    const lineTotal = (parseFloat(ci.amount)||0) * (parseFloat(ci.unitPrice)||0);
+    return `<tr>
+      <td><input data-cost-name="${i}" value="${escapeHtml(ci.name||"")}" placeholder="原材料名"></td>
+      <td><input type="number" data-cost-amount="${i}" value="${escapeHtml(ci.amount||"")}" placeholder="0" style="width:70px"></td>
+      <td><input data-cost-unit="${i}" value="${escapeHtml(ci.unit||"g")}" placeholder="g" style="width:50px"></td>
+      <td><input type="number" data-cost-price="${i}" value="${escapeHtml(ci.unitPrice||"")}" placeholder="0" style="width:80px"></td>
+      <td class="cost-total">¥${lineTotal.toFixed(0)}</td>
+      <td><button class="icon-btn" data-remove-cost="${i}">×</button></td>
+    </tr>`;
+  }).join("");
+
+  const mc = marginClass(costs.margin);
+  return `<div class="detail-section">
+    <h3 class="detail-section-title">原価管理</h3>
+    <div class="cost-table-wrap">
+      <table class="cost-table">
+        <thead><tr><th>原材料名</th><th>使用量</th><th>単位</th><th>仕入単価(円)</th><th>原材料費</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="cost-add-row">
+      <button class="action" data-action="add-cost-item">＋ 原材料を追加</button>
+    </div>
+    <div class="cost-summary">
+      <div class="cost-summary-row"><span>原材料費合計</span><span>¥${costs.rawCost.toFixed(0)}</span></div>
+      <div class="cost-summary-row"><span>販売価格</span><span>${costs.price>0?"¥"+costs.price:"未設定"}</span></div>
+      <div class="cost-summary-row"><span>粗利益</span><span>${costs.price>0?"¥"+costs.gross.toFixed(0):"—"}</span></div>
+      <div class="cost-summary-row cost-summary-total ${mc}">
+        <span>利益率</span>
+        <span>${costs.margin!==null?costs.margin+"%":"—"}</span>
+      </div>
+    </div>
+    <p class="notice" style="margin-top:8px">利益率 <span class="margin-good">■ 50%以上</span>　<span class="margin-warn">■ 30-49%</span>　<span class="margin-bad">■ 30%未満</span></p>
+  </div>`;
+}
+
+// ── 商品画像アップロード HTML ─────────────────────────────────────────
+function imageUploadSectionHtml(p) {
+  const img = p.imageDataUrl
+    ? `<div class="image-preview-wrap">
+        <img class="image-preview-img" src="${p.imageDataUrl}" alt="商品画像">
+        <button class="image-remove-btn" data-action="remove-product-image" title="削除">×</button>
+       </div>`
+    : `<div class="image-upload-area" id="image-drop-zone">
+        <span class="upload-icon">📷</span>
+        <p>クリックまたはドラッグ＆ドロップで画像をアップロード</p>
+        <p style="font-size:11px;color:#94a3b8">JPEG / PNG / WebP（最大5MB）</p>
+        <input type="file" id="product-image-input" accept="image/*" style="display:none">
+       </div>`;
+  return `<div class="detail-section">
+    <h3 class="detail-section-title">商品画像</h3>
+    ${img}
+  </div>`;
+}
+
 // ── ダッシュボード ────────────────────────────────────────────────────
 function dashboardHtml() {
   const total = products.length;
@@ -1955,7 +2067,22 @@ function dashboardHtml() {
       </div>
     </div>`).join("") : `<p class="empty-note">商品がまだ登録されていません。</p>`;
 
+  const todos = calcTodo();
+  const todoCard = total === 0 ? "" : `<div class="todo-card">
+    <div class="todo-card-title">📋 今日やること</div>
+    ${todos.length === 0
+      ? `<div class="todo-all-done">✅ すべて完了しています！</div>`
+      : `<div class="todo-items">${todos.map(t=>`
+          <button class="todo-item" data-todo-key="${t.key}">
+            <span class="todo-count">${t.count}</span>
+            <span class="todo-label">${escapeHtml(t.label)}</span>
+            <span style="color:#94a3b8;font-size:11px">→ 一覧へ</span>
+          </button>`).join("")}
+        </div>`}
+  </div>`;
+
   return saasLayout("ダッシュボード", `
+    ${todoCard}
     <div class="dash-stats">
       <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">登録商品数</div></div>
       <div class="stat-card warn"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
@@ -1963,7 +2090,7 @@ function dashboardHtml() {
       <div class="stat-card blue"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
     </div>
     <div class="dash-quick-actions">
-      <button class="quick-action-btn primary" data-nav="products" data-quick-new="1">＋ 新商品を登録</button>
+      <button class="quick-action-btn primary" data-quick-new="1">＋ 新商品を登録</button>
       <button class="quick-action-btn" data-nav="products">商品一覧を見る</button>
       <button class="quick-action-btn" data-nav="spec-sheet-nav">規格書を作成</button>
       <button class="quick-action-btn" data-nav="ai-descriptions-nav">AI説明文を生成</button>
@@ -1993,25 +2120,38 @@ function productsListHtml() {
   const cards = list.length ? list.map(p => {
     const d = derive(p);
     const comp = calcCompletion(p,d);
+    const thumb = p.imageDataUrl
+      ? `<img class="product-thumb" src="${p.imageDataUrl}" alt="商品画像">`
+      : `<div class="product-thumb-placeholder">📦</div>`;
+    const missingHtml = comp.missing.length
+      ? `<div class="comp-missing">${comp.missing.map(m=>`<span class="comp-missing-item">${escapeHtml(m)}</span>`).join("")}</div>`
+      : "";
     return `<div class="master-card">
-      <div class="master-card-hd">
-        <div class="master-card-title-row">
-          <span class="master-card-name">${escapeHtml(p.name||"（名称未入力）")}</span>
-          ${statusBadge(p)}
-          <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}">${p.starred?"★":"☆"}</button>
-        </div>
-        <div class="master-card-meta">
-          ${p.code?`<span class="meta-item">品番：${escapeHtml(p.code)}</span>`:""}
-          ${p.category?`<span class="meta-item">${escapeHtml(p.category)}</span>`:""}
-          ${p.price?`<span class="meta-item">¥${escapeHtml(p.price)}</span>`:""}
-          <span class="meta-item">更新：${escapeHtml(p.updatedAt||"")}</span>
-        </div>
-        <div class="master-card-comp">
-          <div class="comp-bar-wrap"><div class="comp-bar-fill" style="width:${comp.pct}%"></div></div>
-          <span class="comp-pct">${comp.pct}%</span>
+      <div class="master-card-inner">
+        ${thumb}
+        <div class="master-card-body">
+          <div class="master-card-title-row">
+            <span class="master-card-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+            ${statusBadge(p)}
+            <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}">${p.starred?"★":"☆"}</button>
+          </div>
+          <div class="master-card-meta">
+            ${p.code?`<span class="meta-item">品番：${escapeHtml(p.code)}</span>`:""}
+            ${p.category?`<span class="meta-item">${escapeHtml(p.category)}</span>`:""}
+            ${p.price?`<span class="meta-item">¥${escapeHtml(p.price)}</span>`:""}
+            <span class="meta-item">更新：${escapeHtml(p.updatedAt||"")}</span>
+          </div>
+          <div class="comp-section">
+            <div class="comp-bar-row">
+              <div class="comp-bar-wrap" style="max-width:160px"><div class="comp-bar-fill" style="width:${comp.pct}%"></div></div>
+              <span class="comp-pct">完成度 ${comp.pct}%</span>
+            </div>
+            ${missingHtml}
+          </div>
+          ${productStatusBadges(p, d)}
         </div>
       </div>
-      <div class="master-card-actions">
+      <div class="master-card-actions" style="margin-top:12px">
         <button class="btn-action" data-nav-product-detail="${escapeHtml(p.id)}">✎ 詳細編集</button>
         <button class="btn-action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル</button>
         <button class="btn-action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
@@ -2089,7 +2229,19 @@ function productDetailHtml() {
           <label class="field"><span>電話番号</span><input data-master-field="manufacturerPhone" value="${escapeHtml(p.manufacturerPhone||"")}"></label>
         </div>
       </div>
+      <div class="detail-section">
+        <h3 class="detail-section-title">規格書・出荷情報</h3>
+        <div class="field-grid">
+          <label class="field"><span>版数（Rev）</span><input data-master-field="specVersion" value="${escapeHtml(p.specVersion||"1")}" placeholder="例：1"></label>
+          <label class="field"><span>担当者</span><input data-master-field="specResponsible" value="${escapeHtml(p.specResponsible||"")}" placeholder="例：田中 太郎"></label>
+          <label class="field"><span>荷姿</span><input data-master-field="packaging" value="${escapeHtml(p.packaging||"")}" placeholder="例：段ボール箱"></label>
+          <label class="field"><span>ケース入数</span><input data-master-field="caseCount" value="${escapeHtml(p.caseCount||"")}" placeholder="例：12個"></label>
+          <label class="field full"><span>製品サイズ</span><input data-master-field="productSize" value="${escapeHtml(p.productSize||"")}" placeholder="例：W120×D80×H40mm / 150g"></label>
+        </div>
+      </div>
     </div>
+    ${imageUploadSectionHtml(p)}
+    ${costEditorHtml(p)}
   `);
 }
 
@@ -2102,32 +2254,104 @@ function specSheetHtml() {
   const p = specSheetId ? products.find(x=>x.id===specSheetId) : productList[0];
   if (!p) return saasLayout("商品規格書", `<p>商品が見つかりません。</p>`);
   const d = derive(p);
+  const today = new Date().toLocaleDateString("ja-JP");
   const row = (label, val) => val ? `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(String(val))}</td></tr>` : "";
-  const specHtml = `<div class="spec-doc" id="spec-print-area">
-    <div class="spec-header">
-      <h1 class="spec-title">商品規格書</h1>
-      <div class="spec-meta">作成日：${new Date().toLocaleDateString("ja-JP")}　版数：Rev.1</div>
+
+  const productImg = p.imageDataUrl
+    ? `<img class="spec-v2-product-img" src="${p.imageDataUrl}" alt="商品画像">`
+    : `<div class="spec-v2-product-img-placeholder">📦<small>画像未登録</small></div>`;
+
+  const costs = calcCosts(p);
+  const mc = marginClass(costs.margin);
+
+  const specHtml = `<div class="spec-v2" id="spec-print-area">
+    <div class="spec-v2-header">
+      <div class="spec-v2-title-block">
+        <h1>商品規格書</h1>
+        <div class="spec-subtitle">${escapeHtml(p.name||"")}</div>
+      </div>
+      <div class="spec-v2-meta-block">
+        <dl>
+          <div><dt>版数：</dt><dd>Rev.${escapeHtml(p.specVersion||"1")}</dd></div>
+          <div><dt>作成日：</dt><dd>${escapeHtml(p.specCreatedAt||today)}</dd></div>
+          <div><dt>更新日：</dt><dd>${escapeHtml(p.updatedAt||today)}</dd></div>
+          <div><dt>担当者：</dt><dd>${escapeHtml(p.specResponsible||"　　　　")}</dd></div>
+        </dl>
+      </div>
     </div>
-    <table class="spec-table">
-      <tbody>
-        ${row("商品名", p.name)}
-        ${row("品番・商品コード", p.code)}
-        ${row("JANコード", p.janCode)}
-        ${row("カテゴリ", p.category)}
-        ${row("内容量", p.volume)}
-        ${row("販売価格", p.price ? `¥${p.price}` : "")}
-        ${row("賞味期限", p.bestBefore)}
-        ${row("保存方法", d.storage)}
-        ${row("原材料名", d.ingLabel)}
-        ${row("アレルゲン", d.allergens.join("・"))}
-        ${p.contaminationEnabled ? row("コンタミネーション", d.contamination) : ""}
-        ${row("栄養成分（100g当たり）", `エネルギー ${d.nutrition.kcal}kcal / たんぱく質 ${d.nutrition.protein}g / 脂質 ${d.nutrition.fat}g / 炭水化物 ${d.nutrition.carbs}g / 食塩相当量 ${d.nutrition.salt}g`)}
-        ${row("製造者", [p.manufacturerName, p.manufacturerAddress].filter(Boolean).join(" "))}
-        ${row("製造者電話番号", p.manufacturerPhone)}
-        ${row("販売チャネル", (p.salesChannels||[]).join("・"))}
-        ${row("メモ・備考", p.memo)}
-      </tbody>
-    </table>
+
+    <div class="spec-v2-body">
+      <div class="spec-v2-tables">
+        <div class="spec-v2-section-label">基本情報</div>
+        <table class="spec-v2-table">
+          <tbody>
+            ${row("商品名", p.name)}
+            ${row("品番・商品コード", p.code)}
+            ${row("カテゴリ", p.category)}
+            ${row("JANコード", p.janCode)}
+            ${row("内容量", p.volume)}
+            ${row("販売価格", p.price ? `¥${p.price}` : "")}
+            ${row("製品サイズ・重量", p.productSize)}
+            ${row("荷姿", p.packaging)}
+            ${row("ケース入数", p.caseCount)}
+          </tbody>
+        </table>
+
+        <div class="spec-v2-section-label">品質・規格</div>
+        <table class="spec-v2-table">
+          <tbody>
+            ${row("賞味期限", p.bestBefore)}
+            ${row("保存方法", d.storage)}
+            ${row("原材料名", d.ingLabel)}
+            ${row("アレルゲン", d.allergens.length ? d.allergens.join("・") : "なし")}
+            ${p.contaminationEnabled ? row("コンタミネーション", d.contamination) : ""}
+          </tbody>
+        </table>
+
+        <div class="spec-v2-section-label">栄養成分表示（100g当たり）</div>
+        <table class="spec-v2-table">
+          <tbody>
+            <tr><th>エネルギー</th><td>${d.nutrition.kcal} kcal</td></tr>
+            <tr><th>たんぱく質</th><td>${d.nutrition.protein} g</td></tr>
+            <tr><th>脂質</th><td>${d.nutrition.fat} g</td></tr>
+            <tr><th>炭水化物</th><td>${d.nutrition.carbs} g</td></tr>
+            <tr><th>食塩相当量</th><td>${d.nutrition.salt} g</td></tr>
+          </tbody>
+        </table>
+
+        <div class="spec-v2-section-label">製造者情報</div>
+        <table class="spec-v2-table">
+          <tbody>
+            ${row("製造者名", p.manufacturerName)}
+            ${row("住所", p.manufacturerAddress)}
+            ${row("電話番号", p.manufacturerPhone)}
+            ${row("販売チャネル", (p.salesChannels||[]).join("・"))}
+          </tbody>
+        </table>
+
+        ${p.memo ? `<div class="spec-v2-section-label">備考・特記事項</div>
+        <div class="spec-v2-remark">${escapeHtml(p.memo)}</div>` : ""}
+      </div>
+
+      <div class="spec-v2-image-col">
+        ${productImg}
+        <div class="spec-v2-qr">QR<br>コード</div>
+        ${costs.margin !== null ? `<div style="text-align:center;font-size:11px;color:#64748b;margin-top:4px">
+          利益率<br><span class="${mc}" style="font-size:18px;font-weight:700">${costs.margin}%</span>
+        </div>` : ""}
+      </div>
+    </div>
+
+    <div class="spec-v2-footer">
+      <div style="font-size:11px;color:#94a3b8">
+        発行日：${today}　このドキュメントは${escapeHtml(p.name||"")}の公式規格書です。
+      </div>
+      <div class="spec-v2-sig-row">
+        <div class="spec-v2-sig-box"><div class="spec-v2-sig-line"></div>作成者</div>
+        <div class="spec-v2-sig-box"><div class="spec-v2-sig-line"></div>確認者</div>
+        <div class="spec-v2-sig-box"><div class="spec-v2-sig-line"></div>承認者</div>
+      </div>
+    </div>
   </div>`;
 
   const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.name)}</option>`).join("");
@@ -2243,6 +2467,23 @@ function saveMaster() {
     if (el.checked) chs.push(el.dataset.salesCh);
   });
   p.salesChannels = chs;
+  // 原価データ保存
+  document.querySelectorAll("[data-cost-name]").forEach(el => {
+    const i = parseInt(el.dataset.costName);
+    if (p.costItems[i]) p.costItems[i].name = el.value;
+  });
+  document.querySelectorAll("[data-cost-amount]").forEach(el => {
+    const i = parseInt(el.dataset.costAmount);
+    if (p.costItems[i]) p.costItems[i].amount = el.value;
+  });
+  document.querySelectorAll("[data-cost-unit]").forEach(el => {
+    const i = parseInt(el.dataset.costUnit);
+    if (p.costItems[i]) p.costItems[i].unit = el.value;
+  });
+  document.querySelectorAll("[data-cost-price]").forEach(el => {
+    const i = parseInt(el.dataset.costPrice);
+    if (p.costItems[i]) p.costItems[i].unitPrice = el.value;
+  });
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
   saveProducts();
   showStatus("保存しました");
@@ -2369,6 +2610,119 @@ function bindSaasEvents() {
     const ta = document.getElementById("ai-desc-prompt");
     if (ta) copyPlainText(ta.value);
   }));
+
+  // ★ お気に入りトグル
+  document.querySelectorAll("[data-toggle-star]").forEach(el => el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const pid = el.dataset.toggleStar;
+    const p = products.find(x=>x.id===pid);
+    if (!p) return;
+    p.starred = !p.starred;
+    saveProducts(); render();
+  }));
+
+  // TODO アイテムクリック → 商品一覧へ
+  document.querySelectorAll("[data-todo-key]").forEach(el => el.addEventListener("click", () => {
+    saasView = "products"; view = "saas";
+    safeSet("fmcc-view", saasView);
+    render();
+  }));
+
+  // ── 画像アップロード ──
+  function handleImageFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    if (file.size > 5 * 1024 * 1024) { showStatus("画像は5MB以下にしてください"); return; }
+    const pid = productDetailId;
+    const p = products.find(x=>x.id===pid);
+    if (!p) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX = 800;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        p.imageDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        p.updatedAt = new Date().toLocaleDateString("ja-JP");
+        saveProducts(); showStatus("画像を登録しました"); render();
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const imgInput = document.getElementById("product-image-input");
+  if (imgInput) {
+    imgInput.addEventListener("change", () => handleImageFile(imgInput.files[0]));
+    const dropZone = document.getElementById("image-drop-zone");
+    if (dropZone) {
+      dropZone.addEventListener("click", () => imgInput.click());
+      dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+      dropZone.addEventListener("drop", (e) => {
+        e.preventDefault(); dropZone.classList.remove("drag-over");
+        handleImageFile(e.dataTransfer.files[0]);
+      });
+    }
+  }
+
+  document.querySelectorAll("[data-action='remove-product-image']").forEach(el => el.addEventListener("click", () => {
+    const p = products.find(x=>x.id===productDetailId);
+    if (!p) return;
+    p.imageDataUrl = "";
+    saveProducts(); render();
+  }));
+
+  // ── 原価管理 ──
+  function saveCostItems() {
+    const p = products.find(x=>x.id===productDetailId);
+    if (!p) return;
+    document.querySelectorAll("[data-cost-name]").forEach(el => {
+      const i = parseInt(el.dataset.costName);
+      if (p.costItems[i]) p.costItems[i].name = el.value;
+    });
+    document.querySelectorAll("[data-cost-amount]").forEach(el => {
+      const i = parseInt(el.dataset.costAmount);
+      if (p.costItems[i]) p.costItems[i].amount = el.value;
+    });
+    document.querySelectorAll("[data-cost-unit]").forEach(el => {
+      const i = parseInt(el.dataset.costUnit);
+      if (p.costItems[i]) p.costItems[i].unit = el.value;
+    });
+    document.querySelectorAll("[data-cost-price]").forEach(el => {
+      const i = parseInt(el.dataset.costPrice);
+      if (p.costItems[i]) p.costItems[i].unitPrice = el.value;
+    });
+    saveProducts();
+  }
+
+  document.querySelectorAll("[data-action='add-cost-item']").forEach(el => el.addEventListener("click", () => {
+    const p = products.find(x=>x.id===productDetailId);
+    if (!p) return;
+    saveCostItems();
+    p.costItems = [...(p.costItems||[]), { id: uid(), name: "", amount: "", unit: "g", unitPrice: "" }];
+    saveProducts(); render();
+  }));
+
+  document.querySelectorAll("[data-remove-cost]").forEach(el => el.addEventListener("click", () => {
+    const p = products.find(x=>x.id===productDetailId);
+    if (!p) return;
+    saveCostItems();
+    const i = parseInt(el.dataset.removeCost);
+    p.costItems.splice(i, 1);
+    saveProducts(); render();
+  }));
+
+  // 原価フィールド変更時はリアルタイム再計算（フォーカスアウト）
+  document.querySelectorAll("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price]").forEach(el => {
+    el.addEventListener("change", () => { saveCostItems(); render(); });
+  });
 }
 
 render();

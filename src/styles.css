@@ -1143,3 +1143,179 @@ button:disabled {
   .master-toolbar { flex-direction: column; align-items: stretch; }
   .filter-btns { flex-wrap: wrap; }
 }
+
+/* ══ ① TODO Card ══ */
+.todo-card {
+  background: #fff; border-radius: 12px; padding: 20px;
+  border: 1px solid #fde68a; border-left: 4px solid #f59e0b;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 24px;
+}
+.todo-card-title {
+  font-size: 14px; font-weight: 700; color: #92400e;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+}
+.todo-items { display: flex; flex-direction: column; gap: 6px; }
+.todo-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 8px;
+  background: #fffbeb; border: 1px solid #fde68a;
+  cursor: pointer; transition: background 0.15s;
+  font-size: 13px; color: #374151; text-align: left; width: 100%;
+}
+.todo-item:hover { background: #fef3c7; border-color: #f59e0b; }
+.todo-count {
+  background: #f59e0b; color: #fff; font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 100px; min-width: 28px; text-align: center;
+}
+.todo-label { flex: 1; }
+.todo-all-done {
+  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+  border-radius: 8px; background: #f0fdf4; font-size: 14px;
+  color: #15803d; font-weight: 600;
+}
+
+/* ══ ② Status Icons ══ */
+.status-icons { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+.status-icon {
+  font-size: 10px; font-weight: 600; padding: 2px 7px;
+  border-radius: 4px; white-space: nowrap;
+}
+.status-icon.ok { background: #dcfce7; color: #15803d; }
+.status-icon.ng { background: #fef2f2; color: #dc2626; }
+
+/* ══ Product Thumbnail ══ */
+.master-card-inner { display: flex; gap: 16px; align-items: flex-start; }
+.product-thumb {
+  width: 72px; height: 72px; border-radius: 8px;
+  object-fit: cover; border: 1px solid #e2e8f0; flex-shrink: 0;
+}
+.product-thumb-placeholder {
+  width: 72px; height: 72px; border-radius: 8px;
+  background: #f8fafc; border: 1px dashed #cbd5e1; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; color: #cbd5e1;
+}
+.master-card-body { flex: 1; min-width: 0; }
+
+/* ══ ③ Completion Missing Items ══ */
+.comp-section { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.comp-bar-row { display: flex; align-items: center; gap: 8px; }
+.comp-missing { display: flex; gap: 4px; flex-wrap: wrap; }
+.comp-missing-item {
+  font-size: 10px; padding: 2px 7px; border-radius: 4px;
+  background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; cursor: default;
+}
+
+/* ══ ④ Image Upload ══ */
+.image-upload-area {
+  border: 2px dashed #cbd5e1; border-radius: 10px; padding: 24px;
+  text-align: center; cursor: pointer; transition: all 0.2s; background: #f8fafc;
+}
+.image-upload-area:hover, .image-upload-area.drag-over {
+  border-color: #2563eb; background: #eff6ff;
+}
+.image-upload-area p { font-size: 13px; color: #64748b; margin: 0 0 8px; }
+.image-upload-area .upload-icon { font-size: 28px; display: block; margin-bottom: 8px; }
+.image-preview-wrap { position: relative; display: inline-block; }
+.image-preview-img {
+  max-width: 100%; max-height: 200px; border-radius: 8px; border: 1px solid #e2e8f0;
+}
+.image-remove-btn {
+  position: absolute; top: -8px; right: -8px; width: 22px; height: 22px;
+  border-radius: 50%; background: #ef4444; color: #fff; border: none; cursor: pointer;
+  font-size: 12px; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+
+/* ══ ⑥ Cost Management ══ */
+.cost-table-wrap { overflow-x: auto; margin-bottom: 16px; }
+.cost-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 480px; }
+.cost-table th, .cost-table td {
+  border: 1px solid #e2e8f0; padding: 6px 10px; text-align: left;
+}
+.cost-table th { background: #f8fafc; font-weight: 600; color: #374151; font-size: 11px; }
+.cost-table input {
+  border: none; width: 100%; padding: 2px 4px; font-size: 13px;
+  background: transparent; font-family: inherit;
+}
+.cost-table input:focus { outline: 1px solid #2563eb; border-radius: 3px; }
+.cost-table td.cost-total { font-weight: 600; color: #1e293b; background: #fafafa; }
+.cost-add-row { margin-bottom: 16px; }
+.cost-summary { background: #f8fafc; border-radius: 8px; padding: 14px 16px; border: 1px solid #e2e8f0; }
+.cost-summary-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0; font-size: 13px; color: #374151;
+}
+.cost-summary-total {
+  font-weight: 700; font-size: 15px; padding-top: 10px; margin-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+.margin-good { color: #15803d; font-weight: 700; }
+.margin-warn { color: #92400e; font-weight: 700; }
+.margin-bad { color: #dc2626; font-weight: 700; }
+
+/* ══ ⑤ Spec Sheet v2 ══ */
+.spec-v2 {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 40px; max-width: 900px; font-size: 13px; line-height: 1.6;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.spec-v2-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 28px; padding-bottom: 20px; border-bottom: 3px solid #1e293b;
+  gap: 20px;
+}
+.spec-v2-title-block h1 { font-size: 26px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+.spec-v2-title-block .spec-subtitle { font-size: 12px; color: #64748b; }
+.spec-v2-meta-block { text-align: right; font-size: 12px; color: #374151; line-height: 2; white-space: nowrap; }
+.spec-v2-meta-block dt { display: inline; font-weight: 600; }
+.spec-v2-meta-block dd { display: inline; margin: 0 0 0 6px; }
+.spec-v2-body { display: grid; grid-template-columns: 1fr 180px; gap: 28px; align-items: start; margin-bottom: 24px; }
+.spec-v2-image-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.spec-v2-product-img { width: 160px; height: 160px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; }
+.spec-v2-product-img-placeholder {
+  width: 160px; height: 160px; border-radius: 8px; background: #f8fafc;
+  border: 1px dashed #cbd5e1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; font-size: 32px; color: #94a3b8; gap: 4px;
+}
+.spec-v2-product-img-placeholder small { font-size: 10px; color: #cbd5e1; }
+.spec-v2-section-label {
+  font-size: 11px; font-weight: 700; color: #fff;
+  background: #334155; padding: 3px 10px; border-radius: 4px;
+  display: inline-block; margin-bottom: 2px;
+}
+.spec-v2-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+.spec-v2-table th, .spec-v2-table td {
+  border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; font-size: 13px;
+}
+.spec-v2-table th { background: #f8fafc; width: 30%; font-weight: 600; color: #374151; }
+.spec-v2-table td { color: #1e293b; }
+.spec-v2-footer {
+  margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0;
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.spec-v2-qr {
+  width: 72px; height: 72px; border: 1px solid #e2e8f0; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: #94a3b8; background: #f8fafc; text-align: center;
+}
+.spec-v2-sig-row { display: flex; gap: 28px; }
+.spec-v2-sig-box { text-align: center; font-size: 11px; color: #64748b; }
+.spec-v2-sig-line { width: 100px; border-bottom: 1px solid #94a3b8; height: 32px; margin: 0 auto 4px; }
+.spec-v2-remark { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 20px; color: #374151; }
+
+@media print {
+  .spec-controls, .sidebar, .saas-topbar, .sidebar-backdrop,
+  .detail-header-actions, .bread-link, .saas-menu-btn { display: none !important; }
+  .saas-main { margin-left: 0 !important; }
+  .spec-v2 { box-shadow: none; border: none; padding: 20px; max-width: 100%; }
+  .saas-content { padding: 0 !important; }
+}
+
+@media (max-width: 768px) {
+  .spec-v2-body { grid-template-columns: 1fr; }
+  .spec-v2-image-col { order: -1; flex-direction: row; }
+  .master-card-inner { gap: 10px; }
+  .product-thumb, .product-thumb-placeholder { width: 56px; height: 56px; font-size: 18px; }
+  .spec-v2 { padding: 20px; }
+  .cost-table { font-size: 12px; }
+}

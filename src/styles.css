@@ -1379,3 +1379,45 @@ button:disabled {
 .field-note { font-size: 10px; color: #94a3b8; font-weight: 400; margin-left: 6px; background: #f1f5f9; padding: 1px 6px; border-radius: 10px; }
 .display-name-note { font-size: 11px; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
 .spec-display-name { font-size: 12px; color: #64748b; margin-top: 4px; }
+
+/* ══ AI相談ページ ══ */
+.consult-layout { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; height: calc(100vh - 140px); }
+.consult-left { display: flex; flex-direction: column; gap: 14px; height: 100%; }
+.consult-right { position: sticky; top: 80px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.consult-preview-title { font-size: 12px; font-weight: 700; color: #64748b; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+.consult-preview-wrap { padding: 12px; overflow: auto; max-height: calc(100vh - 200px); }
+.consult-top-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.consult-top-bar .field-inline { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 13px; }
+.consult-top-bar .field-inline select { flex: 1; padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; }
+.consult-templates { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; }
+.consult-tpl-title { font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px; }
+.consult-tpl-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.consult-tpl-btn { font-size: 12px; padding: 5px 12px; border: 1px solid #e2e8f0; border-radius: 20px; background: #fff; color: #1e293b; cursor: pointer; white-space: nowrap; transition: background .15s; }
+.consult-tpl-btn:hover { background: #eff6ff; border-color: #2563eb; color: #2563eb; }
+.consult-history { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 0; min-height: 200px; max-height: 45vh; }
+.consult-empty { color: #94a3b8; font-size: 13px; padding: 20px; text-align: center; }
+.consult-msg { border-radius: 10px; padding: 12px 14px; }
+.consult-msg-user { background: #eff6ff; border: 1px solid #bfdbfe; }
+.consult-msg-assistant { background: #fff; border: 1px solid #e2e8f0; }
+.consult-msg-label { font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 6px; }
+.consult-msg-body { font-size: 13px; line-height: 1.7; color: #1e293b; }
+.consult-input-area { display: flex; gap: 10px; align-items: flex-end; }
+.consult-textarea { flex: 1; min-height: 72px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; resize: vertical; font-family: inherit; line-height: 1.6; }
+.consult-textarea:focus { outline: none; border-color: #2563eb; }
+.consult-send-btn { white-space: nowrap; padding: 10px 18px; }
+.consult-send-btn.disabled { opacity: .5; cursor: not-allowed; }
+/* Markdown 表示 */
+.md-p { margin: 0 0 8px; line-height: 1.75; }
+.md-h2 { font-size: 15px; font-weight: 700; margin: 8px 0 6px; color: #1e293b; }
+.md-h3, .md-h4 { font-size: 13px; font-weight: 700; margin: 6px 0 4px; color: #374151; }
+.md-ul { margin: 4px 0 8px 18px; padding: 0; }
+.md-li { margin: 2px 0; line-height: 1.6; }
+.md-table { border-collapse: collapse; margin: 8px 0; font-size: 12px; width: 100%; }
+.md-td { border: 1px solid #e2e8f0; padding: 5px 10px; }
+.md-table tr:first-child .md-td { background: #f8fafc; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .consult-layout { grid-template-columns: 1fr; height: auto; }
+  .consult-right { position: static; }
+  .consult-history { max-height: 35vh; }
+}

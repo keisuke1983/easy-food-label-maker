@@ -139,6 +139,9 @@ let specSheetId = null;
 let aiDescId = null;
 let aiDescChannel = "rakuten";
 let aiEditText = "";
+let aiConsultProductId = null;
+let aiConsultInput = "";
+let aiConsultSending = false;
 let sidebarOpen = false;
 let masterSearch = "";
 let masterFilter = "all";
@@ -619,6 +622,7 @@ function render() {
     else if (saasView === "product-detail") pageHtml = productDetailHtml();
     else if (saasView === "spec-sheet-nav") pageHtml = specSheetHtml();
     else if (saasView === "ai-descriptions-nav") pageHtml = aiDescriptionsHtml();
+    else if (saasView === "ai-consult-nav") pageHtml = aiConsultHtml();
     else if (saasView === "settings-nav") pageHtml = newSettingsHtml();
     else pageHtml = dashboardHtml();
   } else if (view === "home") {
@@ -1770,71 +1774,79 @@ function downloadCanvasImage(canvas) {
   showStatus(opened ? "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f" : "\u753b\u50cf\u4fdd\u5b58\u753b\u9762\u3092\u8868\u793a\u3057\u307e\u3057\u305f");
 }
 
-async function copyImageLabels() {
-  try {
-    showStatus("\u753b\u50cf\u3092\u4f5c\u6210\u4e2d\u3067\u3059");
-    const p = currentProduct();
-    const d = derive(p);
-    const scale = 12;
-    const pxPerMm = 4;
-    const margin = Math.max(8, Number(printCfg.margin || 3) * pxPerMm);
-    const contentW = Math.max(260, Number(printCfg.w || 90) * pxPerMm);
-    const fs = Math.max(12, Number(printCfg.fs || 7.5) * 1.8);
-    const FONT = `"Meiryo","Yu Gothic","MS Gothic",sans-serif`;
-    const canvas = document.createElement("canvas");
-    const roughRows = imageCopyRows(p, d).length + (printTarget !== "label" ? 8 : 0);
-    canvas.width = Math.ceil((contentW + margin * 2) * scale);
-    canvas.height = Math.ceil((Math.max(180, roughRows * 42 + margin * 2 + 80)) * scale);
-    // フォントが確実にロードされてから描画する
-    await document.fonts.ready;
-    try { await document.fonts.load(`bold ${fs}px "Yu Mincho"`); } catch {}
-    try { await document.fonts.load(`${fs}px "Yu Mincho"`); } catch {}
+// ③ 高解像度ラベルCanvas構築（copyとsaveで共用）
+async function buildLabelCanvas(p, d, scale) {
+  scale = scale || 16;
+  const pxPerMm = 4;
+  const margin = Math.max(8, Number(printCfg.margin || 3) * pxPerMm);
+  const contentW = Math.max(260, Number(printCfg.w || 90) * pxPerMm);
+  const fs = Math.max(12, Number(printCfg.fs || 7.5) * 1.8);
+  const FONT = '"Meiryo","Yu Gothic","MS Gothic",sans-serif';
+  const roughRows = imageCopyRows(p, d).length + (printTarget !== "label" ? 8 : 0);
+  const canvas = document.createElement("canvas");
+  canvas.width  = Math.ceil((contentW + margin * 2) * scale);
+  canvas.height = Math.ceil((Math.max(180, roughRows * 42 + margin * 2 + 80)) * scale);
+  await document.fonts.ready;
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.scale(scale, scale);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width / scale, canvas.height / scale);
+  let y = margin;
+  if (printTarget !== "nutrition") {
+    y = drawTableImage(ctx, margin, y, contentW, "", imageCopyRows(p, d), fs, FONT);
+    const jan = normalizedJan(p.janCode);
+    if (canUseJanCode() && jan) {
+      y += 10;
+      y += drawBarcodeOnCanvas(ctx, jan, margin, y, contentW, fs) + 8;
+    }
+    if (d.contamination) {
+      ctx.font = `${Math.max(10, fs * 0.82)}px ${FONT}`;
+      const note = `※${d.contamination}`;
+      const lines = wrapCanvasText(ctx, note, contentW);
+      drawTextLines(ctx, lines, margin, y + fs, fs * 1.25);
+      y += lines.length * fs * 1.25 + 12;
+    }
+  }
+  if (printTarget !== "label") {
+    if (printTarget === "both") y += 22;
+    y = drawNutritionImage(ctx, margin, y, contentW, d, fs, FONT);
+  }
+  const finalH = Math.ceil((y + margin) * scale);
+  const trimmed = document.createElement("canvas");
+  trimmed.width = canvas.width;
+  trimmed.height = finalH;
+  const trimCtx = trimmed.getContext("2d", { alpha: false });
+  trimCtx.imageSmoothingEnabled = true;
+  trimCtx.imageSmoothingQuality = "high";
+  trimCtx.fillStyle = "#fff";
+  trimCtx.fillRect(0, 0, trimmed.width, trimmed.height);
+  trimCtx.drawImage(canvas, 0, 0);
+  return trimmed;
+}
 
-    const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = false;
-    ctx.scale(scale, scale);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width / scale, canvas.height / scale);
-    let y = margin;
-    if (printTarget !== "nutrition") {
-      y = drawTableImage(ctx, margin, y, contentW, "", imageCopyRows(p, d), fs, FONT);
-      const jan = normalizedJan(p.janCode);
-      if (canUseJanCode() && jan) {
-        y += 10;
-        const barcodeH = drawBarcodeOnCanvas(ctx, jan, margin, y, contentW, fs);
-        y += barcodeH + 8;
-      }
-      if (d.contamination) {
-        ctx.font = `${Math.max(10, fs * 0.82)}px ${FONT}`;
-        const note = `※${d.contamination}`;
-        const lines = wrapCanvasText(ctx, note, contentW);
-        drawTextLines(ctx, lines, margin, y + fs, fs * 1.25);
-        y += lines.length * fs * 1.25 + 12;
-      }
+// ② 画像コピー（Chrome: Promise<Blob>をClipboardItemに渡してジェスチャ制約を回避）
+async function copyImageLabels() {
+  showStatus("画像をコピー中です...");
+  const p = currentProduct();
+  const d = derive(p);
+  if (navigator.clipboard?.write && window.ClipboardItem) {
+    const blobPromise = buildLabelCanvas(p, d).then(c => canvasToPngBlob(c));
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blobPromise })]);
+      showStatus("画像としてコピーしました ✓");
+    } catch (e) {
+      console.warn("clipboard.write failed:", e);
+      try { downloadCanvasImage(await buildLabelCanvas(p, d)); } catch {}
+      showStatus("コピー失敗 → 画像をダウンロードします（ブラウザのクリップボード権限を確認してください）");
     }
-    if (printTarget !== "label") {
-      if (printTarget === "both") y += 22;
-      y = drawNutritionImage(ctx, margin, y, contentW, d, fs, FONT);
-    }
-    const finalH = Math.ceil((y + margin) * scale);
-    const trimmed = document.createElement("canvas");
-    trimmed.width = canvas.width;
-    trimmed.height = finalH;
-    const trimCtx = trimmed.getContext("2d");
-    trimCtx.imageSmoothingEnabled = false;
-    trimCtx.drawImage(canvas, 0, 0);
-    if (navigator.clipboard?.write && window.ClipboardItem) {
-      navigator.clipboard.write([new ClipboardItem({ "image/png": canvasToPngBlob(trimmed) })])
-        .then(() => showStatus("\u753b\u50cf\u3068\u3057\u3066\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f"))
-        .catch(() => {
-          downloadCanvasImage(trimmed);
-          showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u304c\u8a31\u53ef\u3055\u308c\u306a\u3044\u305f\u3081\u3001\u4fdd\u5b58\u753b\u9762\u3092\u958b\u304d\u307e\u3057\u305f");
-        });
-      return;
-    }
-    downloadCanvasImage(trimmed);
+    return;
+  }
+  try {
+    downloadCanvasImage(await buildLabelCanvas(p, d));
   } catch {
-    showStatus("\u753b\u50cf\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+    showStatus("画像コピーに失敗しました");
   }
 }
 
@@ -1918,6 +1930,7 @@ function sidebarHtml() {
     { id:"label-nav",         label:"ラベル作成",     ico:"⊟" },
     { id:"spec-sheet-nav",    label:"商品規格書",     ico:"≡" },
     { id:"ai-descriptions-nav",label:"AI説明文",      ico:"✦" },
+    { id:"ai-consult-nav",      label:"AI相談",       ico:"💬" },
   ];
   const settingItem = { id:"settings-nav", label:"設定", ico:"⊕" };
   const active = saasView;
@@ -2148,7 +2161,9 @@ function dashboardHtml() {
   const recentCards = recent.length ? recent.map(p => `
     <div class="dash-product-row">
       <div class="dash-product-info">
-        <span class="dash-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+        <span class="dash-product-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
+        ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
+
         ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
       </div>
       <div class="dash-product-actions">
@@ -2726,7 +2741,175 @@ function saveMaster() {
   showStatus("保存しました");
 }
 
+// ══ AI相談機能 ═══════════════════════════════════════════════════════════
+
+function getConsultHistory(productId) {
+  try { return JSON.parse(safeGet("fmcc-ai-consult") || "{}")[productId] || []; }
+  catch { return []; }
+}
+function saveConsultHistory(productId, msgs) {
+  const all = (() => { try { return JSON.parse(safeGet("fmcc-ai-consult") || "{}"); } catch { return {}; } })();
+  all[productId] = msgs.slice(-60);
+  safeSet("fmcc-ai-consult", JSON.stringify(all));
+}
+
+function renderMarkdown(text) {
+  if (!text) return "";
+  let h = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  h = h.replace(/^### (.+)$/gm, "<h4 class='md-h4'>$1</h4>");
+  h = h.replace(/^## (.+)$/gm, "<h3 class='md-h3'>$1</h3>");
+  h = h.replace(/^# (.+)$/gm, "<h2 class='md-h2'>$1</h2>");
+  h = h.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/^\|(.+)\|$/gm, (_, inner) => {
+    if (inner.replace(/[\s\-|:]/g, "").length === 0) return "";
+    const cells = inner.split("|").map(c => "<td class='md-td'>" + c.trim() + "</td>").join("");
+    return "<tr>" + cells + "</tr>";
+  });
+  h = h.replace(/(<tr>[\s\S]*?<\/tr>)+/g, m => "<table class='md-table'>" + m + "</table>");
+  h = h.replace(/^[-・•] (.+)$/gm, "<li class='md-li'>$1</li>");
+  h = h.replace(/^\d+\. (.+)$/gm, "<li class='md-li'>$1</li>");
+  h = h.replace(/(<li[^>]*>[\s\S]*?<\/li>)+/g, m => "<ul class='md-ul'>" + m + "</ul>");
+  h = h.replace(/\n\n/g, "</p><p class='md-p'>");
+  h = h.replace(/\n/g, "<br>");
+  return "<p class='md-p'>" + h + "</p>";
+}
+
+const CONSULT_TEMPLATES = [
+  { label: "食品表示に問題はありますか？", key: "check_label" },
+  { label: "アレルゲン表示を確認してください", key: "check_allergens" },
+  { label: "食品表示法上の注意点は？", key: "legal_notes" },
+  { label: "改善点を教えてください", key: "improvements" },
+  { label: "原材料名の表示順を確認", key: "ingredients_order" },
+  { label: "栄養成分表示の確認", key: "nutrition_check" },
+];
+
+function generateConsultResponse(p, questionKey) {
+  const d = derive(p);
+  const dn = p.internalName || p.name || "（名称未設定）";
+  const ings = (p.ingredients || []).filter(i => i.name && i.name.trim());
+  const ingWithW = ings.filter(i => Number(i.weight) > 0);
+  switch (questionKey || "general") {
+    case "check_label": {
+      const issues = [];
+      if (!p.name || !p.name.trim()) issues.push("**名称** が未入力（必須）");
+      if (!ings.length) issues.push("**原材料名** が未入力（必須）");
+      if (!p.volume || !p.volume.trim()) issues.push("**内容量** が未入力（必須）");
+      if (!p.bestBefore || !p.bestBefore.trim()) issues.push("**賞味期限** が未入力（必須）");
+      if (!d.storage || !d.storage.trim()) issues.push("**保存方法** が未入力（必須）");
+      if (!p.manufacturerName || !p.manufacturerName.trim()) issues.push("**製造者名** が未入力（必須）");
+      if (!p.manufacturerAddress || !p.manufacturerAddress.trim()) issues.push("**製造者住所** が未入力（必須）");
+      if (!issues.length)
+        return "## ✅ " + dn + " の食品表示チェック\n\n必須表示事項はすべて入力されています。\n\n**次のステップ**\n- アレルゲン表示の最終確認\n- 原材料名の配合順（多い順）確認\n- 栄養成分表示の確認\n\n※ 最終的な表示適合性の確認は専門家にご依頼ください。";
+      return "## ⚠️ " + dn + " の食品表示チェック\n\n以下の必須項目を確認・修正してください：\n\n" + issues.map(i => "- " + i).join("\n") + "\n\n食品表示法上、これらは**必須表示事項**です。未入力のまま販売すると法令違反になる可能性があります。\n\n※ 最終的な表示適合性の確認は専門家にご依頼ください。";
+    }
+    case "check_allergens": {
+      const al = d.allergens || [];
+      return "## 🌾 " + dn + " のアレルゲン確認\n\n**自動検出されたアレルゲン**\n" + (al.length ? al.map(a => "- **" + a + "**").join("\n") : "- 検出なし") + "\n\n**使用原材料**\n" + (ings.length ? ings.map(i => "- " + i.name).join("\n") : "- 未入力") + "\n\n**確認ポイント**\n- 特定原材料8品目：えび・かに・小麦・そば・卵・乳・落花生・くるみ\n- 特定原材料に準ずる20品目も可能な限り表示が推奨されます\n- コンタミネーション（製造ラインでの混入リスク）も検討してください\n\n※ アレルゲン表示の最終確認は、原材料メーカーの規格書に基づき実施してください。";
+    }
+    case "legal_notes":
+      return "## ⚖️ 食品表示法上の主な注意点\n\n**1. 名称**\n- 商品名ではなく「油菓子」「菓子パン」等の一般的名称を使用\n\n**2. 原材料名**\n- 配合割合の**多い順**に表示（義務）\n- 添加物は一般名・用途名で表示\n- 「/」で原材料と添加物を区分することが推奨\n\n**3. 賞味・消費期限**\n- 賞味期限（品質保持）と消費期限（安全性）を使い分ける\n- 設定には微生物試験等の根拠が必要\n\n**4. 製造者**\n- 製造者・加工者・輸入者・販売者を正しく使い分ける\n- OEM商品の場合は特に注意\n\n**5. 栄養成分表示**\n- 一般消費者向け加工食品には義務\n- 100gまたは100mLあたり、もしくは1食分あたりで表示\n\n詳細は消費者庁「食品表示基準」をご確認ください。";
+    case "improvements": {
+      const tips = [];
+      if (!p.imageDataUrl) tips.push("📷 **商品画像** を登録すると規格書が充実します");
+      if (!(p.costItems || []).length) tips.push("💰 **原価管理** を入力して原価率を把握しましょう");
+      if (!p.internalName || !p.internalName.trim()) tips.push("🏷️ **社内管理名称** を設定すると複数SKU管理が楽になります");
+      if (!p.code) tips.push("🔢 **商品コード** を設定すると棚卸し・受発注管理に便利です");
+      if (!ingWithW.length) tips.push("⚖️ **原材料の重量** を入力すると栄養成分が自動計算されます");
+      if (!tips.length) tips.push("現在入力できる情報は充実しています。引き続き最新情報を維持してください。");
+      return "## 💡 " + dn + " の改善提案\n\n" + tips.map(t => "- " + t).join("\n") + "\n\n**表示品質向上のヒント**\n- 原材料名の配合順（多い順）を確認\n- アレルゲン表示のダブルチェック\n- 販売チャネル別のAI説明文を事前に準備";
+    }
+    case "ingredients_order": {
+      const sorted = ingWithW.slice().sort((a, b) => Number(b.weight) - Number(a.weight));
+      return "## 📋 " + dn + " の原材料表示順\n\n**現在の入力順**\n" + (ings.length ? ings.map((i, idx) => (idx + 1) + ". " + i.name + (i.weight ? " (" + i.weight + (i.unit || "g") + ")" : "")).join("\n") : "- 未入力") + "\n\n" + (sorted.length ? "**重量基準の推奨順（多い順）**\n" + sorted.map((i, idx) => (idx + 1) + ". " + i.name + " (" + i.weight + (i.unit || "g") + ")").join("\n") + "\n\n" : "") + "**注意事項**\n- 食品表示法では原材料を**配合割合の多い順**に表示することが義務\n- 重量未入力の原材料は自動並び替えができません\n- 複合原材料は展開表示が必要な場合があります\n\n※ 最終的な確認は製造記録・配合表に基づき実施してください。";
+    }
+    case "nutrition_check": {
+      const n = d.nutrition;
+      const ok = Number(n.kcal) > 0;
+      return "## 📊 " + dn + " の栄養成分確認\n\n| 項目 | 値 |\n|------|----|\n| エネルギー | " + (ok ? n.kcal + " kcal" : "未計算") + " |\n| たんぱく質 | " + (ok ? n.protein + " g" : "未計算") + " |\n| 脂質 | " + (ok ? n.fat + " g" : "未計算") + " |\n| 炭水化物 | " + (ok ? n.carbs + " g" : "未計算") + " |\n| 食塩相当量 | " + (ok ? n.salt + " g" : "未計算") + " |\n\n" + (!ok ? "⚠️ 栄養成分が未計算です。\n\n原材料に重量を入力するか、手動入力モードで値を設定してください。\n\n" : "") + "**注意事項**\n- 一般消費者向け加工食品には栄養成分表示が**義務**\n- 100gまたは100mLあたり（もしくは1食分）で表示\n- 正確な値には公認検査機関での分析を推奨";
+    }
+    default:
+      return "## 🤖 AI食品表示アドバイザー\n\n**" + dn + "** について何でもご質問ください。\n\n**よく使う質問テンプレート**\n" + CONSULT_TEMPLATES.map(t => "- " + t.label).join("\n") + "\n\n上のテンプレートボタンをクリックすると素早くアクセスできます。\n\n※ このAI相談機能は食品表示の参考情報を提供します。法的判断については必ず専門家にご確認ください。";
+  }
+}
+
+// OpenAI API接続ポイント（APIキー設定で差し替え可能な設計）
+async function callConsultAI(p, userMessage, questionKey) {
+  const apiKey = safeGet("fmcc-openai-key") || "";
+  if (apiKey) {
+    try {
+      const d = derive(p);
+      const systemPrompt = "あなたは食品表示法の専門家AIアシスタントです。日本の食品表示法・JAS法・栄養表示基準に精通しています。\n商品情報：名称「" + (p.name || "未設定") + "」、社内名称「" + (p.internalName || "") + "」、原材料：" + ((p.ingredients || []).filter(i => i.name).map(i => i.name).join("、") || "未入力") + "\nアレルゲン：" + ((d.allergens || []).join("、") || "なし") + "\n正確で実用的なアドバイスをMarkdown形式で回答してください。";
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }], max_tokens: 1000 }),
+      });
+      const json = await res.json();
+      if (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) return json.choices[0].message.content;
+    } catch (e) { console.warn("OpenAI API error:", e); }
+  }
+  return generateConsultResponse(p, questionKey);
+}
+
+function aiConsultHtml() {
+  const productList = products.filter(p => p.id);
+  if (!aiConsultProductId && productList.length) aiConsultProductId = productList[0].id;
+  const rawP = products.find(x => x.id === aiConsultProductId);
+  if (!rawP && productList.length === 0) {
+    return saasLayout("AI相談", "<div class=\"empty-state\"><p>商品を先に登録してください。</p><button class=\"action primary\" data-nav=\"products\">商品管理へ</button></div>");
+  }
+  const ep = rawP ? extendProductMaster(rawP) : extendProductMaster(productList[0]);
+  const history = getConsultHistory(ep.id);
+  const displayName = ep.internalName || ep.name || "（名称未入力）";
+  const productSelect = productList.map(px => "<option value=\"" + escapeHtml(px.id) + "\"" + (px.id === aiConsultProductId ? " selected" : "") + ">" + escapeHtml(px.internalName || px.name || "（名称未入力）") + "</option>").join("");
+  const templateBtns = CONSULT_TEMPLATES.map(t => "<button class=\"consult-tpl-btn\" data-consult-key=\"" + escapeHtml(t.key) + "\" data-consult-q=\"" + escapeHtml(t.label) + "\">" + escapeHtml(t.label) + "</button>").join("");
+  const histHtml = history.length
+    ? history.map(msg => "<div class=\"consult-msg consult-msg-" + escapeHtml(msg.role) + "\"><div class=\"consult-msg-label\">" + (msg.role === "user" ? "質問" : "🤖 AI回答") + "</div><div class=\"consult-msg-body\">" + (msg.role === "assistant" ? renderMarkdown(msg.content) : escapeHtml(msg.content)) + "</div></div>").join("")
+    : "<div class=\"consult-empty\">テンプレートを選ぶか、テキストボックスに質問を入力して送信してください。</div>";
+  const d2 = derive(ep);
+  const ls = "style=\"width:" + escapeHtml(String(printCfg.w || "90")) + "mm;font-size:" + escapeHtml(String(printCfg.fs || "7.5")) + "pt;\"";
+  const previewArea = printablePreviewHtml(ep, d2, ls, false);
+  const hasApiKey = !!safeGet("fmcc-openai-key");
+  return saasLayout("AI相談", "<div class=\"consult-layout\">\n  <div class=\"consult-left\">\n    <div class=\"consult-top-bar\">\n      <label class=\"field-inline\"><span>商品</span><select id=\"consult-product-sel\">" + productSelect + "</select></label>\n      <button class=\"btn-sm btn-danger\" id=\"consult-clear\">履歴クリア</button>\n    </div>\n    <div class=\"consult-templates\">\n      <div class=\"consult-tpl-title\">ワンクリック質問</div>\n      <div class=\"consult-tpl-grid\">" + templateBtns + "</div>\n    </div>\n    <div class=\"consult-history\" id=\"consult-history\">" + histHtml + "</div>\n    <div class=\"consult-input-area\">\n      <textarea class=\"consult-textarea\" id=\"consult-input\" placeholder=\"食品表示についてご質問ください...\">" + escapeHtml(aiConsultInput) + "</textarea>\n      <button class=\"action primary consult-send-btn" + (aiConsultSending ? " disabled" : "") + "\" id=\"consult-send\"" + (aiConsultSending ? " disabled" : "") + ">" + (aiConsultSending ? "回答中..." : "送信 ▶") + "</button>\n    </div>\n    " + (hasApiKey ? "" : "<p class=\"notice\">💡 設定画面でOpenAI APIキーを登録すると、ChatGPTが直接回答します（現在はテンプレート回答）</p>") + "\n  </div>\n  <div class=\"consult-right\">\n    <div class=\"consult-preview-title\">ラベルプレビュー（" + escapeHtml(displayName) + "）</div>\n    <div class=\"consult-preview-wrap\">" + previewArea + "</div>\n  </div>\n</div>");
+}
+
 // ── SaaSナビゲーション イベントバインド ──────────────────────────────
+async function sendConsultMessage(questionKey) {
+  const input = document.getElementById("consult-input");
+  const msg = (input?.value || aiConsultInput).trim();
+  if (!msg || aiConsultSending) return;
+  const p = products.find(x => x.id === aiConsultProductId);
+  if (!p) return;
+  const ep = extendProductMaster(p);
+  const history = getConsultHistory(ep.id);
+  history.push({ role: "user", content: msg });
+  saveConsultHistory(ep.id, history);
+  aiConsultInput = "";
+  aiConsultSending = true;
+  render();
+  // 履歴欄を最下部にスクロール
+  setTimeout(() => {
+    const h = document.getElementById("consult-history");
+    if (h) h.scrollTop = h.scrollHeight;
+  }, 50);
+  try {
+    const answer = await callConsultAI(ep, msg, questionKey || "general");
+    const updated = getConsultHistory(ep.id);
+    updated.push({ role: "assistant", content: answer });
+    saveConsultHistory(ep.id, updated);
+  } catch (e) {
+    const updated = getConsultHistory(ep.id);
+    updated.push({ role: "assistant", content: "回答の生成に失敗しました。もう一度お試しください。" });
+    saveConsultHistory(ep.id, updated);
+  }
+  aiConsultSending = false;
+  render();
+  setTimeout(() => {
+    const h = document.getElementById("consult-history");
+    if (h) h.scrollTop = h.scrollHeight;
+  }, 80);
+}
+
 function bindSaasEvents() {
   // ラベルエディタ → 商品管理に戻る
   document.querySelectorAll("[data-action='back-to-saas']").forEach(el => el.addEventListener("click", () => {
@@ -2996,6 +3179,40 @@ function bindSaasEvents() {
   // 原価フィールド変更時はリアルタイム再計算（フォーカスアウト）
   document.querySelectorAll("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]").forEach(el => {
     el.addEventListener("change", () => { saveCostItems(); render(); });
+  });
+
+  // ── AI相談 ──
+  const consultSel = document.getElementById("consult-product-sel");
+  if (consultSel) {
+    consultSel.addEventListener("change", () => {
+      aiConsultProductId = consultSel.value;
+      aiConsultInput = "";
+      render();
+    });
+  }
+  document.getElementById("consult-clear")?.addEventListener("click", () => {
+    if (!aiConsultProductId) return;
+    saveConsultHistory(aiConsultProductId, []);
+    render();
+  });
+  document.getElementById("consult-input")?.addEventListener("input", e => {
+    aiConsultInput = e.target.value;
+  });
+  document.querySelectorAll(".consult-tpl-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const q = btn.dataset.consultQ;
+      const key = btn.dataset.consultKey;
+      document.getElementById("consult-input").value = q;
+      aiConsultInput = q;
+      sendConsultMessage(key);
+    });
+  });
+  document.getElementById("consult-send")?.addEventListener("click", () => {
+    sendConsultMessage(null);
+  });
+  // Ctrl+Enterで送信
+  document.getElementById("consult-input")?.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") sendConsultMessage(null);
   });
 }
 

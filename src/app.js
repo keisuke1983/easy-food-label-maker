@@ -1939,7 +1939,7 @@ function saasLayout(title, content) {
 function dashboardHtml() {
   const total = products.length;
   const incomplete = products.filter(p => {
-    const d = deriveFields(p);
+    const d = derive(p);
     return calcCompletion(p,d).pct < 100;
   }).length;
   const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0,5);
@@ -1991,7 +1991,7 @@ function productsListHtml() {
   };
 
   const cards = list.length ? list.map(p => {
-    const d = deriveFields(p);
+    const d = derive(p);
     const comp = calcCompletion(p,d);
     return `<div class="master-card">
       <div class="master-card-hd">
@@ -2101,7 +2101,7 @@ function specSheetHtml() {
   }
   const p = specSheetId ? products.find(x=>x.id===specSheetId) : productList[0];
   if (!p) return saasLayout("商品規格書", `<p>商品が見つかりません。</p>`);
-  const d = deriveFields(p);
+  const d = derive(p);
   const row = (label, val) => val ? `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(String(val))}</td></tr>` : "";
   const specHtml = `<div class="spec-doc" id="spec-print-area">
     <div class="spec-header">
@@ -2143,7 +2143,7 @@ function specSheetHtml() {
 
 // ── AI商品説明文プロンプト生成 ─────────────────────────────────────────
 function buildAiDescPrompt(p, channelId) {
-  const d = deriveFields(p);
+  const d = derive(p);
   const base = `商品名：${p.name||"未入力"}
 カテゴリ：${p.category||"未入力"}
 内容量：${p.volume||"未入力"}

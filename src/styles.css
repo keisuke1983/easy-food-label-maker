@@ -1319,3 +1319,58 @@ button:disabled {
   .spec-v2 { padding: 20px; }
   .cost-table { font-size: 12px; }
 }
+
+/* ══ ④ AI説明文ページ ══ */
+.hidden { display: none !important; }
+.ai-page-layout { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; }
+.ai-left-panel { display: flex; flex-direction: column; gap: 16px; }
+.ai-right-panel { position: sticky; top: 80px; }
+.ai-generate-section { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ai-generate-btn { font-size: 14px; padding: 12px 24px; }
+.ai-generate-note { font-size: 12px; color: #64748b; }
+.ai-result-section { display: flex; flex-direction: column; gap: 10px; background: #fff; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; }
+.ai-result-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.ai-result-label { font-size: 13px; font-weight: 700; color: #1e293b; }
+.ai-result-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-result-textarea { width: 100%; min-height: 300px; padding: 12px; font-size: 13px; line-height: 1.7; border: 1px solid #e2e8f0; border-radius: 8px; resize: vertical; font-family: inherit; color: #1e293b; background: #f8fafc; }
+.ai-result-textarea:focus { outline: none; border-color: #2563eb; background: #fff; }
+.ai-saved-note { font-size: 12px; color: #15803d; font-weight: 500; }
+.ai-prompt-panel { background: #fff; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 10px; }
+.ai-prompt-panel-title { font-size: 13px; font-weight: 700; color: #1e293b; }
+.ai-prompt-panel-desc { font-size: 12px; color: #64748b; }
+
+/* ══ ③ 原価管理カード型 ══ */
+.cost-items-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.cost-item-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; }
+.cost-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cost-name-input { flex: 1; padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; font-weight: 600; background: #fff; }
+.cost-name-input:focus { outline: none; border-color: #2563eb; }
+.cost-item-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 10px; align-items: end; }
+.cost-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #64748b; }
+.cost-field span { font-weight: 500; }
+.cost-field input, .cost-field select { padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: #fff; }
+.cost-field input:focus, .cost-field select:focus { outline: none; border-color: #2563eb; }
+.cost-amount-wrap { display: flex; gap: 4px; }
+.cost-amount-wrap input { flex: 1; min-width: 0; }
+.cost-amount-wrap select { width: auto; flex-shrink: 0; }
+.cost-line-total { align-items: flex-start; justify-content: center; background: #eff6ff; border-radius: 6px; padding: 8px 10px; }
+.cost-line-total strong { font-size: 16px; color: #1d4ed8; }
+.cost-extra-section { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.cost-extra-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 10px; }
+.cost-extra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+/* ══ 印刷設定（sectionBody内） ══ */
+.section-body .print-controls label { display: grid; gap: 4px; }
+.section-body .size-controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.section-body .size-controls label { display: grid; gap: 4px; font-size: 12px; color: var(--text-sub); }
+
+@media (max-width: 900px) {
+  .ai-page-layout { grid-template-columns: 1fr; }
+  .ai-right-panel { position: static; }
+  .cost-item-row { grid-template-columns: 1fr 1fr; }
+  .cost-extra-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .cost-item-row { grid-template-columns: 1fr; }
+  .cost-line-total { flex-direction: row; align-items: center; justify-content: space-between; }
+}

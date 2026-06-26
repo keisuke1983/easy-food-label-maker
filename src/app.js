@@ -112,7 +112,7 @@ let renderTimer = null;
 let printPreviewOpen = false;
 let assistMessage = "";
 let statusMessage = "";
-let openSections = new Set(["商品情報", "原材料"]);
+let openSections = new Set(["商品情報", "原材料", "印刷・サイズ設定"]);
 let autoSaveTimer = null;
 let autoSaveStatus = "";
 let previewZoom = 100;
@@ -138,6 +138,7 @@ let productDetailId = null;
 let specSheetId = null;
 let aiDescId = null;
 let aiDescChannel = "rakuten";
+let aiEditText = "";
 let sidebarOpen = false;
 let masterSearch = "";
 let masterFilter = "all";
@@ -913,6 +914,7 @@ function editorHtml(p) {
         ${contaminationEditorHtml(p)}
         ${labelAssistHtml(p, d)}
         ${manufacturerEditorHtml(p)}
+        ${section("印刷・サイズ設定", printSettingsBodyHtml())}
         ${historyHtml(p)}
         <datalist id="ing-master-list">${ingMaster.map((n) => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
       </div>
@@ -1032,7 +1034,6 @@ function labelChecklist(p, d) {
 function previewHtml(p, d) {
   const targetChoices = [["label", "表示ラベルのみ"], ["nutrition", "栄養成分表示のみ"], ["both", "両方"]];
   const labelStyle = `style="width:${escapeHtml(printCfg.w || "90")}mm;${printCfg.h ? `min-height:${escapeHtml(printCfg.h)}mm;` : ""}font-size:${escapeHtml(printCfg.fs || "7.5")}pt;"`;
-  const previewNote = printPreviewSupportHtml();
   const printable = printablePreviewHtml(p, d, labelStyle, true);
   const ZOOM_OPTS = [50, 75, 100, 150];
   const isJissun = previewZoom === "実寸";
@@ -1051,15 +1052,6 @@ function previewHtml(p, d) {
     <div class="preview-area-wrap">
       <div id="print-area" style="${zoomStyle}">${printable}</div>
     </div>
-    <details class="print-settings-panel">
-      <summary>印刷・サイズ設定</summary>
-      <div class="print-settings-body">
-        <div class="print-controls"><label><span>サイズプリセット</span><select data-size>${SIZE_PRESETS.map((s) => `<option ${s.label === printCfg.label ? "selected" : ""}>${s.label}</option>`).join("")}</select></label></div>
-        <div class="size-controls"><label><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label><label><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label><label><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label><label><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label></div>
-        <div class="offset-controls"><span class="offset-label">印刷位置補正</span><label><span>上下(mm)</span><input type="number" step="0.5" data-print-offset="y" value="${escapeHtml(printOffsetY)}" placeholder="0"></label><label><span>左右(mm)</span><input type="number" step="0.5" data-print-offset="x" value="${escapeHtml(printOffsetX)}" placeholder="0"></label></div>
-        ${previewNote}
-      </div>
-    </details>
     <div class="output-actions">
       <button class="action print-btn" data-action="open-print-preview">🖨 印刷プレビュー</button>
       <button class="action secondary" data-action="copy-image-output">画像コピー</button>
@@ -1080,6 +1072,22 @@ function contaminationNoteHtml(d) {
 }
 function printPreviewModalHtml(printable) {
   return `<div class="print-preview-modal"><div class="print-preview-card"><div class="print-preview-head"><div><b>印刷前確認</b><span>ブラウザの印刷ダイアログで表示されない場合も、ここでサイズ感を確認できます。</span></div><button class="action" data-action="close-print-preview">閉じる</button><button class="action primary" data-action="confirm-print">この内容で印刷</button></div><div class="print-preview-sheet" style="padding:${escapeHtml(printCfg.margin || "3")}mm;">${printable}</div></div></div>`;
+}
+function printSettingsBodyHtml() {
+  const previewNote = printPreviewSupportHtml();
+  return `<div class="print-controls"><label class="field"><span>サイズプリセット</span><select data-size>${SIZE_PRESETS.map((s) => `<option ${s.label === printCfg.label ? "selected" : ""}>${s.label}</option>`).join("")}</select></label></div>
+    <div class="size-controls">
+      <label class="field"><span>幅(mm)</span><input type="number" data-print-cfg="w" value="${escapeHtml(printCfg.w || "")}" placeholder="90"></label>
+      <label class="field"><span>高さ(mm)</span><input type="number" data-print-cfg="h" value="${escapeHtml(printCfg.h || "")}" placeholder="自動"></label>
+      <label class="field"><span>余白(mm)</span><input type="number" data-print-cfg="margin" value="${escapeHtml(printCfg.margin || "")}" placeholder="3"></label>
+      <label class="field"><span>文字(pt)</span><input type="number" step="0.1" data-print-cfg="fs" value="${escapeHtml(printCfg.fs || "")}" placeholder="7.5"></label>
+    </div>
+    <div class="offset-controls">
+      <span class="offset-label">印刷位置補正</span>
+      <label><span>上下(mm)</span><input type="number" step="0.5" data-print-offset="y" value="${escapeHtml(printOffsetY)}" placeholder="0"></label>
+      <label><span>左右(mm)</span><input type="number" step="0.5" data-print-offset="x" value="${escapeHtml(printOffsetX)}" placeholder="0"></label>
+    </div>
+    ${previewNote}`;
 }
 function printPreviewSupportHtml() {
   const w = Number(printCfg.w || 0);
@@ -1882,6 +1890,7 @@ function extendProductMaster(p) {
     salesChannels: [], publishStatus: "active", memo: "",
     createdAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
     costItems: [],
+    packagingCost: "", laborCost: "", otherCost: "",
     specVersion: "1", specResponsible: "",
     specCreatedAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
     packaging: "", caseCount: "", productSize: "",
@@ -1971,13 +1980,34 @@ function productStatusBadges(p, d) {
 }
 
 // ── 原価計算 ──────────────────────────────────────────────────────────
+const COST_UNITS = ["g", "kg", "ml", "L", "個", "袋", "本", "枚"];
+const COST_PRICE_UNITS = [
+  { id:"per_unit",  label:"/ 使用量単位", factor: (ci) => 1 },
+  { id:"per_kg",    label:"/ kg",        factor: (ci) => (ci.unit==="g"?0.001:ci.unit==="kg"?1:1) },
+  { id:"per_100g",  label:"/ 100g",      factor: (ci) => (ci.unit==="g"?0.01:0.01) },
+];
+
+function calcItemCost(ci) {
+  const amount  = parseFloat(ci.amount) || 0;
+  const price   = parseFloat(ci.unitPrice) || 0;
+  const loss    = parseFloat(ci.lossRate) || 0;
+  let unitCost  = price;
+  if (ci.priceUnit === "per_kg" && (ci.unit === "g" || !ci.unit)) unitCost = price / 1000;
+  else if (ci.priceUnit === "per_100g" && (ci.unit === "g" || !ci.unit)) unitCost = price / 100;
+  return amount * unitCost * (1 + loss / 100);
+}
+
 function calcCosts(p) {
   const items = p.costItems || [];
-  const rawCost = items.reduce((sum, ci) => sum + (parseFloat(ci.amount)||0) * (parseFloat(ci.unitPrice)||0), 0);
-  const price = parseFloat(p.price) || 0;
-  const gross = price - rawCost;
-  const margin = price > 0 ? Math.round(gross / price * 100) : null;
-  return { rawCost, price, gross, margin };
+  const rawCost     = items.reduce((s, ci) => s + calcItemCost(ci), 0);
+  const packaging   = parseFloat(p.packagingCost) || 0;
+  const labor       = parseFloat(p.laborCost) || 0;
+  const other       = parseFloat(p.otherCost) || 0;
+  const totalCost   = rawCost + packaging + labor + other;
+  const price       = parseFloat(p.price) || 0;
+  const gross       = price - totalCost;
+  const margin      = price > 0 ? Math.round(gross / price * 100) : null;
+  return { rawCost, packaging, labor, other, totalCost, price, gross, margin };
 }
 
 function marginClass(margin) {
@@ -1987,44 +2017,97 @@ function marginClass(margin) {
   return "margin-bad";
 }
 
-// ── 原価管理 HTML ─────────────────────────────────────────────────────
+// ── 原価管理 HTML（カード型レイアウト） ──────────────────────────────
 function costEditorHtml(p) {
   const items = p.costItems || [];
   const costs = calcCosts(p);
-  const rows = items.map((ci, i) => {
-    const lineTotal = (parseFloat(ci.amount)||0) * (parseFloat(ci.unitPrice)||0);
-    return `<tr>
-      <td><input data-cost-name="${i}" value="${escapeHtml(ci.name||"")}" placeholder="原材料名"></td>
-      <td><input type="number" data-cost-amount="${i}" value="${escapeHtml(ci.amount||"")}" placeholder="0" style="width:70px"></td>
-      <td><input data-cost-unit="${i}" value="${escapeHtml(ci.unit||"g")}" placeholder="g" style="width:50px"></td>
-      <td><input type="number" data-cost-price="${i}" value="${escapeHtml(ci.unitPrice||"")}" placeholder="0" style="width:80px"></td>
-      <td class="cost-total">¥${lineTotal.toFixed(0)}</td>
-      <td><button class="icon-btn" data-remove-cost="${i}">×</button></td>
-    </tr>`;
+  const mc = marginClass(costs.margin);
+
+  const unitOpts = COST_UNITS.map(u => `<option value="${u}">${u}</option>`).join("");
+  const priceUnitOpts = [
+    {id:"per_unit", label:"円/使用量"},
+    {id:"per_kg",   label:"円/kg"},
+    {id:"per_100g", label:"円/100g"},
+  ].map(u => `<option value="${u.id}">${u.label}</option>`).join("");
+
+  const itemCards = items.map((ci, i) => {
+    const lineCost = calcItemCost(ci);
+    return `<div class="cost-item-card">
+      <div class="cost-item-header">
+        <input class="cost-name-input" list="ing-master-list" data-cost-name="${i}"
+          value="${escapeHtml(ci.name||"")}" placeholder="原材料名を入力">
+        <button class="icon-btn" data-remove-cost="${i}" title="削除">×</button>
+      </div>
+      <div class="cost-item-row">
+        <label class="cost-field">
+          <span>使用量</span>
+          <div class="cost-amount-wrap">
+            <input type="number" data-cost-amount="${i}" value="${escapeHtml(ci.amount||"")}" placeholder="0" min="0" step="0.01">
+            <select data-cost-unit="${i}">
+              ${COST_UNITS.map(u=>`<option value="${u}"${ci.unit===u?" selected":""}>${u}</option>`).join("")}
+            </select>
+          </div>
+        </label>
+        <label class="cost-field">
+          <span>仕入単価</span>
+          <div class="cost-amount-wrap">
+            <input type="number" data-cost-price="${i}" value="${escapeHtml(ci.unitPrice||"")}" placeholder="0" min="0" step="0.01">
+            <select data-cost-punit="${i}">
+              ${[
+                {id:"per_unit", label:"円/使用量単位"},
+                {id:"per_kg",   label:"円/kg"},
+                {id:"per_100g", label:"円/100g"},
+              ].map(u=>`<option value="${u.id}"${(ci.priceUnit||"per_unit")===u.id?" selected":""}>${u.label}</option>`).join("")}
+            </select>
+          </div>
+        </label>
+        <label class="cost-field">
+          <span>ロス率 %</span>
+          <input type="number" data-cost-loss="${i}" value="${escapeHtml(ci.lossRate||"0")}" placeholder="0" min="0" max="100" style="width:70px">
+        </label>
+        <div class="cost-field cost-line-total">
+          <span>原材料費</span>
+          <strong>¥${lineCost.toFixed(1)}</strong>
+          <small style="color:#94a3b8;font-size:10px">使用量×単価×(1+ロス率)</small>
+        </div>
+      </div>
+    </div>`;
   }).join("");
 
-  const mc = marginClass(costs.margin);
   return `<div class="detail-section">
     <h3 class="detail-section-title">原価管理</h3>
-    <div class="cost-table-wrap">
-      <table class="cost-table">
-        <thead><tr><th>原材料名</th><th>使用量</th><th>単位</th><th>仕入単価(円)</th><th>原材料費</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
+    <div class="cost-items-list">${itemCards}</div>
     <div class="cost-add-row">
       <button class="action" data-action="add-cost-item">＋ 原材料を追加</button>
     </div>
-    <div class="cost-summary">
-      <div class="cost-summary-row"><span>原材料費合計</span><span>¥${costs.rawCost.toFixed(0)}</span></div>
-      <div class="cost-summary-row"><span>販売価格</span><span>${costs.price>0?"¥"+costs.price:"未設定"}</span></div>
-      <div class="cost-summary-row"><span>粗利益</span><span>${costs.price>0?"¥"+costs.gross.toFixed(0):"—"}</span></div>
-      <div class="cost-summary-row cost-summary-total ${mc}">
-        <span>利益率</span>
-        <span>${costs.margin!==null?costs.margin+"%":"—"}</span>
+
+    <div class="cost-extra-section">
+      <h4 class="cost-extra-title">その他コスト（1個あたり）</h4>
+      <div class="cost-extra-grid">
+        <label class="field"><span>包材費 (円)</span><input type="number" data-master-field="packagingCost" value="${escapeHtml(p.packagingCost||"")}" placeholder="0"></label>
+        <label class="field"><span>人件費 (円)</span><input type="number" data-master-field="laborCost" value="${escapeHtml(p.laborCost||"")}" placeholder="0"></label>
+        <label class="field"><span>その他経費 (円)</span><input type="number" data-master-field="otherCost" value="${escapeHtml(p.otherCost||"")}" placeholder="0"></label>
       </div>
     </div>
-    <p class="notice" style="margin-top:8px">利益率 <span class="margin-good">■ 50%以上</span>　<span class="margin-warn">■ 30-49%</span>　<span class="margin-bad">■ 30%未満</span></p>
+
+    <div class="cost-summary">
+      <div class="cost-summary-row"><span>原材料費合計</span><span>¥${costs.rawCost.toFixed(1)}</span></div>
+      <div class="cost-summary-row"><span>包材費</span><span>¥${costs.packaging.toFixed(1)}</span></div>
+      <div class="cost-summary-row"><span>人件費</span><span>¥${costs.labor.toFixed(1)}</span></div>
+      <div class="cost-summary-row"><span>その他経費</span><span>¥${costs.other.toFixed(1)}</span></div>
+      <div class="cost-summary-row" style="border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px;font-weight:600"><span>商品総原価</span><span>¥${costs.totalCost.toFixed(1)}</span></div>
+      <div class="cost-summary-row"><span>販売価格</span><span>${costs.price>0?"¥"+costs.price:"未設定（商品マスターで設定）"}</span></div>
+      <div class="cost-summary-row"><span>粗利益</span><span>${costs.price>0?"¥"+costs.gross.toFixed(1):"—"}</span></div>
+      <div class="cost-summary-row cost-summary-total ${mc}">
+        <span>利益率</span>
+        <strong>${costs.margin!==null?costs.margin+"%":"—"}</strong>
+      </div>
+    </div>
+    <p class="notice" style="margin-top:8px">
+      利益率 <span class="margin-good">■ 50%以上（優良）</span>
+      <span class="margin-warn">■ 30〜49%（標準）</span>
+      <span class="margin-bad">■ 30%未満（要改善）</span>
+    </p>
   </div>`;
 }
 
@@ -2365,6 +2448,121 @@ function specSheetHtml() {
   `);
 }
 
+// ── AI説明文 ローカル生成（API未設定時のフォールバック） ───────────────
+function generateAiDesc(p, channelId) {
+  const d = derive(p);
+  const name     = p.name || "商品";
+  const category = p.category || "食品";
+  const ings     = d.ingLabel ? d.ingLabel.split("、").slice(0,3).join("、") : "厳選素材";
+  const allergens = d.allergens.length ? d.allergens.join("・") : "なし";
+  const storage  = d.storage || "常温保存";
+  const bb       = p.bestBefore || "製造日より記載";
+  const vol      = p.volume || "";
+  const price    = p.price ? `¥${p.price}` : "";
+  const mfr      = p.manufacturerName || "";
+  const memo     = p.memo ? p.memo : "";
+
+  const gen = {
+    rakuten: `【${name}】${memo ? "\n" + memo + "\n" : ""}
+■ 商品特徴
+・${category}の逸品。主な原材料：${ings}
+・保存方法：${storage}
+・内容量：${vol}　賞味期限：${bb}
+${allergens !== "なし" ? `・アレルゲン：${allergens}` : "・主要アレルゲン（7品目）不使用"}
+${mfr ? `・製造者：${mfr}` : ""}
+
+■ こだわりポイント
+素材本来の味を大切にした${name}です。添加物を極力抑え、自然の美味しさをお届けします。
+ご贈答・お土産にも喜ばれる一品です。ぜひお試しください。
+
+${price ? `■ 価格：${price}（税込）` : ""}
+
+■ 保存方法
+${storage}`,
+
+    amazon: `【商品タイトル案】
+厳選素材使用 ${name} ${vol ? `(${vol})` : ""} ${mfr || ""}
+
+【5つの特徴】
+✅ ${category}の定番「${name}」
+✅ 主原料：${ings}
+✅ 保存方法：${storage}
+✅ 賞味期限：${bb}
+${allergens !== "なし" ? `✅ アレルゲン表示：${allergens}` : "✅ 主要アレルゲン不使用"}
+
+【商品説明】
+${memo || `${name}は、${ings}を主原料とした${category}です。`}
+内容量：${vol}　保存：${storage}
+製造者：${mfr || "記載なし"}`,
+
+    base: `${name}
+
+${memo || `こだわりの素材を使った${name}をお届けします。`}
+
+▍商品情報
+原材料：${d.ingLabel || "記載なし"}
+内容量：${vol}
+賞味期限：${bb}
+保存方法：${storage}
+${allergens !== "なし" ? `アレルゲン：${allergens}` : ""}
+${price ? `価格：${price}` : ""}
+
+大切な方へのギフトや、毎日の食卓にいかがでしょうか。`,
+
+    instagram: `✨ ${name} ✨
+
+${memo ? memo.slice(0,60) + "…" : `こだわり素材の${category}が入荷しました🎉`}
+
+📦 内容量：${vol}
+📅 賞味期限：${bb}
+🌿 ${ings}
+${allergens !== "なし" ? `⚠️ ${allergens}` : ""}
+${price ? `💰 ${price}` : ""}
+
+#${name.replace(/\s/g,"")} #${category} #こだわり #お取り寄せ #グルメ #ギフト #手作り #美味しい #食品`,
+
+    wholesale: `【業務用・卸向け商品案内】
+
+品名：${name}
+品番：${p.code || "—"}　カテゴリ：${category}
+内容量：${vol}　賞味期限：${bb}
+保存方法：${storage}
+原材料：${d.ingLabel || "—"}
+アレルゲン：${allergens}
+荷姿：${p.packaging || "応相談"}
+ケース入数：${p.caseCount || "応相談"}
+製品サイズ：${p.productSize || "応相談"}
+希望小売価格：${price || "応相談"}
+
+製造者：${mfr || "自社製造"}
+${p.manufacturerAddress ? `所在地：${p.manufacturerAddress}` : ""}
+${p.manufacturerPhone ? `TEL：${p.manufacturerPhone}` : ""}
+
+※ロット・数量により価格応相談。お気軽にお問い合わせください。`,
+
+    pop: `【${name}】
+${memo ? memo.slice(0,40) : `${ings}を使った${category}`}
+
+${vol ? `内容量 ${vol}` : ""}
+${bb ? `賞味期限 ${bb}` : ""}
+${price ? `${price}（税込）` : ""}`,
+  };
+
+  return gen[channelId] || gen.rakuten;
+}
+
+function getAiTexts() {
+  try { return JSON.parse(safeGet("fmcc-ai-texts") || "{}"); } catch { return {}; }
+}
+function saveAiText(productId, channelId, text) {
+  const texts = getAiTexts();
+  texts[`${productId}:${channelId}`] = text;
+  safeSet("fmcc-ai-texts", JSON.stringify(texts));
+}
+function loadAiText(productId, channelId) {
+  return getAiTexts()[`${productId}:${channelId}`] || "";
+}
+
 // ── AI商品説明文プロンプト生成 ─────────────────────────────────────────
 function buildAiDescPrompt(p, channelId) {
   const d = derive(p);
@@ -2398,34 +2596,54 @@ function aiDescriptionsHtml() {
   }
   const p = aiDescId ? products.find(x=>x.id===aiDescId) : productList[0];
   if (!p) return saasLayout("AI説明文", `<p>商品が見つかりません。</p>`);
-  const prompt = buildAiDescPrompt(p, aiDescChannel);
+
   const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.name)}</option>`).join("");
   const channelBtns = AI_CHANNELS.map(ch=>`<button class="ch-btn${aiDescChannel===ch.id?" active":""}" data-ai-ch="${ch.id}">${ch.label}</button>`).join("");
 
-  return saasLayout("AI説明文プロンプト生成", `
-    <div class="ai-desc-toolbar">
-      <div class="ai-desc-select-row">
-        <label>商品を選択：</label>
-        <select class="spec-select" data-ai-product-select>${selectOpts}</select>
+  const savedText = loadAiText(p.id, aiDescChannel);
+  const currentText = aiEditText || savedText;
+  const hasSaved = !!savedText;
+
+  return saasLayout("AI説明文", `
+    <div class="ai-page-layout">
+      <div class="ai-left-panel">
+        <div class="ai-desc-toolbar">
+          <div class="ai-desc-select-row">
+            <label>商品を選択：</label>
+            <select class="spec-select" data-ai-product-select>${selectOpts}</select>
+          </div>
+        </div>
+        <div class="ai-desc-channels">${channelBtns}</div>
+
+        <div class="ai-generate-section">
+          <button class="action primary ai-generate-btn" data-action="generate-ai-desc">
+            ✦ AI説明文を生成
+          </button>
+          <span class="ai-generate-note">商品情報をもとに説明文を自動生成します</span>
+        </div>
+
+        <div class="ai-result-section${currentText ? "" : " hidden"}" id="ai-result-section">
+          <div class="ai-result-header">
+            <span class="ai-result-label">生成結果</span>
+            <div class="ai-result-actions">
+              <button class="action" data-action="copy-ai-result">📋 コピー</button>
+              <button class="action primary" data-action="save-ai-result">💾 保存</button>
+              <button class="action" data-action="regen-ai-desc">↺ 再生成</button>
+            </div>
+          </div>
+          <textarea class="ai-result-textarea" id="ai-result-text">${escapeHtml(currentText)}</textarea>
+          ${hasSaved ? `<p class="ai-saved-note">✅ 保存済み</p>` : ""}
+        </div>
       </div>
-    </div>
-    <div class="ai-desc-channels">${channelBtns}</div>
-    <div class="ai-desc-info">
-      <p>下のプロンプトをコピーして、ChatGPT・Claude などのAIに貼り付けてください。</p>
-    </div>
-    <div class="ai-prompt-wrap">
-      <textarea class="ai-prompt-textarea" id="ai-desc-prompt" readonly>${escapeHtml(prompt)}</textarea>
-      <button class="action primary" data-action="copy-ai-desc">📋 プロンプトをコピー</button>
-    </div>
-    <div class="ai-desc-tips">
-      <h3>使い方</h3>
-      <ol>
-        <li>上の「商品を選択」で説明文を作りたい商品を選ぶ</li>
-        <li>作成したい説明文の種類（楽天・Amazonなど）を選ぶ</li>
-        <li>「プロンプトをコピー」ボタンをクリック</li>
-        <li>ChatGPT（chat.openai.com）やClaude（claude.ai）に貼り付けて送信</li>
-        <li>生成された文章をそのまま使用、または編集して活用する</li>
-      </ol>
+
+      <div class="ai-right-panel">
+        <div class="ai-prompt-panel">
+          <div class="ai-prompt-panel-title">📋 外部AI用プロンプト</div>
+          <p class="ai-prompt-panel-desc">ChatGPT・Claude などの外部AIを使う場合はこちらをコピーしてください。</p>
+          <textarea class="ai-prompt-textarea" id="ai-desc-prompt" readonly>${escapeHtml(buildAiDescPrompt(p, aiDescChannel))}</textarea>
+          <button class="action" data-action="copy-ai-desc">プロンプトをコピー</button>
+        </div>
+      </div>
     </div>
   `);
 }
@@ -2483,6 +2701,14 @@ function saveMaster() {
   document.querySelectorAll("[data-cost-price]").forEach(el => {
     const i = parseInt(el.dataset.costPrice);
     if (p.costItems[i]) p.costItems[i].unitPrice = el.value;
+  });
+  document.querySelectorAll("[data-cost-punit]").forEach(el => {
+    const i = parseInt(el.dataset.costPunit);
+    if (p.costItems[i]) p.costItems[i].priceUnit = el.value;
+  });
+  document.querySelectorAll("[data-cost-loss]").forEach(el => {
+    const i = parseInt(el.dataset.costLoss);
+    if (p.costItems[i]) p.costItems[i].lossRate = el.value;
   });
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
   saveProducts();
@@ -2600,16 +2826,61 @@ function bindSaasEvents() {
   }));
 
   // AI説明文 商品選択
-  document.querySelectorAll("[data-ai-product-select]").forEach(el => el.addEventListener("change", () => { aiDescId = el.value; render(); }));
+  document.querySelectorAll("[data-ai-product-select]").forEach(el => el.addEventListener("change", () => {
+    aiDescId = el.value; aiEditText = ""; render();
+  }));
 
   // AI説明文 チャネル選択
-  document.querySelectorAll("[data-ai-ch]").forEach(el => el.addEventListener("click", () => { aiDescChannel = el.dataset.aiCh; render(); }));
+  document.querySelectorAll("[data-ai-ch]").forEach(el => el.addEventListener("click", () => {
+    aiDescChannel = el.dataset.aiCh; aiEditText = ""; render();
+  }));
 
-  // AI説明文コピー
+  // AI説明文プロンプトコピー
   document.querySelectorAll("[data-action='copy-ai-desc']").forEach(el => el.addEventListener("click", () => {
     const ta = document.getElementById("ai-desc-prompt");
     if (ta) copyPlainText(ta.value);
   }));
+
+  // AI説明文 生成
+  document.querySelectorAll("[data-action='generate-ai-desc']").forEach(el => el.addEventListener("click", () => {
+    const pid = aiDescId || (products.find(x=>x.name?.trim())?.id);
+    const p = pid ? products.find(x=>x.id===pid) : null;
+    if (!p) return;
+    aiEditText = generateAiDesc(p, aiDescChannel);
+    render();
+  }));
+
+  // AI説明文 再生成
+  document.querySelectorAll("[data-action='regen-ai-desc']").forEach(el => el.addEventListener("click", () => {
+    const pid = aiDescId || (products.find(x=>x.name?.trim())?.id);
+    const p = pid ? products.find(x=>x.id===pid) : null;
+    if (!p) return;
+    aiEditText = generateAiDesc(p, aiDescChannel);
+    render();
+  }));
+
+  // AI説明文 結果コピー
+  document.querySelectorAll("[data-action='copy-ai-result']").forEach(el => el.addEventListener("click", () => {
+    const ta = document.getElementById("ai-result-text");
+    if (ta) { ta.select(); copyPlainText(ta.value); showStatus("コピーしました"); }
+  }));
+
+  // AI説明文 保存
+  document.querySelectorAll("[data-action='save-ai-result']").forEach(el => el.addEventListener("click", () => {
+    const ta = document.getElementById("ai-result-text");
+    if (!ta) return;
+    const pid = aiDescId || (products.find(x=>x.name?.trim())?.id);
+    if (!pid) return;
+    aiEditText = ta.value;
+    saveAiText(pid, aiDescChannel, ta.value);
+    showStatus("保存しました"); render();
+  }));
+
+  // AI結果テキストエリアの内容変化を追跡
+  const aiResultTa = document.getElementById("ai-result-text");
+  if (aiResultTa) {
+    aiResultTa.addEventListener("input", () => { aiEditText = aiResultTa.value; });
+  }
 
   // ★ お気に入りトグル
   document.querySelectorAll("[data-toggle-star]").forEach(el => el.addEventListener("click", (e) => {
@@ -2683,21 +2954,13 @@ function bindSaasEvents() {
   function saveCostItems() {
     const p = products.find(x=>x.id===productDetailId);
     if (!p) return;
-    document.querySelectorAll("[data-cost-name]").forEach(el => {
-      const i = parseInt(el.dataset.costName);
-      if (p.costItems[i]) p.costItems[i].name = el.value;
-    });
-    document.querySelectorAll("[data-cost-amount]").forEach(el => {
-      const i = parseInt(el.dataset.costAmount);
-      if (p.costItems[i]) p.costItems[i].amount = el.value;
-    });
-    document.querySelectorAll("[data-cost-unit]").forEach(el => {
-      const i = parseInt(el.dataset.costUnit);
-      if (p.costItems[i]) p.costItems[i].unit = el.value;
-    });
-    document.querySelectorAll("[data-cost-price]").forEach(el => {
-      const i = parseInt(el.dataset.costPrice);
-      if (p.costItems[i]) p.costItems[i].unitPrice = el.value;
+    [["data-cost-name","name"],["data-cost-amount","amount"],["data-cost-unit","unit"],
+     ["data-cost-price","unitPrice"],["data-cost-punit","priceUnit"],["data-cost-loss","lossRate"]
+    ].forEach(([attr, field]) => {
+      document.querySelectorAll(`[${attr}]`).forEach(el => {
+        const i = parseInt(el.dataset[attr.replace("data-","").replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]);
+        if (p.costItems[i]) p.costItems[i][field] = el.value;
+      });
     });
     saveProducts();
   }
@@ -2720,7 +2983,7 @@ function bindSaasEvents() {
   }));
 
   // 原価フィールド変更時はリアルタイム再計算（フォーカスアウト）
-  document.querySelectorAll("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price]").forEach(el => {
+  document.querySelectorAll("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]").forEach(el => {
     el.addEventListener("change", () => { saveCostItems(); render(); });
   });
 }

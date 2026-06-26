@@ -1374,3 +1374,8 @@ button:disabled {
   .cost-item-row { grid-template-columns: 1fr; }
   .cost-line-total { flex-direction: row; align-items: center; justify-content: space-between; }
 }
+
+/* ══ ① 社内名称 ══ */
+.field-note { font-size: 10px; color: #94a3b8; font-weight: 400; margin-left: 6px; background: #f1f5f9; padding: 1px 6px; border-radius: 10px; }
+.display-name-note { font-size: 11px; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.spec-display-name { font-size: 12px; color: #64748b; margin-top: 4px; }

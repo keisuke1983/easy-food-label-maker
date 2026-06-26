@@ -399,7 +399,7 @@ function safeSet(key, value) {
 }
 function emptyProduct() {
   return {
-    id: uid(), name: "", volume: "", volumeCustomUnit: false, bestBefore: "", serving: "", janCode: "",
+    id: uid(), name: "", internalName: "", volume: "", volumeCustomUnit: false, bestBefore: "", serving: "", janCode: "",
     storage: STORAGE_OPTS[0], storageCustom: "",
     ingredients: [{ id: uid(), name: "", weight: "" }],
     nutritionMode: "auto", nutritionManual: { kcal: "", protein: "", fat: "", carbs: "", salt: "" },
@@ -936,7 +936,7 @@ function section(title, body, accent = false) {
 function calcCompletion(p, d) {
   const items = [
     { ok: !!p.name?.trim(), label: "名称" },
-    { ok: p.ingredients.some((i) => i.name?.trim() && Number(i.weight) > 0), label: "原材料（重量付き）" },
+    { ok: p.ingredients.some((i) => i.name?.trim()), label: "原材料名" },
     { ok: !!p.volume?.trim(), label: "内容量" },
     { ok: !!p.bestBefore?.trim(), label: "賞味期限" },
     { ok: !!d.storage?.trim(), label: "保存方法" },
@@ -965,7 +965,10 @@ function productInfoHtml(p) {
   const isCustomUnit = !!p.volumeCustomUnit || (!!volume.unit && !VOLUME_UNITS.includes(volume.unit));
   const activeUnit = isCustomUnit ? "その他" : (volume.unit || "個");
   const dateValue = toDateInputValue(p.bestBefore);
-  return `<label class="field"><span>名称<b>必須</b></span><input data-field="name" value="${escapeHtml(p.name)}" placeholder="例：油菓子"></label>
+  return `<div class="two-col">
+      <label class="field"><span>社内名称<span class="field-note">管理用・ラベル非表示</span></span><input data-field="internalName" value="${escapeHtml(p.internalName||"")}" placeholder="例：ドーナツ プレーン"></label>
+      <label class="field"><span>名称（表示名）<b>必須</b></span><input data-field="name" value="${escapeHtml(p.name)}" placeholder="例：油菓子"></label>
+    </div>
     <div class="two-col">
       <div class="field"><span>内容量</span><div class="volume-input"><input inputmode="decimal" data-volume-amount value="${escapeHtml(volume.amount)}" placeholder="例：6"><div class="unit-tabs">${VOLUME_UNITS.map((u) => `<button class="${activeUnit === u ? "selected" : ""}" data-volume-unit="${escapeHtml(u)}">${escapeHtml(u)}</button>`).join("")}</div>${activeUnit === "その他" ? `<input data-volume-custom-unit value="${escapeHtml(isCustomUnit ? volume.unit : "")}" placeholder="単位を入力 例：ホール・パック・瓶">` : ""}</div></div>
       <div class="field"><span>賞味期限</span><input type="date" data-date-input value="${escapeHtml(dateValue)}"><div class="unit-tabs date-tabs">${DATE_PRESETS.map(([id, label]) => `<button data-date-preset="${id}">${escapeHtml(label)}</button>`).join("")}</div></div>
@@ -1017,15 +1020,17 @@ function labelAssistHtml(p, d) {
 function labelChecklist(p, d) {
   const ingWithWeight = p.ingredients.filter((i) => i.name?.trim() && Number(i.weight) > 0);
   const ingAny = p.ingredients.some((i) => i.name?.trim());
+  const hasWeight = ingWithWeight.length > 0;
   return [
     { label: p.name?.trim() ? "名称が入力されています" : "名称が未入力です → 商品情報で入力してください", ok: !!p.name?.trim() },
-    { label: ingAny ? (ingWithWeight.length > 0 ? "原材料と重量が入力されています" : "原材料名はありますが重量が未入力です → 重量(g)を入力すると栄養成分を自動計算できます") : "原材料名が未入力です → 原材料セクションで追加してください", ok: ingAny },
+    { label: ingAny ? "原材料名が入力されています" : "原材料名が未入力です → 原材料セクションで追加してください", ok: ingAny },
+    { label: hasWeight ? "原材料の重量が入力されています（栄養成分を自動計算）" : "原材料重量：任意入力（重量を入力すると栄養成分を自動計算できます）", ok: true },
     { label: p.volume?.trim() ? "内容量が入力されています" : "内容量が未入力です → 商品情報で入力してください", ok: !!p.volume?.trim() },
     { label: p.bestBefore?.trim() ? "賞味期限が入力されています" : "賞味期限が未入力です → 商品情報で入力してください", ok: !!p.bestBefore?.trim() },
     { label: d.storage?.trim() ? "保存方法が入力されています" : "保存方法が未入力です → 保存方法セクションで選択してください", ok: !!d.storage?.trim() },
     { label: p.manufacturerName?.trim() ? "製造者名が入力されています" : "製造者名が未入力です → 製造者セクションで入力してください", ok: !!p.manufacturerName?.trim() },
     { label: p.manufacturerAddress?.trim() ? "製造者住所が入力されています" : "製造者住所が未入力です → 製造者セクションで入力してください", ok: !!p.manufacturerAddress?.trim() },
-    { label: d.nutrition.kcal > 0 ? "栄養成分表示を確認済み" : "栄養成分表示を確認してください → 原材料に重量を入力するか、手動で入力してください", ok: d.nutrition.kcal > 0 },
+    { label: d.nutrition.kcal > 0 ? "栄養成分が計算・設定されています" : "栄養成分は未計算（任意：原材料に重量を入力するか手動で設定してください）", ok: true },
     { label: "アレルゲンを確認済み（自動検出または手動設定）", ok: p.allergensMode === "manual" || d.autoAllergens.length >= 0 },
     { label: p.contaminationEnabled ? (buildContaminationText(p) ? "コンタミネーション表示が設定されています" : "コンタミネーションの内容が未設定です") : "コンタミネーション：表示しない設定", ok: p.contaminationEnabled ? !!buildContaminationText(p) : true },
     { label: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) ? "JANコードの桁数が正しい" : "JANコードは8桁または13桁にしてください", ok: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) },
@@ -1886,7 +1891,7 @@ const AI_CHANNELS = [
 // ── マイグレーション ──────────────────────────────────────────────────
 function extendProductMaster(p) {
   return {
-    code: "", category: "", price: "", imageDataUrl: "",
+    code: "", category: "", price: "", imageDataUrl: "", internalName: "",
     salesChannels: [], publishStatus: "active", memo: "",
     createdAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
     costItems: [],
@@ -2006,22 +2011,24 @@ function calcCosts(p) {
   const totalCost   = rawCost + packaging + labor + other;
   const price       = parseFloat(p.price) || 0;
   const gross       = price - totalCost;
-  const margin      = price > 0 ? Math.round(gross / price * 100) : null;
-  return { rawCost, packaging, labor, other, totalCost, price, gross, margin };
+  const costRate    = price > 0 ? Math.round(totalCost / price * 100) : null;
+  return { rawCost, packaging, labor, other, totalCost, price, gross, costRate };
 }
 
-function marginClass(margin) {
-  if (margin === null) return "";
-  if (margin >= 50) return "margin-good";
-  if (margin >= 30) return "margin-warn";
+function costRateClass(costRate) {
+  if (costRate === null) return "";
+  if (costRate <= 30) return "margin-good";
+  if (costRate <= 40) return "margin-warn";
   return "margin-bad";
 }
+// 後方互換エイリアス
+function marginClass(m) { return costRateClass(m); }
 
 // ── 原価管理 HTML（カード型レイアウト） ──────────────────────────────
 function costEditorHtml(p) {
   const items = p.costItems || [];
   const costs = calcCosts(p);
-  const mc = marginClass(costs.margin);
+  const mc = costRateClass(costs.costRate);
 
   const unitOpts = COST_UNITS.map(u => `<option value="${u}">${u}</option>`).join("");
   const priceUnitOpts = [
@@ -2099,14 +2106,14 @@ function costEditorHtml(p) {
       <div class="cost-summary-row"><span>販売価格</span><span>${costs.price>0?"¥"+costs.price:"未設定（商品マスターで設定）"}</span></div>
       <div class="cost-summary-row"><span>粗利益</span><span>${costs.price>0?"¥"+costs.gross.toFixed(1):"—"}</span></div>
       <div class="cost-summary-row cost-summary-total ${mc}">
-        <span>利益率</span>
-        <strong>${costs.margin!==null?costs.margin+"%":"—"}</strong>
+        <span>原価率（原価÷販売価格）</span>
+        <strong>${costs.costRate!==null?costs.costRate+"%":"—"}</strong>
       </div>
     </div>
     <p class="notice" style="margin-top:8px">
-      利益率 <span class="margin-good">■ 50%以上（優良）</span>
-      <span class="margin-warn">■ 30〜49%（標準）</span>
-      <span class="margin-bad">■ 30%未満（要改善）</span>
+      原価率 <span class="margin-good">■ 30%以下（優良）</span>
+      <span class="margin-warn">■ 31〜40%（標準）</span>
+      <span class="margin-bad">■ 41%以上（要改善）</span>
     </p>
   </div>`;
 }
@@ -2188,7 +2195,7 @@ function dashboardHtml() {
 // ── 商品マスター一覧 ──────────────────────────────────────────────────
 function productsListHtml() {
   let list = [...products];
-  if (masterSearch) list = list.filter(p => (p.name||"").includes(masterSearch)||(p.code||"").includes(masterSearch)||(p.category||"").includes(masterSearch));
+  if (masterSearch) list = list.filter(p => (p.internalName||"").includes(masterSearch)||(p.name||"").includes(masterSearch)||(p.code||"").includes(masterSearch)||(p.category||"").includes(masterSearch));
   if (masterFilter==="starred") list = list.filter(p=>p.starred);
   if (masterFilter==="active") list = list.filter(p=>p.publishStatus==="active");
   if (masterFilter==="draft") list = list.filter(p=>p.publishStatus==="draft");
@@ -2214,7 +2221,9 @@ function productsListHtml() {
         ${thumb}
         <div class="master-card-body">
           <div class="master-card-title-row">
-            <span class="master-card-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+            <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
+            ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
+
             ${statusBadge(p)}
             <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}">${p.starred?"★":"☆"}</button>
           </div>
@@ -2345,13 +2354,15 @@ function specSheetHtml() {
     : `<div class="spec-v2-product-img-placeholder">📦<small>画像未登録</small></div>`;
 
   const costs = calcCosts(p);
-  const mc = marginClass(costs.margin);
+  const mc = costRateClass(costs.costRate);
 
   const specHtml = `<div class="spec-v2" id="spec-print-area">
     <div class="spec-v2-header">
       <div class="spec-v2-title-block">
         <h1>商品規格書</h1>
-        <div class="spec-subtitle">${escapeHtml(p.name||"")}</div>
+        <div class="spec-subtitle">${escapeHtml(p.internalName||p.name||"")}</div>
+        ${p.internalName&&p.name?`<div class="spec-display-name">表示名称：${escapeHtml(p.name)}</div>`:""}
+
       </div>
       <div class="spec-v2-meta-block">
         <dl>
@@ -2419,8 +2430,8 @@ function specSheetHtml() {
       <div class="spec-v2-image-col">
         ${productImg}
         <div class="spec-v2-qr">QR<br>コード</div>
-        ${costs.margin !== null ? `<div style="text-align:center;font-size:11px;color:#64748b;margin-top:4px">
-          利益率<br><span class="${mc}" style="font-size:18px;font-weight:700">${costs.margin}%</span>
+        ${costs.costRate !== null ? `<div style="text-align:center;font-size:11px;color:#64748b;margin-top:4px">
+          原価率<br><span class="${mc}" style="font-size:18px;font-weight:700">${costs.costRate}%</span>
         </div>` : ""}
       </div>
     </div>
@@ -2437,7 +2448,7 @@ function specSheetHtml() {
     </div>
   </div>`;
 
-  const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.name)}</option>`).join("");
+  const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.internalName||px.name)}</option>`).join("");
   return saasLayout("商品規格書", `
     <div class="spec-controls">
       <select class="spec-select" data-spec-select>${selectOpts}</select>
@@ -2597,7 +2608,7 @@ function aiDescriptionsHtml() {
   const p = aiDescId ? products.find(x=>x.id===aiDescId) : productList[0];
   if (!p) return saasLayout("AI説明文", `<p>商品が見つかりません。</p>`);
 
-  const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.name)}</option>`).join("");
+  const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.internalName||px.name)}</option>`).join("");
   const channelBtns = AI_CHANNELS.map(ch=>`<button class="ch-btn${aiDescChannel===ch.id?" active":""}" data-ai-ch="${ch.id}">${ch.label}</button>`).join("");
 
   const savedText = loadAiText(p.id, aiDescChannel);

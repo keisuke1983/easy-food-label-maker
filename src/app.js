@@ -265,11 +265,10 @@ async function downloadImageLabel() {
     const trimCtx = trimmed.getContext("2d");
     trimCtx.imageSmoothingEnabled = false;
     trimCtx.drawImage(canvas, 0, 0);
-    const pngBlob = canvasToPngBlob(trimmed);
     const safeName = (p.name || "label").replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_");
     const date = new Date().toISOString().slice(0, 10);
     const filename = `${safeName}_label_${date}.png`;
-    const url = URL.createObjectURL(await pngBlob);
+    const url = URL.createObjectURL(await canvasToPngBlob(trimmed));
     const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 3000);
     showStatus("画像を保存しました");
@@ -1696,12 +1695,16 @@ function pngWith300dpi(bytes) {
   out.set(bytes.slice(33), 33 + chunk.length);
   return out;
 }
+// canvas.toBlob() を使用（toDataURL より大容量キャンバスに対して安定）
 function canvasToPngBlob(canvas) {
-  const dataUrl = canvas.toDataURL("image/png");
-  const bin = atob(dataUrl.split(",")[1]);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-  return new Blob([pngWith300dpi(bytes)], { type: "image/png" });
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) { reject(new Error("toBlob failed")); return; }
+      blob.arrayBuffer().then(buf => {
+        resolve(new Blob([pngWith300dpi(new Uint8Array(buf))], { type: "image/png" }));
+      }).catch(reject);
+    }, "image/png");
+  });
 }
 
 function downloadImageDataUrl(dataUrl) {
@@ -1776,7 +1779,7 @@ function downloadCanvasImage(canvas) {
 
 // ③ 高解像度ラベルCanvas構築（copyとsaveで共用）
 async function buildLabelCanvas(p, d, scale) {
-  scale = scale || 16;
+  scale = scale || 8;
   const pxPerMm = 4;
   const margin = Math.max(8, Number(printCfg.margin || 3) * pxPerMm);
   const contentW = Math.max(260, Number(printCfg.w || 90) * pxPerMm);

@@ -1700,9 +1700,7 @@ function canvasToPngBlob(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => {
       if (!blob) { reject(new Error("toBlob failed")); return; }
-      blob.arrayBuffer().then(buf => {
-        resolve(new Blob([pngWith300dpi(new Uint8Array(buf))], { type: "image/png" }));
-      }).catch(reject);
+      resolve(blob);
     }, "image/png");
   });
 }

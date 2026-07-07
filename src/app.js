@@ -3542,13 +3542,27 @@ async function extractPdfText(file) {
   }
   const buf = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-  let text = "";
+  let fullText = "";
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map(it => it.str).join(" ") + "\n";
+    // Y座標の変化で改行を検出してテキスト構造を保持
+    const lines = [];
+    let lastY = null;
+    let line = [];
+    for (const item of content.items) {
+      const y = item.transform ? item.transform[5] : null;
+      if (lastY !== null && y !== null && Math.abs(y - lastY) > 3) {
+        if (line.length) lines.push(line.join(" "));
+        line = [];
+      }
+      if (item.str.trim()) line.push(item.str.trim());
+      if (y !== null) lastY = y;
+    }
+    if (line.length) lines.push(line.join(" "));
+    fullText += lines.join("\n") + "\n";
   }
-  return text;
+  return fullText;
 }
 
 function parseSpecSheetText(text) {

@@ -3451,13 +3451,17 @@ function bindSaasEvents() {
     const fileInput = document.getElementById(`${type}-file-input`);
     const selectBtn = document.getElementById(`${type}-select-btn`);
     if (selectBtn) selectBtn.addEventListener("click", () => fileInput?.click());
-    if (fileInput) fileInput.addEventListener("change", () => startAiAnalysis(type));
+    if (fileInput) fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      if (file) processRegFile(type, file);
+    });
     if (dropZone) {
       dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
       dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
       dropZone.addEventListener("drop", e => {
         e.preventDefault(); dropZone.classList.remove("drag-over");
-        if (e.dataTransfer.files.length) startAiAnalysis(type);
+        const file = e.dataTransfer.files[0];
+        if (file) processRegFile(type, file);
       });
     }
   });
@@ -3496,6 +3500,122 @@ function startAiAnalysis(type) {
     }
   }
   setTimeout(tick, 800);
+}
+
+async function processRegFile(type, file) {
+  aiRegChatDraft = {};
+  startAiAnalysis(type);
+  if (type === "spec") {
+    try {
+      const text = await extractTextFromFile(file);
+      if (text) aiRegChatDraft = parseSpecSheetText(text);
+    } catch(e) {
+      console.warn("規格書解析エラー:", e);
+    }
+  }
+}
+
+async function extractTextFromFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".pdf") || file.type === "application/pdf") {
+    return await extractPdfText(file);
+  }
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result || "");
+    reader.onerror = () => resolve("");
+    reader.readAsText(file, "UTF-8");
+  });
+}
+
+async function extractPdfText(file) {
+  if (!window.pdfjsLib) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  let text = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(" ") + "\n";
+  }
+  return text;
+}
+
+function parseSpecSheetText(text) {
+  const get = (re) => { const m = text.match(re); return m ? m[1].trim() : ""; };
+
+  const name = get(/商品名[　\s：:]+([^\n]+)/) || get(/^(.+)/);
+  const volume = get(/内容量[　\s：:]+([^\n]+)/);
+  const bestBefore = get(/賞味期限[　\s：:]+([^\n]+)/);
+
+  const storageRaw = get(/保存方法[　\s：:]+([^\n]+)/);
+  let storage = STORAGE_OPTS[0], storageCustom = "";
+  if (/冷凍|−18|−18|-18/.test(storageRaw)) {
+    storage = "冷凍保存（-18℃以下）";
+  } else if (/冷蔵|10℃/.test(storageRaw)) {
+    storage = "冷蔵保存（10℃以下）";
+  } else if (/常温/.test(storageRaw)) {
+    storage = "常温保存";
+  } else if (/高温多湿/.test(storageRaw)) {
+    storage = "高温多湿を避けて保存";
+  } else if (storageRaw) {
+    storage = "自由入力"; storageCustom = storageRaw;
+  }
+
+  const ingredientsRaw = get(/原材料名[（(][^)）]*[)）][　\s：:]*([^\n【[]+)/)
+    || get(/原材料名[　\s：:]+([^\n【[]+)/);
+  const ingredients = ingredientsRaw
+    ? ingredientsRaw.split(/[、，,]/).map(n => n.trim()).filter(Boolean)
+        .map(n => ({ id: uid(), name: n, weight: "" }))
+    : [{ id: uid(), name: "", weight: "" }];
+
+  const allergensLine = get(/含まれるアレルゲン[：:]\s*([^\n\/／]+)/);
+  const allergensManual = allergensLine.replace(/\s*\/.*/, "").trim();
+
+  const kcal    = get(/エネルギー[　\s]*([\d.]+)\s*kcal/i) || get(/エネルギー[　\s]*([\d.]+)/);
+  const protein = get(/たんぱく質[　\s]*([\d.]+)/);
+  const fat     = get(/脂質[　\s]*([\d.]+)/);
+  const carbs   = get(/炭水化物[　\s]*([\d.]+)/);
+  const salt    = get(/食塩相当量[　\s]*([\d.]+)/);
+
+  const mfrLine      = get(/製造者[　\s：:]+([^\n〒（(]+)/);
+  const postalMatch  = text.match(/〒([\d\-]+)/);
+  const postalFull   = postalMatch ? postalMatch[0] : "";
+  const addrRaw      = get(/〒[\d\-]+[　\s]*([^\nTEL0-9]+)/);
+  const phone        = get(/TEL[　\s：:]*([\d\-（()）]+)/);
+
+  const result = {
+    name: name.replace(/\s+製品規格書.*/, "").trim(),
+    volume,
+    bestBefore,
+    storage,
+    storageCustom,
+    ingredients,
+    allergensMode: allergensManual ? "manual" : "auto",
+    allergensManual,
+    manufacturerName: mfrLine.trim(),
+    manufacturerPostal: postalMatch ? postalMatch[1] : "",
+    manufacturerAddress: addrRaw.replace(postalFull, "").trim(),
+    manufacturerPhone: phone,
+  };
+  if (kcal || protein || fat || carbs || salt) {
+    result.nutritionMode = "manual";
+    result.nutritionManual = {
+      kcal: kcal || "", protein: protein || "", fat: fat || "",
+      carbs: carbs || "", salt: salt || "",
+    };
+  }
+  return result;
 }
 
 function sendAiChatMessage() {

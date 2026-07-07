@@ -880,6 +880,16 @@ function savedHtml() {
           : filtered.map((p) => {
               const d = derive(p);
               const sel = selectedForPrint.has(p.id);
+              const costs = calcCosts(p);
+              const hasCost = costs.totalCost > 0;
+              const modeLabel = (p.costMode||"direct") === "direct" ? "直接入力" : "原材料計算";
+              const costChips = hasCost ? `
+                <div class="card-cost-row">
+                  <span class="cost-chip">原価 ${costs.totalCost > 0 ? "¥"+Math.round(costs.totalCost).toLocaleString() : "—"}</span>
+                  ${costs.price > 0 ? `<span class="cost-chip">売価 ¥${Math.round(costs.price).toLocaleString()}</span>` : ""}
+                  ${costs.price > 0 ? `<span class="cost-chip profit ${costRateClass(costs.costRate)}">利益 ¥${Math.round(costs.gross).toLocaleString()} (${100-(costs.costRate||0)}%)</span>` : ""}
+                  <span class="cost-chip mode">${modeLabel}</span>
+                </div>` : "";
               return `<article class="product-card${sel ? " sel-print" : ""}">
                 <div class="card-top-row">
                   <label class="card-check-wrap"><input type="checkbox" data-sel-print="${escapeHtml(p.id)}"${sel ? " checked" : ""}><span>選択</span></label>
@@ -888,6 +898,7 @@ function savedHtml() {
                 <h3>${escapeHtml(p.name || "（名称未入力）")}</h3>
                 <p class="card-meta">更新: ${escapeHtml(p.updatedAt || "")} ／ 内容量: ${escapeHtml(p.volume || "未入力")}</p>
                 <div class="chips">${(d.allergens || []).slice(0, 5).map((a) => `<span>${escapeHtml(a)}</span>`).join("")}</div>
+                ${costChips}
                 <div class="card-actions">
                   <button data-edit="${escapeHtml(p.id)}">編集</button>
                   <button data-dup="${escapeHtml(p.id)}">複製</button>
@@ -1916,6 +1927,9 @@ function extendProductMaster(p) {
     code: "", category: "", price: "", imageDataUrl: "", internalName: "",
     salesChannels: [], publishStatus: "active", memo: "",
     createdAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
+    costMode: "direct",
+    directCost: "", directCostTaxMode: "tax_included",
+    directPackaging: "", directShipping: "", directOther: "",
     costItems: [],
     packagingCost: "", laborCost: "", otherCost: "",
     specVersion: "1", specResponsible: "",
@@ -1987,7 +2001,7 @@ function calcTodo() {
     { key:"noMfr",         label:"製造者未設定",          count: products.filter(p=>!p.manufacturerName?.trim()).length },
     { key:"noJan",         label:"JANコード未登録",       count: products.filter(p=>!p.janCode?.trim()).length },
     { key:"noImage",       label:"商品画像未登録",        count: products.filter(p=>!p.imageDataUrl).length },
-    { key:"noCost",        label:"原価未設定",            count: products.filter(p=>!(p.costItems||[]).length).length },
+    { key:"noCost",        label:"原価未設定",            count: products.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
   ].filter(t=>t.count>0);
 }
 
@@ -2003,7 +2017,7 @@ function productStatusBadges(p, d) {
     ${ok(!!p.manufacturerName?.trim(),"製造者")}
     ${ok(!!p.janCode?.trim(),       "JAN")}
     ${ok(!!p.imageDataUrl,          "画像")}
-    ${ok((p.costItems||[]).length>0,"原価")}
+    ${ok((p.costMode||"direct")==="direct"?!!parseFloat(p.directCost):(p.costItems||[]).length>0,"原価")}
   </div>`;
 }
 
@@ -2026,16 +2040,31 @@ function calcItemCost(ci) {
 }
 
 function calcCosts(p) {
-  const items = p.costItems || [];
-  const rawCost     = items.reduce((s, ci) => s + calcItemCost(ci), 0);
-  const packaging   = parseFloat(p.packagingCost) || 0;
-  const labor       = parseFloat(p.laborCost) || 0;
-  const other       = parseFloat(p.otherCost) || 0;
-  const totalCost   = rawCost + packaging + labor + other;
-  const price       = parseFloat(p.price) || 0;
-  const gross       = price - totalCost;
-  const costRate    = price > 0 ? Math.round(totalCost / price * 100) : null;
-  return { rawCost, packaging, labor, other, totalCost, price, gross, costRate };
+  const mode  = p.costMode || "direct";
+  const price = parseFloat(p.price) || 0;
+
+  if (mode === "direct") {
+    const rawCost   = parseFloat(p.directCost) || 0;
+    const packaging = parseFloat(p.directPackaging) || 0;
+    const shipping  = parseFloat(p.directShipping) || 0;
+    const other     = parseFloat(p.directOther) || 0;
+    const totalCost = rawCost + packaging + shipping + other;
+    const gross     = price - totalCost;
+    const costRate  = price > 0 ? Math.round(totalCost / price * 100) : null;
+    const profitRate = price > 0 ? Math.round(gross / price * 100) : null;
+    return { mode, rawCost, packaging, labor: 0, shipping, other, totalCost, price, gross, costRate, profitRate };
+  } else {
+    const items     = p.costItems || [];
+    const rawCost   = items.reduce((s, ci) => s + calcItemCost(ci), 0);
+    const packaging = parseFloat(p.packagingCost) || 0;
+    const labor     = parseFloat(p.laborCost) || 0;
+    const other     = parseFloat(p.otherCost) || 0;
+    const totalCost = rawCost + packaging + labor + other;
+    const gross     = price - totalCost;
+    const costRate  = price > 0 ? Math.round(totalCost / price * 100) : null;
+    const profitRate = price > 0 ? Math.round(gross / price * 100) : null;
+    return { mode, rawCost, packaging, labor, shipping: 0, other, totalCost, price, gross, costRate, profitRate };
+  }
 }
 
 function costRateClass(costRate) {
@@ -2047,19 +2076,72 @@ function costRateClass(costRate) {
 // 後方互換エイリアス
 function marginClass(m) { return costRateClass(m); }
 
-// ── 原価管理 HTML（カード型レイアウト） ──────────────────────────────
+// ── 原価管理 HTML ──────────────────────────────────────────────────────
 function costEditorHtml(p) {
-  const items = p.costItems || [];
+  const mode  = p.costMode || "direct";
   const costs = calcCosts(p);
-  const mc = costRateClass(costs.costRate);
+  const mc    = costRateClass(costs.costRate);
 
-  const unitOpts = COST_UNITS.map(u => `<option value="${u}">${u}</option>`).join("");
-  const priceUnitOpts = [
-    {id:"per_unit", label:"円/使用量"},
-    {id:"per_kg",   label:"円/kg"},
-    {id:"per_100g", label:"円/100g"},
-  ].map(u => `<option value="${u.id}">${u.label}</option>`).join("");
+  // ── セグメントボタン ──
+  const segBtn = (id, label, desc) => {
+    const on = mode === id;
+    return `<button class="cost-mode-btn${on?" active":""}" data-set-cost-mode="${id}">
+      <span class="cost-mode-label">${label}</span>
+      <span class="cost-mode-desc">${desc}</span>
+    </button>`;
+  };
+  const segment = `<div class="cost-mode-seg">
+    ${segBtn("direct",      "商品原価を直接入力",  "仕入・完成品向け")}
+    ${segBtn("ingredients", "原材料から自動計算",  "自社製造向け")}
+  </div>`;
 
+  // ── モード①：直接入力 ──
+  const taxSel = (val) => ["tax_included","tax_excluded"].map(v =>
+    `<option value="${v}"${(p.directCostTaxMode||"tax_included")===v?" selected":""}>${v==="tax_included"?"税込":"税抜"}</option>`
+  ).join("");
+  const directPanel = `
+    <div class="cost-direct-grid">
+      <label class="field cost-main-field">
+        <span>商品原価 <b>必須</b></span>
+        <div class="cost-amount-wrap">
+          <span class="cost-yen">¥</span>
+          <input type="number" data-master-field="directCost"
+            value="${escapeHtml(p.directCost||"")}" placeholder="0" min="0" step="1" class="cost-main-input">
+          <select data-master-field="directCostTaxMode" class="cost-tax-sel">${taxSel()}</select>
+        </div>
+      </label>
+      <label class="field">
+        <span>販売価格（税込）</span>
+        <div class="cost-amount-wrap"><span class="cost-yen">¥</span>
+          <input type="number" data-master-field="price"
+            value="${escapeHtml(p.price||"")}" placeholder="0" min="0" step="1">
+        </div>
+      </label>
+      <label class="field">
+        <span>包装資材 <small>任意</small></span>
+        <div class="cost-amount-wrap"><span class="cost-yen">¥</span>
+          <input type="number" data-master-field="directPackaging"
+            value="${escapeHtml(p.directPackaging||"")}" placeholder="0" min="0" step="1">
+        </div>
+      </label>
+      <label class="field">
+        <span>送料 <small>任意</small></span>
+        <div class="cost-amount-wrap"><span class="cost-yen">¥</span>
+          <input type="number" data-master-field="directShipping"
+            value="${escapeHtml(p.directShipping||"")}" placeholder="0" min="0" step="1">
+        </div>
+      </label>
+      <label class="field">
+        <span>その他経費 <small>任意</small></span>
+        <div class="cost-amount-wrap"><span class="cost-yen">¥</span>
+          <input type="number" data-master-field="directOther"
+            value="${escapeHtml(p.directOther||"")}" placeholder="0" min="0" step="1">
+        </div>
+      </label>
+    </div>`;
+
+  // ── モード②：原材料計算 ──
+  const items = p.costItems || [];
   const itemCards = items.map((ci, i) => {
     const lineCost = calcItemCost(ci);
     return `<div class="cost-item-card">
@@ -2069,48 +2151,34 @@ function costEditorHtml(p) {
         <button class="icon-btn" data-remove-cost="${i}" title="削除">×</button>
       </div>
       <div class="cost-item-row">
-        <label class="cost-field">
-          <span>使用量</span>
+        <label class="cost-field"><span>使用量</span>
           <div class="cost-amount-wrap">
             <input type="number" data-cost-amount="${i}" value="${escapeHtml(ci.amount||"")}" placeholder="0" min="0" step="0.01">
-            <select data-cost-unit="${i}">
-              ${COST_UNITS.map(u=>`<option value="${u}"${ci.unit===u?" selected":""}>${u}</option>`).join("")}
-            </select>
+            <select data-cost-unit="${i}">${COST_UNITS.map(u=>`<option value="${u}"${ci.unit===u?" selected":""}>${u}</option>`).join("")}</select>
           </div>
         </label>
-        <label class="cost-field">
-          <span>仕入単価</span>
+        <label class="cost-field"><span>仕入単価</span>
           <div class="cost-amount-wrap">
             <input type="number" data-cost-price="${i}" value="${escapeHtml(ci.unitPrice||"")}" placeholder="0" min="0" step="0.01">
-            <select data-cost-punit="${i}">
-              ${[
-                {id:"per_unit", label:"円/使用量単位"},
-                {id:"per_kg",   label:"円/kg"},
-                {id:"per_100g", label:"円/100g"},
-              ].map(u=>`<option value="${u.id}"${(ci.priceUnit||"per_unit")===u.id?" selected":""}>${u.label}</option>`).join("")}
-            </select>
+            <select data-cost-punit="${i}">${[
+              {id:"per_unit",label:"円/使用量"},{id:"per_kg",label:"円/kg"},{id:"per_100g",label:"円/100g"}
+            ].map(u=>`<option value="${u.id}"${(ci.priceUnit||"per_unit")===u.id?" selected":""}>${u.label}</option>`).join("")}</select>
           </div>
         </label>
-        <label class="cost-field">
-          <span>ロス率 %</span>
+        <label class="cost-field"><span>ロス率%</span>
           <input type="number" data-cost-loss="${i}" value="${escapeHtml(ci.lossRate||"0")}" placeholder="0" min="0" max="100" style="width:70px">
         </label>
-        <div class="cost-field cost-line-total">
-          <span>原材料費</span>
+        <div class="cost-field cost-line-total"><span>小計</span>
           <strong>¥${lineCost.toFixed(1)}</strong>
-          <small style="color:#94a3b8;font-size:10px">使用量×単価×(1+ロス率)</small>
         </div>
       </div>
     </div>`;
   }).join("");
-
-  return `<div class="detail-section">
-    <h3 class="detail-section-title">原価管理</h3>
+  const ingredientsPanel = `
     <div class="cost-items-list">${itemCards}</div>
     <div class="cost-add-row">
       <button class="action" data-action="add-cost-item">＋ 原材料を追加</button>
     </div>
-
     <div class="cost-extra-section">
       <h4 class="cost-extra-title">その他コスト（1個あたり）</h4>
       <div class="cost-extra-grid">
@@ -2118,26 +2186,45 @@ function costEditorHtml(p) {
         <label class="field"><span>人件費 (円)</span><input type="number" data-master-field="laborCost" value="${escapeHtml(p.laborCost||"")}" placeholder="0"></label>
         <label class="field"><span>その他経費 (円)</span><input type="number" data-master-field="otherCost" value="${escapeHtml(p.otherCost||"")}" placeholder="0"></label>
       </div>
-    </div>
+    </div>`;
 
-    <div class="cost-summary">
-      <div class="cost-summary-row"><span>原材料費合計</span><span>¥${costs.rawCost.toFixed(1)}</span></div>
-      <div class="cost-summary-row"><span>包材費</span><span>¥${costs.packaging.toFixed(1)}</span></div>
-      <div class="cost-summary-row"><span>人件費</span><span>¥${costs.labor.toFixed(1)}</span></div>
-      <div class="cost-summary-row"><span>その他経費</span><span>¥${costs.other.toFixed(1)}</span></div>
-      <div class="cost-summary-row" style="border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px;font-weight:600"><span>商品総原価</span><span>¥${costs.totalCost.toFixed(1)}</span></div>
-      <div class="cost-summary-row"><span>販売価格</span><span>${costs.price>0?"¥"+costs.price:"未設定（商品マスターで設定）"}</span></div>
-      <div class="cost-summary-row"><span>粗利益</span><span>${costs.price>0?"¥"+costs.gross.toFixed(1):"—"}</span></div>
-      <div class="cost-summary-row cost-summary-total ${mc}">
-        <span>原価率（原価÷販売価格）</span>
-        <strong>${costs.costRate!==null?costs.costRate+"%":"—"}</strong>
+  // ── サマリー ──
+  const fmt = (n) => n > 0 ? `¥${Math.round(n).toLocaleString()}` : "¥0";
+  const summary = `<div class="cost-summary-v2">
+    <div class="cost-kpi-row">
+      <div class="cost-kpi">
+        <div class="cost-kpi-label">総原価</div>
+        <div class="cost-kpi-value">${fmt(costs.totalCost)}</div>
+      </div>
+      <div class="cost-kpi">
+        <div class="cost-kpi-label">販売価格</div>
+        <div class="cost-kpi-value">${costs.price > 0 ? fmt(costs.price) : "—"}</div>
+      </div>
+      <div class="cost-kpi">
+        <div class="cost-kpi-label">粗利益</div>
+        <div class="cost-kpi-value ${costs.gross >= 0 ? "profit-pos" : "profit-neg"}">${costs.price > 0 ? fmt(costs.gross) : "—"}</div>
+      </div>
+      <div class="cost-kpi ${mc}">
+        <div class="cost-kpi-label">利益率</div>
+        <div class="cost-kpi-value">${costs.profitRate !== null ? (100 - costs.costRate) + "%" : "—"}</div>
+      </div>
+      <div class="cost-kpi ${mc}">
+        <div class="cost-kpi-label">原価率</div>
+        <div class="cost-kpi-value">${costs.costRate !== null ? costs.costRate + "%" : "—"}</div>
       </div>
     </div>
-    <p class="notice" style="margin-top:8px">
-      原価率 <span class="margin-good">■ 30%以下（優良）</span>
+    <p class="notice" style="margin-top:6px;font-size:11px">
+      原価率 <span class="margin-good">■ 〜30%（優良）</span>
       <span class="margin-warn">■ 31〜40%（標準）</span>
-      <span class="margin-bad">■ 41%以上（要改善）</span>
+      <span class="margin-bad">■ 41%〜（要改善）</span>
     </p>
+  </div>`;
+
+  return `<div class="detail-section">
+    <h3 class="detail-section-title">原価管理</h3>
+    ${segment}
+    <div class="cost-panel">${mode === "direct" ? directPanel : ingredientsPanel}</div>
+    ${summary}
   </div>`;
 }
 
@@ -3335,6 +3422,16 @@ function bindSaasEvents() {
   }));
 
   // ── 原価管理 ──
+  document.querySelectorAll("[data-set-cost-mode]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const p = products.find(x => x.id === productDetailId);
+      if (!p) return;
+      saveMaster();
+      p.costMode = btn.dataset.setCostMode;
+      saveProducts(); render();
+    });
+  });
+
   function saveCostItems() {
     const p = products.find(x=>x.id===productDetailId);
     if (!p) return;

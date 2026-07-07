@@ -3541,7 +3541,11 @@ async function extractPdfText(file) {
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
   const buf = await file.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  const pdf = await window.pdfjsLib.getDocument({
+    data: buf,
+    cMapUrl: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/",
+    cMapPacked: true,
+  }).promise;
   let fullText = "";
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
@@ -3586,8 +3590,12 @@ function parseSpecSheetText(text) {
     storage = "自由入力"; storageCustom = storageRaw;
   }
 
-  const ingredientsRaw = get(/原材料名[（(][^)）]*[)）][　\s：:]*([^\n【[]+)/)
-    || get(/原材料名[　\s：:]+([^\n【[]+)/);
+  // 規格書形式（ヘッダー行の次行）または ラベル表示例形式（：区切り）
+  const ingredientsRaw =
+    get(/【原材料名[^】]*】\s*\n([^\n【]+)/) ||
+    get(/原材料名[：:]\s*([^\n\/／]+(?:\n(?![^\n]*：)[^\n]+)*)/) ||
+    get(/原材料名[（(][^)）]*[)）][　\s：:]+([^\n【]+)/) ||
+    get(/原材料名[　\s：:]+([^\n【]+)/);
   const ingredients = ingredientsRaw
     ? ingredientsRaw.split(/[、，,]/).map(n => n.trim()).filter(Boolean)
         .map(n => ({ id: uid(), name: n, weight: "" }))

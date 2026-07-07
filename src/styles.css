@@ -1546,3 +1546,17 @@ button:disabled {
   .cost-kpi { min-width: 70px; padding: 8px; }
   .cost-kpi-value { font-size: 14px; }
 }
+
+/* ── ⑨ 賞味期限フォーマット選択 ── */
+.bb-mode-tabs { margin: 6px 0 8px; }
+.bb-num-wrap { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.bb-unit { font-size: 13px; color: #64748b; }
+.bb-preview { margin-top: 6px; font-size: 12px; color: #64748b; }
+.bb-preview strong { color: #1e293b; }
+
+/* ── ⑧ 原材料ラベルプレビュー ── */
+.ing-preview-wrap { margin-top: 12px; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+.ing-preview-label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+.ing-preview { font-size: 13px; color: #1e293b; line-height: 1.5; word-break: break-all; }
+.action-sub { margin-top: 8px; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; }
+.action-sub:hover { background: #f1f5f9; }

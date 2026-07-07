@@ -931,7 +931,7 @@ function editorHtml(p) {
         ${section("商品情報", productInfoHtml(p))}
         ${janCodeHtml(p)}
         ${section("保存方法", storageHtml)}
-        ${section("原材料", `<div class="ing-list" id="ing-list">${p.ingredients.map((i, idx) => ingredientHtml(i, idx)).join("")}</div><button class="action" data-action="add-ing">＋ 原材料を追加</button>`)}
+        ${section("原材料", `<div class="ing-list" id="ing-list">${p.ingredients.map((i, idx) => ingredientHtml(i, idx)).join("")}</div><button class="action" data-action="add-ing">＋ 原材料を追加</button>${d.ingLabel ? `<div class="ing-preview-wrap"><div class="ing-preview-label">ラベル表示プレビュー</div><div class="ing-preview">${escapeHtml(d.ingLabel)}</div><button class="action-sub" data-action="sort-additives">添加物を末尾に並べ直す</button></div>` : ""}`)}
         ${nutritionEditorHtml(p, d)}
         ${allergenEditorHtml(p, d)}
         ${contaminationEditorHtml(p)}
@@ -983,18 +983,48 @@ function historyHtml(p) {
   if (!hist.length) return "";
   return section("変更履歴", `<div class="history-list">${hist.map((h, i) => `<div class="history-row"><span class="history-date">${escapeHtml(h.savedAt)}</span><button class="action" data-restore-history="${i}" data-history-pid="${escapeHtml(p.id)}">この時点に戻す</button></div>`).join("")}</div>`);
 }
+function detectBestBeforeMode(v) {
+  if (!v) return "date";
+  if (/^製造日より\d+日$/.test(v)) return "days";
+  if (/^製造日より\d+[かヶ]月$/.test(v)) return "months";
+  if (/^\d{4}[./-]/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v)) return "date";
+  return "text";
+}
 function productInfoHtml(p) {
   const volume = splitVolume(p.volume);
   const isCustomUnit = !!p.volumeCustomUnit || (!!volume.unit && !VOLUME_UNITS.includes(volume.unit));
   const activeUnit = isCustomUnit ? "その他" : (volume.unit || "個");
   const dateValue = toDateInputValue(p.bestBefore);
+  const bbMode = detectBestBeforeMode(p.bestBefore);
+  const bbDays   = (p.bestBefore||"").match(/製造日より(\d+)日/)?.[1] || "";
+  const bbMonths = (p.bestBefore||"").match(/製造日より(\d+)[かヶ]月/)?.[1] || "";
+  const bbModes = [
+    ["date",   "年月日"],
+    ["days",   "製造日より○日"],
+    ["months", "製造日より○ヶ月"],
+    ["text",   "自由入力"],
+  ];
+  const bbInput = bbMode === "date"
+    ? `<input type="date" data-date-input value="${escapeHtml(dateValue)}">
+       <div class="unit-tabs date-tabs">${DATE_PRESETS.map(([id, label]) => `<button data-date-preset="${id}">${escapeHtml(label)}</button>`).join("")}</div>`
+    : bbMode === "days"
+    ? `<div class="bb-num-wrap"><input type="number" data-bb-days value="${escapeHtml(bbDays)}" min="1" max="3650" placeholder="90" style="width:90px"><span class="bb-unit">日</span></div>`
+    : bbMode === "months"
+    ? `<div class="bb-num-wrap"><input type="number" data-bb-months value="${escapeHtml(bbMonths)}" min="1" max="120" placeholder="3" style="width:90px"><span class="bb-unit">ヶ月</span></div>`
+    : `<input data-field="bestBefore" value="${escapeHtml(p.bestBefore||"")}" placeholder="例：製造日より90日">`;
+  const bbPreview = p.bestBefore ? `<div class="bb-preview">ラベル表示：<strong>${escapeHtml(p.bestBefore)}</strong></div>` : "";
   return `<div class="two-col">
       <label class="field"><span>社内名称<span class="field-note">管理用・ラベル非表示</span></span><input data-field="internalName" value="${escapeHtml(p.internalName||"")}" placeholder="例：ドーナツ プレーン"></label>
       <label class="field"><span>名称（表示名）<b>必須</b></span><input data-field="name" value="${escapeHtml(p.name)}" placeholder="例：油菓子"></label>
     </div>
     <div class="two-col">
       <div class="field"><span>内容量</span><div class="volume-input"><input inputmode="decimal" data-volume-amount value="${escapeHtml(volume.amount)}" placeholder="例：6"><div class="unit-tabs">${VOLUME_UNITS.map((u) => `<button class="${activeUnit === u ? "selected" : ""}" data-volume-unit="${escapeHtml(u)}">${escapeHtml(u)}</button>`).join("")}</div>${activeUnit === "その他" ? `<input data-volume-custom-unit value="${escapeHtml(isCustomUnit ? volume.unit : "")}" placeholder="単位を入力 例：ホール・パック・瓶">` : ""}</div></div>
-      <div class="field"><span>賞味期限</span><input type="date" data-date-input value="${escapeHtml(dateValue)}"><div class="unit-tabs date-tabs">${DATE_PRESETS.map(([id, label]) => `<button data-date-preset="${id}">${escapeHtml(label)}</button>`).join("")}</div></div>
+      <div class="field">
+        <span>賞味期限</span>
+        <div class="unit-tabs bb-mode-tabs">${bbModes.map(([id, label]) => `<button class="${bbMode===id?"selected":""}" data-bb-mode="${id}">${escapeHtml(label)}</button>`).join("")}</div>
+        ${bbInput}
+        ${bbPreview}
+      </div>
     </div>`;
 }
 function ingredientHtml(i, idx) {
@@ -1334,6 +1364,34 @@ function bindEvents() {
     currentProduct().bestBefore = presetDateValue(preset[2]);
     render();
   }));
+  // ⑨ 賞味期限 フォーマット切り替え
+  document.querySelectorAll("[data-bb-mode]").forEach(el => el.addEventListener("click", () => {
+    const p = currentProduct();
+    const mode = el.dataset.bbMode;
+    if (mode === "date") p.bestBefore = "";
+    else if (mode === "days") p.bestBefore = "製造日より1日";
+    else if (mode === "months") p.bestBefore = "製造日より1ヶ月";
+    else p.bestBefore = "";
+    render();
+  }));
+  document.querySelectorAll("[data-bb-days]").forEach(el => {
+    el.addEventListener("input", () => {
+      const v = parseInt(el.value) || 1;
+      currentProduct().bestBefore = `製造日より${v}日`;
+      const prev = document.querySelector(".bb-preview strong");
+      if (prev) prev.textContent = `製造日より${v}日`;
+    });
+    el.addEventListener("change", () => { render(); });
+  });
+  document.querySelectorAll("[data-bb-months]").forEach(el => {
+    el.addEventListener("input", () => {
+      const v = parseInt(el.value) || 1;
+      currentProduct().bestBefore = `製造日より${v}ヶ月`;
+      const prev = document.querySelector(".bb-preview strong");
+      if (prev) prev.textContent = `製造日より${v}ヶ月`;
+    });
+    el.addEventListener("change", () => { render(); });
+  });
   document.querySelectorAll("[data-storage]").forEach((el) => el.addEventListener("click", () => {
     const s = el.dataset.storage;
     updateCurrent("storage", s);
@@ -1354,6 +1412,14 @@ function bindEvents() {
   document.querySelectorAll("[data-action='add-ing']").forEach((el) => el.addEventListener("click", () => {
     const p = currentProduct();
     p.ingredients.push({ id: uid(), name: "", weight: "" });
+    render();
+  }));
+  // ⑧ 添加物を末尾に並べ直す
+  document.querySelectorAll("[data-action='sort-additives']").forEach(el => el.addEventListener("click", () => {
+    const p = currentProduct();
+    const normal = p.ingredients.filter(i => !isAdditive(i.name));
+    const additive = p.ingredients.filter(i => isAdditive(i.name));
+    p.ingredients = [...normal, ...additive];
     render();
   }));
   document.querySelectorAll("[data-ing-name]").forEach((el) => el.addEventListener("input", () => {
@@ -2185,6 +2251,7 @@ function costEditorHtml(p) {
         <label class="field"><span>包材費 (円)</span><input type="number" data-master-field="packagingCost" value="${escapeHtml(p.packagingCost||"")}" placeholder="0"></label>
         <label class="field"><span>人件費 (円)</span><input type="number" data-master-field="laborCost" value="${escapeHtml(p.laborCost||"")}" placeholder="0"></label>
         <label class="field"><span>その他経費 (円)</span><input type="number" data-master-field="otherCost" value="${escapeHtml(p.otherCost||"")}" placeholder="0"></label>
+        <label class="field"><span>販売価格（税込）</span><div class="cost-amount-wrap"><span class="cost-yen">¥</span><input type="number" data-master-field="price" value="${escapeHtml(p.price||"")}" placeholder="0" min="0" step="1"></div></label>
       </div>
     </div>`;
 
@@ -2194,23 +2261,23 @@ function costEditorHtml(p) {
     <div class="cost-kpi-row">
       <div class="cost-kpi">
         <div class="cost-kpi-label">総原価</div>
-        <div class="cost-kpi-value">${fmt(costs.totalCost)}</div>
+        <div class="cost-kpi-value" id="ck-total">${fmt(costs.totalCost)}</div>
       </div>
       <div class="cost-kpi">
         <div class="cost-kpi-label">販売価格</div>
-        <div class="cost-kpi-value">${costs.price > 0 ? fmt(costs.price) : "—"}</div>
+        <div class="cost-kpi-value" id="ck-price">${costs.price > 0 ? fmt(costs.price) : "—"}</div>
       </div>
       <div class="cost-kpi">
         <div class="cost-kpi-label">粗利益</div>
-        <div class="cost-kpi-value ${costs.gross >= 0 ? "profit-pos" : "profit-neg"}">${costs.price > 0 ? fmt(costs.gross) : "—"}</div>
+        <div class="cost-kpi-value ${costs.gross >= 0 ? "profit-pos" : "profit-neg"}" id="ck-gross">${costs.price > 0 ? fmt(costs.gross) : "—"}</div>
       </div>
-      <div class="cost-kpi ${mc}">
+      <div class="cost-kpi ${mc}" id="ck-profit-wrap">
         <div class="cost-kpi-label">利益率</div>
-        <div class="cost-kpi-value">${costs.profitRate !== null ? (100 - costs.costRate) + "%" : "—"}</div>
+        <div class="cost-kpi-value" id="ck-profit">${costs.profitRate !== null ? (100 - costs.costRate) + "%" : "—"}</div>
       </div>
-      <div class="cost-kpi ${mc}">
+      <div class="cost-kpi ${mc}" id="ck-cost-wrap">
         <div class="cost-kpi-label">原価率</div>
-        <div class="cost-kpi-value">${costs.costRate !== null ? costs.costRate + "%" : "—"}</div>
+        <div class="cost-kpi-value" id="ck-cost">${costs.costRate !== null ? costs.costRate + "%" : "—"}</div>
       </div>
     </div>
     <p class="notice" style="margin-top:6px;font-size:11px">
@@ -2405,7 +2472,6 @@ function productDetailHtml() {
           <label class="field"><span>商品名<b>必須</b></span><input data-master-field="name" value="${escapeHtml(p.name||"")}"></label>
           <label class="field"><span>品番・商品コード</span><input data-master-field="code" value="${escapeHtml(p.code||"")}" placeholder="例：SW-001"></label>
           <label class="field"><span>カテゴリ</span><select data-master-field="category">${catOpts}</select></label>
-          <label class="field"><span>販売価格（円）</span><input type="number" data-master-field="price" value="${escapeHtml(p.price||"")}" placeholder="例：980"></label>
           <label class="field"><span>JANコード</span><input data-master-field="janCode" value="${escapeHtml(p.janCode||"")}" placeholder="例：4901234567894"></label>
           <label class="field"><span>内容量</span><input data-master-field="volume" value="${escapeHtml(p.volume||"")}" placeholder="例：100g"></label>
           <label class="field"><span>賞味期限</span><input data-master-field="bestBefore" value="${escapeHtml(p.bestBefore||"")}" placeholder="例：製造日より90日"></label>
@@ -3466,6 +3532,36 @@ function bindSaasEvents() {
   // 原価フィールド変更時はリアルタイム再計算（フォーカスアウト）
   document.querySelectorAll("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]").forEach(el => {
     el.addEventListener("change", () => { saveCostItems(); render(); });
+  });
+
+  // ② KPI リアルタイム更新（input イベント、re-render なし）
+  function refreshCostKpis() {
+    const p = products.find(x => x.id === productDetailId);
+    if (!p) return;
+    const mode = p.costMode || "direct";
+    const price = parseFloat(document.querySelector("[data-master-field='price']")?.value) || 0;
+    const rawCost = mode === "direct" ? (parseFloat(document.querySelector("[data-master-field='directCost']")?.value) || 0) : 0;
+    const packaging = parseFloat(document.querySelector("[data-master-field='directPackaging']")?.value) || 0;
+    const shipping  = parseFloat(document.querySelector("[data-master-field='directShipping']")?.value)  || 0;
+    const other     = parseFloat(document.querySelector("[data-master-field='directOther']")?.value)     || 0;
+    const totalCost = rawCost + packaging + shipping + other;
+    const gross = price - totalCost;
+    const costRate = price > 0 ? Math.round(totalCost / price * 100) : null;
+    const fmt = n => "¥" + Math.round(n).toLocaleString();
+    const $ = id => document.getElementById(id);
+    if ($("ck-total")) $("ck-total").textContent = fmt(totalCost);
+    if ($("ck-price")) $("ck-price").textContent = price > 0 ? fmt(price) : "—";
+    if ($("ck-gross")) {
+      $("ck-gross").textContent = price > 0 ? fmt(gross) : "—";
+      $("ck-gross").className = "cost-kpi-value " + (gross >= 0 ? "profit-pos" : "profit-neg");
+    }
+    const mc = costRateClass(costRate);
+    if ($("ck-profit")) $("ck-profit").textContent = costRate !== null ? (100 - costRate) + "%" : "—";
+    if ($("ck-cost"))   $("ck-cost").textContent   = costRate !== null ? costRate + "%" : "—";
+    ["ck-profit-wrap", "ck-cost-wrap"].forEach(id => { if ($(id)) $(id).className = "cost-kpi " + mc; });
+  }
+  ["directCost", "price", "directPackaging", "directShipping", "directOther"].forEach(f => {
+    document.querySelectorAll(`[data-master-field="${f}"]`).forEach(el => el.addEventListener("input", refreshCostKpis));
   });
 
   // ── AI相談 ──

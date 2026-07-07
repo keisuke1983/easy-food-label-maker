@@ -1499,3 +1499,50 @@ button:disabled {
   .reg-dropdown { width: calc(100vw - 32px); right: auto; left: 0; }
   .ai-analysis-card { padding: 20px; }
 }
+
+/* ══ 原価管理 v2 ══ */
+.cost-mode-seg { display: flex; gap: 8px; margin-bottom: 16px; }
+.cost-mode-btn {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 10px;
+  background: #f8fafc; cursor: pointer; text-align: left; transition: all .15s;
+}
+.cost-mode-btn:hover { border-color: #93c5fd; background: #eff6ff; }
+.cost-mode-btn.active { border-color: #2563eb; background: #eff6ff; }
+.cost-mode-label { font-size: 13px; font-weight: 700; color: #1e293b; }
+.cost-mode-btn.active .cost-mode-label { color: #2563eb; }
+.cost-mode-desc { font-size: 11px; color: #64748b; }
+
+.cost-panel { margin-bottom: 16px; }
+.cost-direct-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cost-main-field { grid-column: 1 / -1; }
+.cost-main-input { font-size: 20px !important; font-weight: 700 !important; width: 100% !important; }
+.cost-tax-sel { width: auto !important; flex-shrink: 0; }
+.cost-yen { font-size: 14px; color: #64748b; padding: 0 4px; align-self: center; }
+.cost-amount-wrap { display: flex; align-items: center; gap: 4px; }
+
+.cost-summary-v2 { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+.cost-kpi-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.cost-kpi { flex: 1; min-width: 80px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; }
+.cost-kpi-label { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+.cost-kpi-value { font-size: 16px; font-weight: 700; color: #1e293b; }
+.cost-kpi.margin-good .cost-kpi-value { color: #16a34a; }
+.cost-kpi.margin-warn .cost-kpi-value { color: #d97706; }
+.cost-kpi.margin-bad  .cost-kpi-value { color: #dc2626; }
+.profit-pos { color: #16a34a !important; }
+.profit-neg { color: #dc2626 !important; }
+
+/* 商品カード 原価チップ */
+.card-cost-row { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+.cost-chip { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.cost-chip.profit.margin-good { background: #f0fdf4; color: #16a34a; border-color: #86efac; }
+.cost-chip.profit.margin-warn { background: #fffbeb; color: #d97706; border-color: #fcd34d; }
+.cost-chip.profit.margin-bad  { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
+.cost-chip.mode { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+
+@media (max-width: 600px) {
+  .cost-direct-grid { grid-template-columns: 1fr; }
+  .cost-kpi-row { gap: 6px; }
+  .cost-kpi { min-width: 70px; padding: 8px; }
+  .cost-kpi-value { font-size: 14px; }
+}

@@ -142,6 +142,12 @@ let aiEditText = "";
 let aiConsultProductId = null;
 let aiConsultInput = "";
 let aiConsultSending = false;
+let registerMenuOpen = false;
+let aiRegChatMessages = [];
+let aiRegChatInput = "";
+let aiRegChatStep = 0;
+let aiRegChatDraft = {};
+let aiRegAnalysisStep = -1;
 let sidebarOpen = false;
 let masterSearch = "";
 let masterFilter = "all";
@@ -622,6 +628,9 @@ function render() {
     else if (saasView === "spec-sheet-nav") pageHtml = specSheetHtml();
     else if (saasView === "ai-descriptions-nav") pageHtml = aiDescriptionsHtml();
     else if (saasView === "ai-consult-nav") pageHtml = aiConsultHtml();
+    else if (saasView === "reg-photo") pageHtml = photoRegisterHtml();
+    else if (saasView === "reg-spec") pageHtml = specRegisterHtml();
+    else if (saasView === "reg-ai-chat") pageHtml = aiChatRegisterHtml();
     else if (saasView === "settings-nav") pageHtml = newSettingsHtml();
     else pageHtml = dashboardHtml();
   } else if (view === "home") {
@@ -2196,7 +2205,7 @@ function dashboardHtml() {
       <div class="stat-card blue"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
     </div>
     <div class="dash-quick-actions">
-      <button class="quick-action-btn primary" data-quick-new="1">＋ 新商品を登録</button>
+      ${registerBtnHtml()}
       <button class="quick-action-btn" data-nav="products">商品一覧を見る</button>
       <button class="quick-action-btn" data-nav="spec-sheet-nav">規格書を作成</button>
       <button class="quick-action-btn" data-nav="ai-descriptions-nav">AI説明文を生成</button>
@@ -2275,7 +2284,7 @@ function productsListHtml() {
       <div class="filter-btns">
         ${["all","starred","active","draft"].map(f=>`<button class="filter-btn${masterFilter===f?" active":""}" data-master-filter="${f}">${{all:"すべて",starred:"★お気に入り",active:"公開中",draft:"下書き"}[f]}</button>`).join("")}
       </div>
-      <button class="action primary" data-quick-new="1">＋ 新規登録</button>
+      ${registerBtnHtml()}
     </div>
     <div class="master-list">${cards}</div>
   `);
@@ -2852,6 +2861,186 @@ async function callConsultAI(p, userMessage, questionKey) {
   return generateConsultResponse(p, questionKey);
 }
 
+
+// ══ AI商品登録メニュー ══════════════════════════════════════════════════
+
+const REGISTER_MENU = [
+  { id: "photo",   icon: "📷", label: "写真から登録",  desc: "商品写真・裏面・パッケージをAIで解析して自動登録", badge: "おすすめ" },
+  { id: "spec",    icon: "📄", label: "規格書から登録", desc: "PDF・Excel・Word の規格書をAIが解析して登録" },
+  { id: "ai-chat", icon: "🤖", label: "AIで作成",      desc: "チャット形式で質問に答えるだけで商品を自動作成" },
+  { id: "manual",  icon: "✏️", label: "手入力",        desc: "従来どおり手入力で商品登録" },
+];
+
+function registerBtnHtml() {
+  const dropdown = registerMenuOpen ? `
+    <div class="reg-dropdown" id="reg-dropdown">
+      <div class="reg-dropdown-title">商品登録方法を選択</div>
+      ${REGISTER_MENU.map(item => `
+        <button class="reg-menu-item" data-reg-mode="${escapeHtml(item.id)}">
+          <span class="reg-menu-icon">${item.icon}</span>
+          <span class="reg-menu-body">
+            <span class="reg-menu-label">${escapeHtml(item.label)}${item.badge ? `<span class="reg-menu-badge">${escapeHtml(item.badge)}</span>` : ""}</span>
+            <span class="reg-menu-desc">${escapeHtml(item.desc)}</span>
+          </span>
+        </button>`).join("")}
+    </div>` : "";
+  return `<div class="reg-btn-wrap">
+    <button class="action primary reg-main-btn" data-reg-toggle>＋ 商品登録 ▾</button>
+    ${dropdown}
+  </div>`;
+}
+
+// ── AI解析ステップ定義 ──
+const AI_ANALYSIS_STEPS = [
+  "商品名を抽出しています...",
+  "原材料を解析しています...",
+  "栄養成分を読み取っています...",
+  "アレルゲン情報を確認しています...",
+  "表示内容を作成しています...",
+];
+
+function photoRegisterHtml() {
+  if (aiRegAnalysisStep >= 0 && aiRegAnalysisStep < AI_ANALYSIS_STEPS.length) {
+    const pct = Math.round((aiRegAnalysisStep / AI_ANALYSIS_STEPS.length) * 100);
+    const stepsHtml = AI_ANALYSIS_STEPS.map((s, i) => `
+      <div class="ai-step ${i < aiRegAnalysisStep ? "done" : i === aiRegAnalysisStep ? "active" : ""}">
+        <span class="ai-step-dot">${i < aiRegAnalysisStep ? "✓" : i === aiRegAnalysisStep ? "●" : "○"}</span>
+        <span>${escapeHtml(s)}</span>
+      </div>`).join("");
+    return saasLayout("AI解析中", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title">🤖 AI解析中...</div>
+          <div class="ai-analysis-bar-wrap"><div class="ai-analysis-bar" style="width:${pct}%"></div></div>
+          <div class="ai-steps">${stepsHtml}</div>
+        </div>
+      </div>`);
+  }
+  if (aiRegAnalysisStep >= AI_ANALYSIS_STEPS.length) {
+    return saasLayout("AI解析完了", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title" style="color:#16a34a">✅ 解析完了！</div>
+          <p style="color:#64748b;margin:8px 0 20px">商品情報を抽出しました。内容を確認・修正してください。</p>
+          <button class="action primary" data-reg-go-editor>商品編集画面へ →</button>
+        </div>
+      </div>`);
+  }
+  return saasLayout("写真から登録", `
+    <div class="reg-page">
+      <div class="reg-page-header">
+        <button class="btn-back" data-nav="products">← 戻る</button>
+        <h2 class="reg-page-title">📷 写真から登録</h2>
+        <p class="reg-page-desc">商品写真・裏面表示・パッケージ・食品表示ラベルをアップロードしてください。<br>AIが自動で商品情報を解析して入力します。</p>
+      </div>
+      <div class="reg-upload-area" id="photo-drop-zone">
+        <input type="file" id="photo-file-input" accept="image/*" multiple style="display:none">
+        <div class="reg-upload-icon">📸</div>
+        <div class="reg-upload-main">ここに画像をドラッグ＆ドロップ</div>
+        <div class="reg-upload-sub">または</div>
+        <button class="action secondary" id="photo-select-btn">画像を選択</button>
+        <div class="reg-upload-note">対応形式：JPG・PNG・HEIC・WebP　複数枚同時アップロード対応</div>
+      </div>
+      <div class="reg-supported-wrap">
+        <div class="reg-supported-title">対応している画像の種類</div>
+        <div class="reg-supported-list">
+          ${["商品写真","裏面表示ラベル","パッケージ全体","食品表示ラベル","規格書の写真"].map(t => `<span class="reg-supported-chip">${escapeHtml(t)}</span>`).join("")}
+        </div>
+      </div>
+    </div>`);
+}
+
+function specRegisterHtml() {
+  if (aiRegAnalysisStep >= 0 && aiRegAnalysisStep < AI_ANALYSIS_STEPS.length) {
+    const pct = Math.round((aiRegAnalysisStep / AI_ANALYSIS_STEPS.length) * 100);
+    const stepsHtml = AI_ANALYSIS_STEPS.map((s, i) => `
+      <div class="ai-step ${i < aiRegAnalysisStep ? "done" : i === aiRegAnalysisStep ? "active" : ""}">
+        <span class="ai-step-dot">${i < aiRegAnalysisStep ? "✓" : i === aiRegAnalysisStep ? "●" : "○"}</span>
+        <span>${escapeHtml(s)}</span>
+      </div>`).join("");
+    return saasLayout("AI解析中", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title">🤖 規格書を解析中...</div>
+          <div class="ai-analysis-bar-wrap"><div class="ai-analysis-bar" style="width:${pct}%"></div></div>
+          <div class="ai-steps">${stepsHtml}</div>
+        </div>
+      </div>`);
+  }
+  if (aiRegAnalysisStep >= AI_ANALYSIS_STEPS.length) {
+    return saasLayout("解析完了", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title" style="color:#16a34a">✅ 解析完了！</div>
+          <p style="color:#64748b;margin:8px 0 20px">規格書から商品情報を抽出しました。内容を確認・修正してください。</p>
+          <button class="action primary" data-reg-go-editor>商品編集画面へ →</button>
+        </div>
+      </div>`);
+  }
+  return saasLayout("規格書から登録", `
+    <div class="reg-page">
+      <div class="reg-page-header">
+        <button class="btn-back" data-nav="products">← 戻る</button>
+        <h2 class="reg-page-title">📄 規格書から登録</h2>
+        <p class="reg-page-desc">PDF・Excel・Wordの商品規格書をアップロードしてください。<br>AIが自動で商品情報を解析して入力します。</p>
+      </div>
+      <div class="reg-upload-area" id="spec-drop-zone">
+        <input type="file" id="spec-file-input" accept=".pdf,.xlsx,.xls,.docx,.doc,.csv" style="display:none">
+        <div class="reg-upload-icon">📋</div>
+        <div class="reg-upload-main">ここにファイルをドラッグ＆ドロップ</div>
+        <div class="reg-upload-sub">または</div>
+        <button class="action secondary" id="spec-select-btn">ファイルを選択</button>
+        <div class="reg-upload-note">対応形式：PDF・Excel（.xlsx/.xls）・Word（.docx/.doc）・CSV</div>
+      </div>
+      <div class="reg-supported-wrap">
+        <div class="reg-supported-title">読み取る主な項目</div>
+        <div class="reg-supported-list">
+          ${["商品名","原材料名","添加物","アレルゲン","内容量","賞味期限","保存方法","製造者","栄養成分"].map(t => `<span class="reg-supported-chip">${escapeHtml(t)}</span>`).join("")}
+        </div>
+      </div>
+    </div>`);
+}
+
+const AI_CHAT_FLOW = [
+  { q: "何を作りますか？ 商品名を教えてください。\n例：米粉ドーナツ、抹茶クッキー", field: "name" },
+  { q: "種類や味はありますか？\n例：プレーン、チョコレート、なし", field: "_flavor" },
+  { q: "内容量を教えてください。\n例：6個入り、100g、500ml", field: "volume" },
+  { q: "保存方法は？\n例：冷凍保存（-18℃以下）、冷蔵保存、常温保存", field: "_storage" },
+  { q: "賞味期限の目安は？\n例：製造から30日、2027年3月末", field: "bestBefore" },
+  { q: "製造者の会社名を教えてください。\n（わからない場合は「スキップ」と入力）", field: "manufacturerName" },
+];
+
+function aiChatRegisterHtml() {
+  const msgs = aiRegChatMessages;
+  const step = aiRegChatStep;
+  const isDone = step >= AI_CHAT_FLOW.length;
+  const messagesHtml = msgs.map(m => `
+    <div class="ai-chat-msg ai-chat-msg-${escapeHtml(m.role)}">
+      <div class="ai-chat-msg-label">${m.role === "ai" ? "🤖 AI" : "あなた"}</div>
+      <div class="ai-chat-msg-body">${escapeHtml(m.content).replace(/\n/g, "<br>")}</div>
+    </div>`).join("");
+  const inputArea = isDone ? `
+    <div class="ai-chat-done">
+      <p>✅ 商品情報が揃いました！</p>
+      <button class="action primary" data-reg-go-editor>商品編集画面で確認・修正する →</button>
+    </div>` : `
+    <div class="ai-chat-input-area">
+      <textarea class="ai-chat-textarea" id="ai-chat-input" placeholder="入力してください...">${escapeHtml(aiRegChatInput)}</textarea>
+      <button class="action primary ai-chat-send" id="ai-chat-send">送信 ▶</button>
+    </div>
+    <p class="notice">Ctrl+Enter でも送信できます</p>`;
+  return saasLayout("AIで作成", `
+    <div class="reg-page">
+      <div class="reg-page-header">
+        <button class="btn-back" data-nav="products" id="ai-chat-back">← 戻る</button>
+        <h2 class="reg-page-title">🤖 AIで商品を作成</h2>
+        <p class="reg-page-desc">AIの質問に答えるだけで商品情報を自動作成します。</p>
+      </div>
+      <div class="ai-chat-window" id="ai-chat-window">${messagesHtml}</div>
+      ${inputArea}
+    </div>`);
+}
+
 function aiConsultHtml() {
   const productList = products.filter(p => p.id);
   if (!aiConsultProductId && productList.length) aiConsultProductId = productList[0].id;
@@ -3215,6 +3404,126 @@ function bindSaasEvents() {
   document.getElementById("consult-input")?.addEventListener("keydown", e => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") sendConsultMessage(null);
   });
+
+  // ── 商品登録メニュー ──
+  document.querySelector("[data-reg-toggle]")?.addEventListener("click", e => {
+    e.stopPropagation();
+    if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
+    registerMenuOpen = !registerMenuOpen;
+    render();
+  });
+  document.querySelectorAll("[data-reg-mode]").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const mode = btn.dataset.regMode;
+      registerMenuOpen = false;
+      aiRegAnalysisStep = -1;
+      if (mode === "manual") {
+        draft = extendProductMaster(emptyProduct());
+        editId = "new"; view = "edit"; sidebarOpen = false;
+        render(); return;
+      }
+      if (mode === "ai-chat") {
+        aiRegChatMessages = [{ role: "ai", content: AI_CHAT_FLOW[0].q }];
+        aiRegChatInput = ""; aiRegChatStep = 0; aiRegChatDraft = {};
+        saasView = "reg-ai-chat";
+      } else {
+        saasView = mode === "photo" ? "reg-photo" : "reg-spec";
+      }
+      safeSet("fmcc-view", saasView); render();
+    });
+  });
+  // 外クリックでメニューを閉じる
+  if (registerMenuOpen) {
+    setTimeout(() => {
+      document.addEventListener("click", function closeReg(e) {
+        if (!e.target.closest(".reg-btn-wrap")) {
+          registerMenuOpen = false; render();
+          document.removeEventListener("click", closeReg);
+        }
+      });
+    }, 0);
+  }
+
+  // ── 写真/規格書アップロード ──
+  ["photo", "spec"].forEach(type => {
+    const dropZone = document.getElementById(`${type}-drop-zone`);
+    const fileInput = document.getElementById(`${type}-file-input`);
+    const selectBtn = document.getElementById(`${type}-select-btn`);
+    if (selectBtn) selectBtn.addEventListener("click", () => fileInput?.click());
+    if (fileInput) fileInput.addEventListener("change", () => startAiAnalysis(type));
+    if (dropZone) {
+      dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+      dropZone.addEventListener("drop", e => {
+        e.preventDefault(); dropZone.classList.remove("drag-over");
+        if (e.dataTransfer.files.length) startAiAnalysis(type);
+      });
+    }
+  });
+
+  // 解析完了後に商品編集へ
+  document.querySelector("[data-reg-go-editor]")?.addEventListener("click", () => {
+    aiRegAnalysisStep = -1;
+    draft = extendProductMaster(emptyProduct());
+    if (aiRegChatDraft && Object.keys(aiRegChatDraft).length) {
+      Object.assign(draft, aiRegChatDraft);
+      draft.name = draft.name || "AI登録商品";
+    } else {
+      draft.name = "AI解析済み商品（確認・修正してください）";
+    }
+    editId = "new"; view = "edit"; sidebarOpen = false;
+    render();
+  });
+
+  // ── AIチャット登録 ──
+  document.getElementById("ai-chat-input")?.addEventListener("input", e => { aiRegChatInput = e.target.value; });
+  document.getElementById("ai-chat-send")?.addEventListener("click", () => sendAiChatMessage());
+  document.getElementById("ai-chat-input")?.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") sendAiChatMessage();
+  });
+}
+
+function startAiAnalysis(type) {
+  aiRegAnalysisStep = 0;
+  saasView = type === "photo" ? "reg-photo" : "reg-spec";
+  render();
+  function tick() {
+    if (aiRegAnalysisStep < AI_ANALYSIS_STEPS.length) {
+      aiRegAnalysisStep++;
+      render();
+      setTimeout(tick, 900);
+    }
+  }
+  setTimeout(tick, 800);
+}
+
+function sendAiChatMessage() {
+  const msg = aiRegChatInput.trim();
+  if (!msg) return;
+  const step = aiRegChatStep;
+  if (step >= AI_CHAT_FLOW.length) return;
+  aiRegChatMessages.push({ role: "user", content: msg });
+  const field = AI_CHAT_FLOW[step].field;
+  if (!field.startsWith("_")) aiRegChatDraft[field] = msg;
+  if (field === "_storage") {
+    aiRegChatDraft._storageHint = msg;
+  } else if (field === "_flavor") {
+    if (msg !== "なし" && msg.toLowerCase() !== "skip" && msg !== "スキップ")
+      aiRegChatDraft.internalName = (aiRegChatDraft.name || "") + " " + msg;
+  }
+  aiRegChatStep++;
+  aiRegChatInput = "";
+  if (aiRegChatStep < AI_CHAT_FLOW.length) {
+    aiRegChatMessages.push({ role: "ai", content: AI_CHAT_FLOW[aiRegChatStep].q });
+  } else {
+    aiRegChatMessages.push({ role: "ai", content: "ありがとうございます！\n商品情報が揃いました。内容を確認・修正してください 👇" });
+  }
+  render();
+  setTimeout(() => {
+    const w = document.getElementById("ai-chat-window");
+    if (w) w.scrollTop = w.scrollHeight;
+  }, 60);
 }
 
 render();

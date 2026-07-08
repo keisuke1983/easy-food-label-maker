@@ -2469,10 +2469,21 @@ function productDetailHtml() {
       <div class="detail-section">
         <h3 class="detail-section-title">基本情報</h3>
         <div class="field-grid">
-          <label class="field"><span>商品名<b>必須</b></span><input data-master-field="name" value="${escapeHtml(p.name||"")}"></label>
-          <label class="field"><span>品番・商品コード</span><input data-master-field="code" value="${escapeHtml(p.code||"")}" placeholder="例：SW-001"></label>
+          <label class="field"><span>商品名<b>必須</b></span><input data-master-field="name" value="${escapeHtml(p.name||"")}" placeholder="例：米粉ドーナツ プレーン"></label>
+          <div class="field">
+            <span>品番・商品コード <span class="field-opt">任意</span></span>
+            <input data-master-field="code" value="${escapeHtml(p.code||"")}" placeholder="例：SW-001">
+            <p class="field-hint">自社での管理番号です。ラベルには印刷されません。</p>
+          </div>
           <label class="field"><span>カテゴリ</span><select data-master-field="category">${catOpts}</select></label>
-          <label class="field"><span>JANコード</span><input data-master-field="janCode" value="${escapeHtml(p.janCode||"")}" placeholder="例：4901234567894"></label>
+          <div class="field">
+            <span>JANコード <span class="field-opt">任意</span></span>
+            <div class="jan-input-row">
+              <input data-master-field="janCode" value="${escapeHtml(p.janCode||"")}" placeholder="13桁の数字" maxlength="13" inputmode="numeric">
+              ${p.janCode ? `<span class="jan-check ${p.janCode.length===13?"jan-ok":"jan-ng"}">${p.janCode.length===13?"✓ 13桁":""+p.janCode.length+"桁"}</span>` : ""}
+            </div>
+            <p class="field-hint">バーコード管理をしている場合に入力。<a class="field-link" href="https://www.gs1jp.org/code/jan/" target="_blank" rel="noopener">JANコードとは？</a></p>
+          </div>
           <label class="field"><span>内容量</span><input data-master-field="volume" value="${escapeHtml(p.volume||"")}" placeholder="例：100g"></label>
           <label class="field"><span>賞味期限</span><input data-master-field="bestBefore" value="${escapeHtml(p.bestBefore||"")}" placeholder="例：製造日より90日"></label>
           <label class="field"><span>保存方法</span><input data-master-field="storage" value="${escapeHtml(p.storage||"")}" placeholder="例：高温多湿を避けて保存"></label>

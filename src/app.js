@@ -136,6 +136,7 @@ let highlightField = null; // ジャンプ後に強調する field selector
 let saasView = safeGet("fmcc-view") || "dashboard";
 let productDetailId = null;
 let specSheetId = null;
+let specShowCost = false;
 let aiDescId = null;
 let aiDescChannel = "rakuten";
 let aiEditText = "";
@@ -2619,7 +2620,7 @@ function specSheetHtml() {
       <div class="spec-v2-image-col">
         ${productImg}
         <div class="spec-v2-qr">QR<br>コード</div>
-        ${costs.costRate !== null ? `<div style="text-align:center;font-size:11px;color:#64748b;margin-top:4px">
+        ${specShowCost && costs.costRate !== null ? `<div style="text-align:center;font-size:11px;color:#64748b;margin-top:4px">
           原価率<br><span class="${mc}" style="font-size:18px;font-weight:700">${costs.costRate}%</span>
         </div>` : ""}
       </div>
@@ -2643,6 +2644,10 @@ function specSheetHtml() {
       <select class="spec-select" data-spec-select>${selectOpts}</select>
       <button class="action primary" data-action="print-spec">🖨 印刷・PDF</button>
       <button class="action" data-action="copy-spec">📋 テキストでコピー</button>
+      <label class="spec-cost-toggle">
+        <input type="checkbox" id="spec-show-cost" ${specShowCost ? "checked" : ""}>
+        原価率を印刷に含める
+      </label>
     </div>
     ${specHtml}
   `);
@@ -3351,6 +3356,9 @@ function bindSaasEvents() {
 
   // 規格書 商品選択
   document.querySelectorAll("[data-spec-select]").forEach(el => el.addEventListener("change", () => { specSheetId = el.value; render(); }));
+
+  // 原価率表示トグル
+  document.getElementById("spec-show-cost")?.addEventListener("change", e => { specShowCost = e.target.checked; render(); });
 
   // 規格書印刷
   document.querySelectorAll("[data-action='print-spec']").forEach(el => el.addEventListener("click", () => {

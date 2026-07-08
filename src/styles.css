@@ -1605,3 +1605,10 @@ button:disabled {
 /* 規格書：原価率トグル */
 .spec-cost-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #475569; cursor: pointer; user-select: none; }
 .spec-cost-toggle input { accent-color: #2563eb; width: 15px; height: 15px; }
+
+/* 内容量：数量＋単位横並び */
+.volume-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.volume-amount-input { width: 100px; flex-shrink: 0; }
+.volume-unit-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.volume-unit-tabs button { padding: 4px 8px; font-size: 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; cursor: pointer; }
+.volume-unit-tabs button.selected { background: #1e293b; color: #fff; border-color: #1e293b; }

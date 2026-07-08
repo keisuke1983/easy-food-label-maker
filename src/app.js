@@ -3365,8 +3365,42 @@ function bindSaasEvents() {
     const area = document.getElementById("spec-print-area");
     if (!area) return;
     const w = window.open("", "_blank");
-    w.document.write(`<html><head><title>商品規格書</title><style>body{font-family:sans-serif;padding:20px}.spec-table{width:100%;border-collapse:collapse}.spec-table th,.spec-table td{border:1px solid #ddd;padding:8px;text-align:left}.spec-table th{background:#f0f4ff;width:35%}.spec-header{margin-bottom:16px}.spec-title{font-size:22px;font-weight:700}.spec-meta{font-size:12px;color:#666}</style></head><body>${area.innerHTML}</body></html>`);
-    w.document.close(); w.print();
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>商品規格書</title><style>
+@page{size:A4 portrait;margin:8mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11px;color:#1e293b;background:#fff}
+.spec-v2{padding:8mm;max-width:100%}
+/* header */
+.spec-v2-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #1e293b}
+.spec-v2-header h1{font-size:18px;font-weight:800;color:#1e293b}
+.spec-subtitle{font-size:13px;font-weight:600;color:#334155;margin-top:2px}
+.spec-display-name{font-size:11px;color:#64748b;margin-top:2px}
+.spec-v2-meta-block dl{display:flex;flex-direction:column;gap:2px;font-size:10px;color:#64748b;text-align:right}
+.spec-v2-meta-block dl div{display:flex;gap:4px;justify-content:flex-end}
+.spec-v2-meta-block dt{font-weight:600}
+/* body grid */
+.spec-v2-body{display:grid;grid-template-columns:1fr 72px;gap:8px;align-items:start;margin-bottom:8px}
+.spec-v2-image-col{display:flex;flex-direction:column;align-items:center;gap:6px}
+.spec-v2-product-img{width:68px;height:68px;object-fit:cover;border:1px solid #e2e8f0;border-radius:4px}
+.spec-v2-product-img-placeholder{width:68px;height:68px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:18px;color:#cbd5e1}
+.spec-v2-qr{display:none}
+/* tables */
+.spec-v2-section-label{font-size:9px;font-weight:700;color:#fff;background:#475569;padding:2px 6px;border-radius:3px;margin-bottom:2px;margin-top:6px;display:inline-block}
+.spec-v2-tables .spec-v2-section-label:first-child{margin-top:0}
+.spec-v2-table{width:100%;border-collapse:collapse;margin-bottom:4px}
+.spec-v2-table th,.spec-v2-table td{border:1px solid #e2e8f0;padding:3px 6px;font-size:10px;text-align:left;line-height:1.4}
+.spec-v2-table th{background:#f8fafc;width:32%;font-weight:600;color:#374151}
+.spec-v2-table td{color:#1e293b}
+.spec-v2-remark{font-size:10px;border:1px solid #e2e8f0;border-radius:4px;padding:6px;background:#f8fafc;margin-bottom:4px}
+/* footer */
+.spec-v2-footer{border-top:1px solid #e2e8f0;padding-top:8px;display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px}
+.spec-v2-sig-row{display:flex;gap:16px}
+.spec-v2-sig-box{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9px;color:#64748b}
+.spec-v2-sig-line{width:70px;height:28px;border:1px solid #cbd5e1;border-radius:3px}
+/* cost rate colors */
+.margin-good{color:#16a34a}.margin-warn{color:#d97706}.margin-bad{color:#dc2626}
+</style></head><body><div class="spec-v2">${area.innerHTML}</div><script>window.onload=()=>{window.print();}<\/script></body></html>`);
+    w.document.close();
   }));
 
   // 規格書テキストコピー

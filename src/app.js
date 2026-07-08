@@ -2694,7 +2694,6 @@ function specSheetHtml() {
 
       <div class="spec-v2-image-col">
         ${productImg}
-        <img class="spec-v2-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent([p.name, p.janCode ? "JAN:"+p.janCode : "", p.manufacturerName].filter(Boolean).join(" / "))}" alt="QR" loading="lazy" onerror="this.style.display='none'">
         ${specShowCost && costs.costRate !== null ? `<div style="text-align:center;font-size:11px;color:#64748b;margin-top:4px">
           原価率<br><span class="${mc}" style="font-size:18px;font-weight:700">${costs.costRate}%</span>
         </div>` : ""}

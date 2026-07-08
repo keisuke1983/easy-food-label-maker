@@ -375,8 +375,11 @@ function importCsvFile(file) {
         let cur = ""; let inQ = false;
         for (const ch of line) { if (ch === '"') { inQ = !inQ; } else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; } else { cur += ch; } }
         cols.push(cur.trim());
+        const SAFE_CSV_FIELDS = new Set(["name","internalName","volume","bestBefore","storage","storageCustom",
+          "manufacturerName","manufacturerAddress","manufacturerPhone","manufacturerPostal",
+          "janCode","code","category","price","memo","publishStatus","updatedAt"]);
         const row = {};
-        headers.forEach((h, i) => { row[h] = cols[i] || ""; });
+        headers.forEach((h, i) => { if (SAFE_CSV_FIELDS.has(h)) row[h] = cols[i] || ""; });
         if (!row.name) return;
         const p = emptyProduct();
         Object.assign(p, row, { id: uid(), starred: false, ingredients: [{ id: uid(), name: "", weight: "" }] });
@@ -424,7 +427,11 @@ function safeGet(key) {
 }
 function safeSet(key, value) {
   try { localStorage.setItem(key, value); }
-  catch {}
+  catch (e) {
+    if (e && e.name === "QuotaExceededError") {
+      alert("保存容量が不足しています。商品画像を削除するか、不要な商品を整理してください。");
+    }
+  }
 }
 function emptyProduct() {
   return {
@@ -683,7 +690,7 @@ function render() {
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(render, 250);
+  renderTimer = setTimeout(render, 300);
 }
 function scheduleAutoSave() {
   if (view !== "edit") return;

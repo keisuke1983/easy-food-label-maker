@@ -1079,6 +1079,17 @@ button:disabled {
 .detail-section-title { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .field-grid .field.full { grid-column: 1 / -1; }
+.field-grid input:placeholder-shown,
+.field-grid textarea:placeholder-shown {
+  border-color: #fca5a5;
+  background: #fff8f8;
+}
+.field-grid input:placeholder-shown:focus,
+.field-grid textarea:placeholder-shown:focus {
+  border-color: #f87171;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(248,113,113,0.15);
+}
 .check-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .check-label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #374151; cursor: pointer; }
 .field-label { font-size: 12px; font-weight: 500; color: #64748b; display: block; margin-bottom: 4px; }
@@ -1560,3 +1571,14 @@ button:disabled {
 .ing-preview { font-size: 13px; color: #1e293b; line-height: 1.5; word-break: break-all; }
 .action-sub { margin-top: 8px; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; }
 .action-sub:hover { background: #f1f5f9; }
+
+/* ── 品番・JANコードフィールド改善 ── */
+.field-opt { font-size: 10px; font-weight: normal; color: #94a3b8; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
+.field-hint { margin: 4px 0 0; font-size: 11px; color: #94a3b8; line-height: 1.4; }
+.field-link { color: #2563eb; text-decoration: none; }
+.field-link:hover { text-decoration: underline; }
+.jan-input-row { display: flex; align-items: center; gap: 8px; }
+.jan-input-row input { flex: 1; }
+.jan-check { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.jan-ok { color: #16a34a; }
+.jan-ng { color: #d97706; }

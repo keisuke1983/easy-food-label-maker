@@ -1019,7 +1019,15 @@ function productInfoHtml(p) {
       <label class="field"><span>名称（表示名）<b>必須</b></span><input data-field="name" value="${escapeHtml(p.name)}" placeholder="例：油菓子"></label>
     </div>
     <div class="two-col">
-      <div class="field"><span>内容量</span><div class="volume-input"><input inputmode="decimal" data-volume-amount value="${escapeHtml(volume.amount)}" placeholder="例：6"><div class="unit-tabs">${VOLUME_UNITS.map((u) => `<button class="${activeUnit === u ? "selected" : ""}" data-volume-unit="${escapeHtml(u)}">${escapeHtml(u)}</button>`).join("")}</div>${activeUnit === "その他" ? `<input data-volume-custom-unit value="${escapeHtml(isCustomUnit ? volume.unit : "")}" placeholder="単位を入力 例：ホール・パック・瓶">` : ""}</div></div>
+      <div class="field">
+        <span>内容量</span>
+        <div class="volume-row">
+          <input class="volume-amount-input" inputmode="decimal" data-volume-amount value="${escapeHtml(volume.amount)}" placeholder="数量（例：6）">
+          <div class="unit-tabs volume-unit-tabs">${VOLUME_UNITS.map((u) => `<button class="${activeUnit === u ? "selected" : ""}" data-volume-unit="${escapeHtml(u)}">${escapeHtml(u)}</button>`).join("")}</div>
+        </div>
+        ${activeUnit === "その他" ? `<input data-volume-custom-unit value="${escapeHtml(isCustomUnit ? volume.unit : "")}" placeholder="単位を入力 例：ホール・パック・瓶" style="margin-top:6px">` : ""}
+        ${p.volume ? `<div class="bb-preview">ラベル表示：<strong>${escapeHtml(p.volume)}</strong></div>` : `<div class="bb-preview" style="color:#f87171">数量を入力してください</div>`}
+      </div>
       <div class="field">
         <span>賞味期限</span>
         <div class="unit-tabs bb-mode-tabs">${bbModes.map(([id, label]) => `<button class="${bbMode===id?"selected":""}" data-bb-mode="${id}">${escapeHtml(label)}</button>`).join("")}</div>
@@ -2656,100 +2664,127 @@ function specSheetHtml() {
 // ── AI説明文 ローカル生成（API未設定時のフォールバック） ───────────────
 function generateAiDesc(p, channelId) {
   const d = derive(p);
-  const name     = p.name || "商品";
-  const category = p.category || "食品";
-  const ings     = d.ingLabel ? d.ingLabel.split("、").slice(0,3).join("、") : "厳選素材";
-  const allergens = d.allergens.length ? d.allergens.join("・") : "なし";
-  const storage  = d.storage || "常温保存";
-  const bb       = p.bestBefore || "製造日より記載";
-  const vol      = p.volume || "";
-  const price    = p.price ? `¥${p.price}` : "";
-  const mfr      = p.manufacturerName || "";
-  const memo     = p.memo ? p.memo : "";
+  const name      = p.name || "商品";
+  const category  = p.category || "食品";
+  const ingFull   = d.ingLabel || "";
+  // 添加物より前の一般原材料だけ抽出（／区切りの左側）
+  const ingMain   = ingFull ? ingFull.split("／")[0].split("、").slice(0, 4).join("、") : "厳選素材";
+  const hasAdditive = ingFull.includes("／");
+  const allergens = d.allergens.length ? d.allergens.join("・") : "";
+  const noAllergen = d.allergens.length === 0;
+  const storage   = d.storage || "";
+  const bb        = p.bestBefore || "";
+  const vol       = p.volume || "";
+  const price     = p.price ? `¥${Number(p.price).toLocaleString()}` : "";
+  const mfr       = p.manufacturerName || "";
+  const memo      = p.memo || "";
+  // ストレージ表現
+  const storageNote = storage.includes("冷凍") ? "冷凍保存" : storage.includes("冷蔵") ? "冷蔵保存" : storage.includes("常温") ? "常温保存" : storage;
+  // アレルゲン文
+  const algLine   = allergens ? `アレルゲン：${allergens}を含む` : "主要アレルゲン不使用";
+  // 添加物有無メッセージ
+  const additiveMsg = hasAdditive ? "" : "保存料・着色料不使用";
 
   const gen = {
-    rakuten: `【${name}】${memo ? "\n" + memo + "\n" : ""}
-■ 商品特徴
-・${category}の逸品。主な原材料：${ings}
-・保存方法：${storage}
-・内容量：${vol}　賞味期限：${bb}
-${allergens !== "なし" ? `・アレルゲン：${allergens}` : "・主要アレルゲン（7品目）不使用"}
-${mfr ? `・製造者：${mfr}` : ""}
+    rakuten: `【${name}】
+${memo ? memo + "\n\n" : ""}■ 商品詳細
+・商品名：${name}${category !== "食品" ? `（${category}）` : ""}
+・内容量：${vol || "記載なし"}
+・賞味期限：${bb || "商品パッケージをご確認ください"}
+・保存方法：${storage || "商品パッケージをご確認ください"}
+${price ? `・価格：${price}（税込）` : ""}
 
-■ こだわりポイント
-素材本来の味を大切にした${name}です。添加物を極力抑え、自然の美味しさをお届けします。
-ご贈答・お土産にも喜ばれる一品です。ぜひお試しください。
+■ 原材料
+${ingFull || "商品パッケージをご確認ください"}
 
-${price ? `■ 価格：${price}（税込）` : ""}
+■ アレルギー情報
+${algLine}${additiveMsg ? `\n${additiveMsg}` : ""}
 
-■ 保存方法
-${storage}`,
+■ 製造者情報
+${mfr || "製造者情報は商品パッケージをご確認ください"}
+${p.manufacturerAddress ? p.manufacturerAddress : ""}
+
+※ 表示内容は変更になる場合があります。最新情報は商品パッケージをご確認ください。`,
 
     amazon: `【商品タイトル案】
-厳選素材使用 ${name} ${vol ? `(${vol})` : ""} ${mfr || ""}
+${mfr ? `[${mfr}] ` : ""}${name}${vol ? ` ${vol}` : ""}${category !== "食品" ? ` | ${category}` : ""}
 
-【5つの特徴】
-✅ ${category}の定番「${name}」
-✅ 主原料：${ings}
-✅ 保存方法：${storage}
-✅ 賞味期限：${bb}
-${allergens !== "なし" ? `✅ アレルゲン表示：${allergens}` : "✅ 主要アレルゲン不使用"}
+【商品の特長】
+• 商品名：${name}
+• 内容量：${vol || "記載なし"}
+• 原材料：${ingMain}${hasAdditive ? "など" : ""}
+• 保存方法：${storageNote || "商品パッケージ参照"}
+• 賞味期限：${bb || "商品パッケージ参照"}
+${additiveMsg ? `• ${additiveMsg}` : ""}
+
+【アレルギー情報】
+${algLine}
 
 【商品説明】
-${memo || `${name}は、${ings}を主原料とした${category}です。`}
-内容量：${vol}　保存：${storage}
-製造者：${mfr || "記載なし"}`,
+${memo || `${name}は${ingMain}を使用した${category}です。`}
+${price ? `\n希望小売価格：${price}（税込）` : ""}
+
+製造者：${mfr || "記載なし"}
+${p.manufacturerAddress ? `所在地：${p.manufacturerAddress}` : ""}`,
 
     base: `${name}
+${vol ? `内容量：${vol}` : ""}${price ? `　${price}（税込）` : ""}
 
-${memo || `こだわりの素材を使った${name}をお届けします。`}
+${memo || `${ingMain}を使った${category}です。`}
 
-▍商品情報
-原材料：${d.ingLabel || "記載なし"}
-内容量：${vol}
-賞味期限：${bb}
-保存方法：${storage}
-${allergens !== "なし" ? `アレルゲン：${allergens}` : ""}
-${price ? `価格：${price}` : ""}
+─────────────────
+原材料：${ingFull || "記載なし"}
+賞味期限：${bb || "商品パッケージをご確認ください"}
+保存方法：${storage || "商品パッケージをご確認ください"}
+${allergens ? `アレルゲン：${allergens}を含む` : ""}
+${additiveMsg || ""}
+─────────────────
+製造者：${mfr || "記載なし"}
+${p.manufacturerAddress || ""}`,
 
-大切な方へのギフトや、毎日の食卓にいかがでしょうか。`,
+    instagram: `${name} 🛒
+${memo ? memo.slice(0, 80) + (memo.length > 80 ? "…" : "") : `${ingMain}を使った${category}です`}
 
-    instagram: `✨ ${name} ✨
+📦 内容量：${vol || "—"}
+🗓 賞味期限：${bb || "—"}
+❄️ 保存：${storageNote || "—"}
+${allergens ? `⚠️ アレルゲン：${allergens}` : "✅ 主要アレルゲン不使用"}
+${price ? `💴 ${price}（税込）` : ""}
 
-${memo ? memo.slice(0,60) + "…" : `こだわり素材の${category}が入荷しました🎉`}
-
-📦 内容量：${vol}
-📅 賞味期限：${bb}
-🌿 ${ings}
-${allergens !== "なし" ? `⚠️ ${allergens}` : ""}
-${price ? `💰 ${price}` : ""}
-
-#${name.replace(/\s/g,"")} #${category} #こだわり #お取り寄せ #グルメ #ギフト #手作り #美味しい #食品`,
+#${name.replace(/[\s　]/g, "")}${category && category !== "食品" ? ` #${category.replace(/\s/g, "")}` : ""} #食品 #手作り #お取り寄せ #ギフト #日本製`,
 
     wholesale: `【業務用・卸向け商品案内】
 
 品名：${name}
 品番：${p.code || "—"}　カテゴリ：${category}
-内容量：${vol}　賞味期限：${bb}
-保存方法：${storage}
-原材料：${d.ingLabel || "—"}
-アレルゲン：${allergens}
+内容量：${vol || "—"}　賞味期限：${bb || "—"}
+保存方法：${storage || "—"}
+
+【原材料・アレルゲン】
+原材料名：${ingFull || "—"}
+アレルゲン：${allergens || "なし"}
+${additiveMsg || ""}
+
+【荷姿・規格】
 荷姿：${p.packaging || "応相談"}
 ケース入数：${p.caseCount || "応相談"}
 製品サイズ：${p.productSize || "応相談"}
 希望小売価格：${price || "応相談"}
 
-製造者：${mfr || "自社製造"}
+【製造者】
+${mfr || "自社製造"}
 ${p.manufacturerAddress ? `所在地：${p.manufacturerAddress}` : ""}
 ${p.manufacturerPhone ? `TEL：${p.manufacturerPhone}` : ""}
 
-※ロット・数量により価格応相談。お気軽にお問い合わせください。`,
+※ロット・数量により価格応相談。`,
 
-    pop: `【${name}】
-${memo ? memo.slice(0,40) : `${ings}を使った${category}`}
+    pop: `${name}
+${memo ? memo.slice(0, 50) : `${ingMain}を使用`}
 
-${vol ? `内容量 ${vol}` : ""}
-${bb ? `賞味期限 ${bb}` : ""}
+内容量　${vol || "—"}
+賞味期限　${bb || "—"}
+保存方法　${storageNote || "—"}
+${allergens ? `アレルゲン　${allergens}` : ""}
 ${price ? `${price}（税込）` : ""}`,
   };
 

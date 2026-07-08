@@ -140,6 +140,7 @@ let saasView = safeGet("fmcc-view") || "dashboard";
 let productDetailId = null;
 let specSheetId = null;
 let specShowCost = false;
+let specShowSig = true;
 let aiDescId = null;
 let aiDescChannel = "rakuten";
 let aiEditText = "";
@@ -2704,11 +2705,11 @@ function specSheetHtml() {
       <div style="font-size:11px;color:#94a3b8">
         発行日：${today}　このドキュメントは${escapeHtml(p.name||"")}の公式規格書です。
       </div>
-      <div class="spec-v2-sig-row">
+      ${specShowSig ? `<div class="spec-v2-sig-row">
         <div class="spec-v2-sig-box"><div class="spec-v2-sig-line"></div>作成者</div>
         <div class="spec-v2-sig-box"><div class="spec-v2-sig-line"></div>確認者</div>
         <div class="spec-v2-sig-box"><div class="spec-v2-sig-line"></div>承認者</div>
-      </div>
+      </div>` : ""}
     </div>
   </div>`;
 
@@ -2721,6 +2722,10 @@ function specSheetHtml() {
       <label class="spec-cost-toggle">
         <input type="checkbox" id="spec-show-cost" ${specShowCost ? "checked" : ""}>
         原価率を印刷に含める
+      </label>
+      <label class="spec-cost-toggle">
+        <input type="checkbox" id="spec-show-sig" ${specShowSig ? "checked" : ""}>
+        承認欄を表示
       </label>
     </div>
     ${specHtml}
@@ -2959,8 +2964,21 @@ function newSettingsHtml() {
   const userKwList = userAdditiveKw.map((kw, i) =>
     `<div class="additive-kw-row"><span>${escapeHtml(kw)}</span><button class="icon-btn" data-del-additive-kw="${i}">×</button></div>`
   ).join("");
+  const savedKey = safeGet("fmcc-openai-key") || "";
+  const keyMasked = savedKey ? "sk-..." + savedKey.slice(-4) : "";
   return saasLayout("設定", `
     <div class="settings-sections">
+      <div class="settings-card">
+        <h3>OpenAI API キー</h3>
+        <p class="notice">登録するとAI相談・AI説明文でChatGPT（gpt-4o-mini）が直接回答します。未登録の場合はテンプレート回答になります。</p>
+        <div class="api-key-row">
+          <input id="openai-key-input" type="password" placeholder="sk-..." value="${escapeHtml(savedKey)}" style="flex:1;font-family:monospace">
+          <button class="action primary" data-action="save-openai-key">保存</button>
+          ${savedKey ? `<button class="action" data-action="clear-openai-key">削除</button>` : ""}
+        </div>
+        ${savedKey ? `<p class="api-key-status ok">✓ APIキー登録済み（${escapeHtml(keyMasked)}）</p>` : `<p class="api-key-status">未登録</p>`}
+        <p class="notice" style="margin-top:8px">APIキーはこのブラウザのlocalStorageにのみ保存されます。外部サーバーには送信されません。<a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">APIキーを取得する →</a></p>
+      </div>
       <div class="settings-card">
         <h3>プラン</h3>
         ${planHtml()}
@@ -3483,6 +3501,7 @@ function bindSaasEvents() {
 
   // 原価率表示トグル
   document.getElementById("spec-show-cost")?.addEventListener("change", e => { specShowCost = e.target.checked; render(); });
+  document.getElementById("spec-show-sig")?.addEventListener("change", e => { specShowSig = e.target.checked; render(); });
 
   // 規格書印刷
   document.querySelectorAll("[data-action='print-spec']").forEach(el => el.addEventListener("click", () => {
@@ -3767,6 +3786,23 @@ body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11
     const i = parseInt(el.dataset.delAdditiveKw);
     userAdditiveKw = userAdditiveKw.filter((_, idx) => idx !== i);
     safeSet("food-label-additive-kw", JSON.stringify(userAdditiveKw));
+    render();
+  }));
+
+  // ── OpenAI APIキー ──
+  document.querySelectorAll("[data-action='save-openai-key']").forEach(el => el.addEventListener("click", () => {
+    const input = document.getElementById("openai-key-input");
+    if (!input) return;
+    const key = input.value.trim();
+    if (!key) { showStatus("APIキーを入力してください"); return; }
+    if (!key.startsWith("sk-")) { showStatus("APIキーは sk- で始まる文字列です"); return; }
+    safeSet("fmcc-openai-key", key);
+    showStatus("APIキーを保存しました");
+    render();
+  }));
+  document.querySelectorAll("[data-action='clear-openai-key']").forEach(el => el.addEventListener("click", () => {
+    safeSet("fmcc-openai-key", "");
+    showStatus("APIキーを削除しました");
     render();
   }));
 

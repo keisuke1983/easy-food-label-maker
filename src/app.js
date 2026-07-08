@@ -7,7 +7,6 @@
   "豆腐": { kcal: 56, protein: 4.9, fat: 3.0, carbs: 2.0, salt: 0 },
   "タピオカ粉": { kcal: 356, protein: 0.2, fat: 0.2, carbs: 87.8, salt: 0 },
   "ベーキングパウダー": { kcal: 100, protein: 0.5, fat: 0.5, carbs: 28, salt: 10 },
-  "きな粉": { kcal: 437, protein: 36.7, fat: 25.7, carbs: 26.4, salt: 0 },
   "食塩": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 99 },
   "塩": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 99 },
   "アーモンドパウダー": { kcal: 609, protein: 18.6, fat: 54.1, carbs: 21, salt: 0 },
@@ -504,7 +503,7 @@ function derive(p) {
   const autoAllergens = detectAllergens(p.ingredients.map((i) => i.name).filter(Boolean));
   const allergens = p.allergensMode === "manual" ? (p.allergensManual || "").split(/[、,・\s]+/).filter(Boolean) : autoAllergens;
   const contamination = buildContaminationText(p);
-  return { autoNutrition, nutrition, autoAllergens, allergens, contamination, ingLabel: buildIngLabel(p.ingredients), storage: p.storage === "自由入力" ? p.storageCustom : p.storage };
+  return { autoNutrition, nutrition, autoAllergens, allergens, contamination, ingLabel: buildIngLabel(p.ingredients), storage: p.storage === "自由入力" ? p.storageCustom : p.storage, nutritionUnit: p.nutritionUnit || "100g当たり" };
 }
 function buildContaminationText(p) {
   if (!p.contaminationEnabled) return "";
@@ -542,7 +541,8 @@ function buildVolume(amount, unit) {
   return `${n}${u}`;
 }
 function toDateInputValue(value) {
-  const m = String(value || "").trim().match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/);
+  const s = String(value || "").trim();
+  const m = s.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/) || s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
   if (!m) return "";
   return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
 }
@@ -981,7 +981,7 @@ function editorHtml(p) {
         ${manufacturerEditorHtml(p)}
         ${section("印刷・サイズ設定", printSettingsBodyHtml())}
         ${historyHtml(p)}
-        <datalist id="ing-master-list">${ingMaster.map((n) => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
+        <datalist id="ing-master-list">${[...ingMaster, ...Object.keys(NUTRITION_DB)].filter((v,i,a)=>a.indexOf(v)===i).map(n => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
       </div>
       <div class="preview-column">${previewHtml(p, d)}</div>
     </div>
@@ -1029,7 +1029,7 @@ function detectBestBeforeMode(v) {
   if (!v) return "date";
   if (/^製造日より\d+日$/.test(v)) return "days";
   if (/^製造日より\d+[かヶ]月$/.test(v)) return "months";
-  if (/^\d{4}[./-]/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v)) return "date";
+  if (/^\d{4}[./-]/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{4}年/.test(v)) return "date";
   return "text";
 }
 function productInfoHtml(p) {
@@ -1077,16 +1077,6 @@ function productInfoHtml(p) {
       </div>
     </div>`;
 }
-function ingredientHtml(i, idx) {
-  const est = i.name && i.weight ? estimateNutrition(i.name) : null;
-  return `<div class="ing-row" draggable="true" data-ing-idx="${idx}">
-    <span class="drag-handle" title="ドラッグで並び替え">⠿</span>
-    <input list="ing-master-list" data-ing-name="${idx}" value="${escapeHtml(i.name)}" placeholder="原材料名">
-    <input type="number" data-ing-weight="${idx}" value="${escapeHtml(i.weight)}" placeholder="g">
-    <div class="badges">${isAdditive(i.name) ? `<b class="violet">添加物</b>` : ""}${est ? `<b class="${est.estimated ? "amber" : "green"}">${est.estimated ? "推定" : "DB"}</b>` : ""}</div>
-    <button class="icon-btn" data-remove-ing="${idx}">×</button>
-  </div>`;
-}
 function janCodeHtml(p) {
   if (!canUseJanCode()) {
     return section("JANコード", `<p class="notice">JANコードはスタンダード以上のプランで追加できます。</p>`);
@@ -1099,7 +1089,10 @@ function nutritionEditorHtml(p, d) {
   const n = p.nutritionMode === "manual" ? { ...d.autoNutrition, ...p.nutritionManual } : d.autoNutrition;
   const disabled = p.nutritionMode === "manual" ? "" : "disabled";
   const row = (key, label, unit) => `<label><span>${label}</span><input type="number" ${disabled} data-nutr="${key}" value="${escapeHtml(n[key])}"><small>${unit}</small></label>`;
-  return section("栄養成分表示", `<div class="mode-row"><button class="${p.nutritionMode !== "manual" ? "selected" : ""}" data-nutr-mode="auto">自動計算</button><button class="${p.nutritionMode === "manual" ? "selected" : ""}" data-nutr-mode="manual">自分で編集</button></div><div class="nutrition-grid">${row("kcal", "エネルギー", "kcal")}${row("protein", "たんぱく質", "g")}${row("fat", "脂質", "g")}${row("carbs", "炭水化物", "g")}${row("salt", "食塩相当量", "g")}</div>${d.autoNutrition.hasEst ? `<p class="notice">一部の原材料は近い食品成分データで推定しています。</p>` : ""}`, true);
+  const nutrUnit = p.nutritionUnit || "100g当たり";
+  const nutrUnits = ["100g当たり", "1食分当たり", "1個当たり"];
+  const unitSelector = `<div class="nutr-unit-row"><span class="nutr-unit-label">表示単位：</span>${nutrUnits.map(u => `<button class="nutr-unit-btn${nutrUnit===u?" selected":""}" data-field="nutritionUnit" data-value="${u}">${u}</button>`).join("")}</div>`;
+  return section("栄養成分表示", `${unitSelector}<div class="mode-row"><button class="${p.nutritionMode !== "manual" ? "selected" : ""}" data-nutr-mode="auto">自動計算</button><button class="${p.nutritionMode === "manual" ? "selected" : ""}" data-nutr-mode="manual">自分で編集</button></div><div class="nutrition-grid">${row("kcal", "エネルギー", "kcal")}${row("protein", "たんぱく質", "g")}${row("fat", "脂質", "g")}${row("carbs", "炭水化物", "g")}${row("salt", "食塩相当量", "g")}</div>${d.autoNutrition.hasEst ? `<p class="notice">一部の原材料は近い食品成分データで推定しています。</p>` : ""}`, true);
 }
 function allergenEditorHtml(p, d) {
   return section("自動検出アレルゲン", `<div class="mode-row"><button class="${p.allergensMode !== "manual" ? "selected" : ""}" data-alg-mode="auto">自動検出</button><button class="${p.allergensMode === "manual" ? "selected" : ""}" data-alg-mode="manual">自分で編集</button></div>${p.allergensMode === "manual" ? `<input class="wide-input" data-field="allergensManual" value="${escapeHtml(p.allergensManual || "")}" placeholder="例：小麦、卵、乳">` : `<div class="chips allergen">${d.autoAllergens.length ? d.autoAllergens.map((a) => `<span>${escapeHtml(a)}</span>`).join("") : "<em>検出なし</em>"}</div>`}`);
@@ -1244,14 +1237,14 @@ function basicLabelHtml(p, d) {
   ].filter(Boolean);
   const maker = makerLines.map((l) => escapeHtml(l)).join("<br>");
   const rows = [["名称", p.name || "ー"], ["原材料名", d.ingLabel || "ー"], ["内容量", p.volume || "ー"], ["賞味期限", p.bestBefore || "ー"], ["保存方法", d.storage || "ー"]];
-  selectedMfrTypes(p).forEach((type) => rows.push([type, maker || "ー"]));
   if (d.allergens.length) rows.push(["アレルゲン", `${d.allergens.join("・")}を含む`]);
+  const makerRows = selectedMfrTypes(p).map(type => `<tr><th>${escapeHtml(type)}</th><td>${maker || "ー"}</td></tr>`).join("");
   const barcode = canUseJanCode() ? janBarcodeSvg(p.janCode) : "";
-  return `<div class="label-paper basic-label"><table><tbody>${rows.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join("")}</tbody></table>${barcode ? `<div class="label-barcode-footer"><div class="barcode-title">JANコード</div>${barcode}</div>` : ""}</div>`;
+  return `<div class="label-paper basic-label"><table><tbody>${rows.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join("")}${makerRows}</tbody></table>${barcode ? `<div class="label-barcode-footer"><div class="barcode-title">JANコード</div>${barcode}</div>` : ""}</div>`;
 }
 function nutritionLabelHtml(d) {
   const n = d.nutrition;
-  return `<div class="label-paper nutrition-label"><h3>栄養成分表示</h3><p>100g当たり</p><table><tbody>
+  return `<div class="label-paper nutrition-label"><h3>栄養成分表示</h3><p>${escapeHtml(d.nutritionUnit||"100g当たり")}</p><table><tbody>
     <tr><th>エネルギー</th><td>${escapeHtml(n.kcal)}kcal</td></tr>
     <tr><th>たんぱく質</th><td>${escapeHtml(n.protein)}g</td></tr>
     <tr><th>脂質</th><td>${escapeHtml(n.fat)}g</td></tr>
@@ -1502,6 +1495,11 @@ function bindEvents() {
     const p = currentProduct();
     if (el.dataset.nutrMode === "manual") p.nutritionManual = { ...derive(p).autoNutrition };
     p.nutritionMode = el.dataset.nutrMode;
+    render();
+  }));
+  document.querySelectorAll(".nutr-unit-btn[data-value]").forEach((el) => el.addEventListener("click", () => {
+    const p = currentProduct();
+    p.nutritionUnit = el.dataset.value;
     render();
   }));
   document.querySelectorAll("[data-nutr]").forEach((el) => el.addEventListener("input", () => {
@@ -2409,6 +2407,22 @@ function dashboardHtml() {
         </div>`}
   </div>`;
 
+  const costSummary = (() => {
+    const withCost = products.map(p => ({ p, c: calcCosts(p) })).filter(({c}) => c.totalCost > 0);
+    if (!withCost.length) return "";
+    const rates = withCost.filter(({c}) => c.costRate !== null).map(({c}) => c.costRate);
+    const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
+    const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
+    return `<div class="dash-cost-summary">
+      <div class="dash-cost-title">原価サマリー</div>
+      <div class="dash-cost-grid">
+        ${avgRate!==null?`<div class="dash-cost-item"><div class="dash-cost-val ${avgRate>40?"warn":avgRate>30?"amber":""}">${avgRate}%</div><div class="dash-cost-lbl">平均原価率</div></div>`:""}
+        ${best?`<div class="dash-cost-item"><div class="dash-cost-val green">${best.c.profitRate}%</div><div class="dash-cost-lbl">最高粗利率<br><small>${escapeHtml(best.p.name||"")}</small></div></div>`:""}
+        <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
+      </div>
+    </div>`;
+  })();
+
   return saasLayout("ダッシュボード", `
     ${todoCard}
     <div class="dash-stats">
@@ -2417,6 +2431,7 @@ function dashboardHtml() {
       <div class="stat-card"><div class="stat-num">${products.filter(p=>p.starred).length}</div><div class="stat-lbl">お気に入り</div></div>
       <div class="stat-card blue"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
     </div>
+    ${costSummary}
     <div class="dash-quick-actions">
       ${registerBtnHtml()}
       <button class="quick-action-btn" data-nav="products">商品一覧を見る</button>
@@ -2582,6 +2597,7 @@ function productDetailHtml() {
     </div>
     ${imageUploadSectionHtml(p)}
     ${costEditorHtml(p)}
+    <button class="fab-save" data-action="save-master">保存する</button>
   `);
 }
 
@@ -2677,7 +2693,7 @@ function specSheetHtml() {
 
       <div class="spec-v2-image-col">
         ${productImg}
-        <div class="spec-v2-qr">QR<br>コード</div>
+        <img class="spec-v2-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent([p.name, p.janCode ? "JAN:"+p.janCode : "", p.manufacturerName].filter(Boolean).join(" / "))}" alt="QR" loading="lazy" onerror="this.style.display='none'">
         ${specShowCost && costs.costRate !== null ? `<div style="text-align:center;font-size:11px;color:#64748b;margin-top:4px">
           原価率<br><span class="${mc}" style="font-size:18px;font-weight:700">${costs.costRate}%</span>
         </div>` : ""}
@@ -3021,6 +3037,11 @@ function saveMaster() {
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
   saveProducts();
   showStatus("保存しました");
+  document.querySelectorAll("[data-action='save-master']").forEach(btn => {
+    btn.textContent = "✓ 保存済み";
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = "保存する"; btn.disabled = false; }, 2000);
+  });
 }
 
 // ══ AI相談機能 ═══════════════════════════════════════════════════════════
@@ -3486,7 +3507,7 @@ body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11
 .spec-v2-image-col{display:flex;flex-direction:column;align-items:center;gap:6px}
 .spec-v2-product-img{width:68px;height:68px;object-fit:cover;border:1px solid #e2e8f0;border-radius:4px}
 .spec-v2-product-img-placeholder{width:68px;height:68px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:18px;color:#cbd5e1}
-.spec-v2-qr{display:none}
+.spec-v2-qr{width:72px;height:72px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;display:block}
 /* tables */
 .spec-v2-section-label{font-size:9px;font-weight:700;color:#fff;background:#475569;padding:2px 6px;border-radius:3px;margin-bottom:2px;margin-top:6px;display:inline-block}
 .spec-v2-tables .spec-v2-section-label:first-child{margin-top:0}

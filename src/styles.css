@@ -1612,3 +1612,12 @@ button:disabled {
 .volume-unit-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .volume-unit-tabs button { padding: 4px 8px; font-size: 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; cursor: pointer; }
 .volume-unit-tabs button.selected { background: #1e293b; color: #fff; border-color: #1e293b; }
+
+/* 原材料 重量割合バッジ・ソートボタン */
+.ing-pct { font-size: 10px; color: #64748b; background: #f1f5f9; border-radius: 4px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0; }
+.ing-sort-row { display: flex; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+
+/* 添加物キーワード管理 */
+.additive-kw-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.additive-kw-row { display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 10px; font-size: 13px; }
+.additive-kw-add-row { display: flex; gap: 8px; align-items: center; }

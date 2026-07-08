@@ -65,7 +65,11 @@
 };
 
 const FUZZY = [["上白糖", "砂糖"], ["グラニュー糖", "砂糖"], ["てんさい糖", "きび糖"], ["製菓用米粉", "米粉"], ["上新粉", "米粉"], ["アーモンド粉", "アーモンドパウダー"], ["菜種油", "なたね油"], ["サラダ油", "なたね油"], ["植物油", "なたね油"], ["マーガリン", "ショートニング"], ["小麦", "小麦粉"], ["卵白", "卵"], ["卵黄", "卵"], ["鶏卵", "卵"], ["蜂蜜", "はちみつ"], ["胡麻", "ごま"], ["脱脂粉乳", "牛乳"], ["スキムミルク", "牛乳"]];
-const ADDITIVE_KW = ["ベーキングパウダー", "膨張剤", "膨脹剤", "乳化剤", "香料", "酸化防止剤", "着色料", "保存料", "増粘剤", "甘味料", "酸味料", "pH調整剤", "トレハロース", "ソルビトール", "加工澱粉", "加工でんぷん", "凝固剤", "安定剤", "ゲル化剤", "漂白剤", "防かび剤", "防カビ剤", "発色剤", "光沢剤", "豆腐用凝固剤", "にがり", "塩化マグネシウム", "グルコノデルタラクトン", "硫酸カルシウム", "調味料", "酵素", "苦味料", "軟化剤"];
+const ADDITIVE_KW_DEFAULT = ["ベーキングパウダー", "膨張剤", "膨脹剤", "乳化剤", "香料", "酸化防止剤", "着色料", "保存料", "増粘剤", "甘味料", "酸味料", "pH調整剤", "トレハロース", "ソルビトール", "加工澱粉", "加工でんぷん", "凝固剤", "安定剤", "ゲル化剤", "漂白剤", "防かび剤", "防カビ剤", "発色剤", "光沢剤", "豆腐用凝固剤", "にがり", "塩化マグネシウム", "グルコノデルタラクトン", "硫酸カルシウム", "調味料", "酵素", "苦味料", "軟化剤"];
+let userAdditiveKw = (() => { try { return JSON.parse(safeGet("food-label-additive-kw") || "[]"); } catch { return []; } })();
+function getAdditiveKw() { return [...ADDITIVE_KW_DEFAULT, ...userAdditiveKw]; }
+// 後方互換: ADDITIVE_KW を参照している箇所が isAdditive() 経由になっているため定数は残す
+const ADDITIVE_KW = ADDITIVE_KW_DEFAULT;
 const ALLERGEN_RULES = [
   ["えび", ["えび", "エビ", "海老"]], ["かに", ["かに", "カニ", "蟹"]], ["くるみ", ["くるみ", "クルミ", "胡桃"]],
   ["小麦", ["小麦", "薄力粉", "強力粉", "中力粉", "小麦粉", "全粒粉"]], ["そば", ["そば", "蕎麦"]],
@@ -107,7 +111,7 @@ let currentPlan = safeGet("food-label-plan") || "free";
 let view = "saas";
 let editId = null;
 let printTarget = "both";
-let printCfg = SIZE_PRESETS[1];
+let printCfg = (() => { try { const s = JSON.parse(safeGet("food-label-print-cfg") || "null"); return s && s.w ? s : SIZE_PRESETS[1]; } catch { return SIZE_PRESETS[1]; } })();
 let renderTimer = null;
 let printPreviewOpen = false;
 let assistMessage = "";
@@ -330,8 +334,24 @@ function loadHistory(id) {
   try { return JSON.parse(safeGet(`food-label-history-${id}`) || "[]"); } catch { return []; }
 }
 function exportCsv() {
-  const headers = ["id", "name", "volume", "bestBefore", "storage", "storageCustom", "manufacturerName", "manufacturerAddress", "manufacturerPhone", "manufacturerPostal", "janCode", "updatedAt"];
-  const rows = products.map((p) => headers.map((h) => `"${String(p[h] || "").replace(/"/g, '""')}"`).join(","));
+  const baseHeaders = ["id", "name", "volume", "bestBefore", "storage", "storageCustom", "manufacturerName", "manufacturerAddress", "manufacturerPhone", "manufacturerPostal", "janCode", "updatedAt"];
+  const costHeaders = ["price", "costMode", "directCost", "directPackaging", "directShipping", "directOther", "totalCost", "costRate", "grossProfit"];
+  const headers = [...baseHeaders, ...costHeaders];
+  const rows = products.map((p) => {
+    const costs = calcCosts(p);
+    const costVals = {
+      price: p.price || "",
+      costMode: p.costMode || "direct",
+      directCost: p.directCost || "",
+      directPackaging: p.directPackaging || "",
+      directShipping: p.directShipping || "",
+      directOther: p.directOther || "",
+      totalCost: costs.totalCost > 0 ? Math.round(costs.totalCost) : "",
+      costRate: costs.costRate !== null ? costs.costRate + "%" : "",
+      grossProfit: costs.price > 0 ? Math.round(costs.gross) : "",
+    };
+    return headers.map((h) => `"${String(costVals[h] !== undefined ? costVals[h] : (p[h] || "")).replace(/"/g, '""')}"`).join(",");
+  });
   const csv = [headers.join(","), ...rows].join("\r\n");
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -435,7 +455,7 @@ function estimateNutrition(name) {
   for (const [k, d] of Object.entries(NUTRITION_DB)) if (t.includes(k) || k.includes(t)) return { data: d, estimated: true, key: k };
   return { data: { kcal: 320, protein: 5, fat: 8, carbs: 55, salt: 0.3 }, estimated: true, key: "一般加工食品" };
 }
-function isAdditive(name) { return ADDITIVE_KW.some((k) => name.includes(k)); }
+function isAdditive(name) { return getAdditiveKw().some((k) => name.includes(k)); }
 function calcNutrition(ingredients) {
   const sum = { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0 };
   let total = 0, hasEst = false;
@@ -932,7 +952,28 @@ function editorHtml(p) {
         ${section("商品情報", productInfoHtml(p))}
         ${janCodeHtml(p)}
         ${section("保存方法", storageHtml)}
-        ${section("原材料", `<div class="ing-list" id="ing-list">${p.ingredients.map((i, idx) => ingredientHtml(i, idx)).join("")}</div><button class="action" data-action="add-ing">＋ 原材料を追加</button>${d.ingLabel ? `<div class="ing-preview-wrap"><div class="ing-preview-label">ラベル表示プレビュー</div><div class="ing-preview">${escapeHtml(d.ingLabel)}</div><button class="action-sub" data-action="sort-additives">添加物を末尾に並べ直す</button></div>` : ""}`)}
+        ${section("原材料", (() => {
+          const totalW = p.ingredients.reduce((s, i) => s + (parseFloat(i.weight) || 0), 0);
+          const ingListHtml = p.ingredients.map((i, idx) => {
+            const pct = totalW > 0 && parseFloat(i.weight) ? Math.round(parseFloat(i.weight) / totalW * 100) : null;
+            const pctBadge = pct !== null ? `<span class="ing-pct">${pct}%</span>` : "";
+            const est = i.name && i.weight ? estimateNutrition(i.name) : null;
+            return `<div class="ing-row" draggable="true" data-ing-idx="${idx}">
+              <span class="drag-handle" title="ドラッグで並び替え">⠿</span>
+              <input list="ing-master-list" data-ing-name="${idx}" value="${escapeHtml(i.name)}" placeholder="原材料名">
+              <input type="number" data-ing-weight="${idx}" value="${escapeHtml(i.weight)}" placeholder="g">
+              ${pctBadge}
+              <div class="badges">${isAdditive(i.name) ? `<b class="violet">添加物</b>` : ""}${est ? `<b class="${est.estimated ? "amber" : "green"}">${est.estimated ? "推定" : "DB"}</b>` : ""}</div>
+              <button class="icon-btn" data-remove-ing="${idx}">×</button>
+            </div>`;
+          }).join("");
+          const sortBtns = `<div class="ing-sort-row">
+            <button class="action-sub" data-action="sort-by-weight">重量順に並べ直す</button>
+            <button class="action-sub" data-action="sort-additives">添加物を末尾へ</button>
+          </div>`;
+          const preview = d.ingLabel ? `<div class="ing-preview-wrap"><div class="ing-preview-label">ラベル表示プレビュー</div><div class="ing-preview">${escapeHtml(d.ingLabel)}</div></div>` : "";
+          return `<div class="ing-list" id="ing-list">${ingListHtml}</div><button class="action" data-action="add-ing">＋ 原材料を追加</button>${sortBtns}${preview}`;
+        })())}
         ${nutritionEditorHtml(p, d)}
         ${allergenEditorHtml(p, d)}
         ${contaminationEditorHtml(p)}
@@ -1431,6 +1472,12 @@ function bindEvents() {
     p.ingredients = [...normal, ...additive];
     render();
   }));
+  // ② 重量順に並べ直す
+  document.querySelectorAll("[data-action='sort-by-weight']").forEach(el => el.addEventListener("click", () => {
+    const p = currentProduct();
+    p.ingredients = [...p.ingredients].sort((a, b) => (parseFloat(b.weight) || 0) - (parseFloat(a.weight) || 0));
+    render();
+  }));
   document.querySelectorAll("[data-ing-name]").forEach((el) => el.addEventListener("input", () => {
     currentProduct().ingredients[Number(el.dataset.ingName)].name = el.value;
   }));
@@ -1613,14 +1660,17 @@ function bindEvents() {
   });
   document.querySelector("[data-size]")?.addEventListener("change", (e) => {
     printCfg = { ...(SIZE_PRESETS.find((s) => s.label === e.target.value) || SIZE_PRESETS[1]) };
+    safeSet("food-label-print-cfg", JSON.stringify(printCfg));
     render();
   });
   document.querySelectorAll("[data-print-cfg]").forEach((el) => el.addEventListener("input", () => {
     printCfg = { ...printCfg, label: "自由入力", [el.dataset.printCfg]: el.value };
+    safeSet("food-label-print-cfg", JSON.stringify(printCfg));
     scheduleRender();
   }));
   document.querySelectorAll("[data-print-cfg]").forEach((el) => el.addEventListener("change", () => {
     printCfg = { ...printCfg, label: "自由入力", [el.dataset.printCfg]: el.value };
+    safeSet("food-label-print-cfg", JSON.stringify(printCfg));
     scheduleRender();
   }));
   document.querySelectorAll("[data-target-choice]").forEach((el) => el.addEventListener("click", () => {
@@ -2890,6 +2940,9 @@ function aiDescriptionsHtml() {
 
 // ── 設定（新版） ──────────────────────────────────────────────────────
 function newSettingsHtml() {
+  const userKwList = userAdditiveKw.map((kw, i) =>
+    `<div class="additive-kw-row"><span>${escapeHtml(kw)}</span><button class="icon-btn" data-del-additive-kw="${i}">×</button></div>`
+  ).join("");
   return saasLayout("設定", `
     <div class="settings-sections">
       <div class="settings-card">
@@ -2900,10 +2953,25 @@ function newSettingsHtml() {
       <div class="settings-card">
         <h3>データ管理</h3>
         <div class="settings-actions">
-          <button class="action" data-action="export-csv">↓ CSV出力</button>
+          <button class="action" data-action="export-csv">↓ CSV出力（原価データ含む）</button>
           <label class="action secondary import-label">↑ CSVインポート<input type="file" accept=".csv" data-csv-import style="display:none"></label>
         </div>
         <p class="notice">データはすべてこのブラウザのlocalStorageに保存されています。</p>
+      </div>
+      <div class="settings-card">
+        <h3>添加物キーワード管理</h3>
+        <p class="notice" style="margin-bottom:10px">「添加物」と判定するキーワードを追加できます。原材料名に含まれていると自動で添加物バッジが付きます。</p>
+        <div class="additive-kw-list">
+          ${userKwList || `<p class="empty-note">追加キーワードなし（デフォルトのみ使用中）</p>`}
+        </div>
+        <div class="additive-kw-add-row">
+          <input id="additive-kw-input" placeholder="例：重曹、天然香料" style="flex:1">
+          <button class="action" data-action="add-additive-kw">追加</button>
+        </div>
+        <details style="margin-top:10px">
+          <summary style="font-size:11px;color:#94a3b8;cursor:pointer">デフォルトのキーワード一覧 (${ADDITIVE_KW_DEFAULT.length}件)</summary>
+          <p class="notice" style="margin-top:4px">${ADDITIVE_KW_DEFAULT.join("、")}</p>
+        </details>
       </div>
       <div class="settings-card">
         <h3>チュートリアル</h3>
@@ -3507,6 +3575,18 @@ body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11
     aiResultTa.addEventListener("input", () => { aiEditText = aiResultTa.value; });
   }
 
+  // 商品削除（確認モーダル付き）
+  document.querySelectorAll("[data-del]").forEach(el => el.addEventListener("click", () => {
+    const p = products.find(x => x.id === el.dataset.del);
+    if (!p) return;
+    showModal({
+      message: `「${p.name || "この商品"}」を削除しますか？\nこの操作は取り消せません。`,
+      confirmLabel: "削除する",
+      cancelLabel: "キャンセル",
+      onConfirm: () => { products = products.filter(x => x.id !== p.id); saveProducts(); render(); },
+    });
+  }));
+
   // ★ お気に入りトグル
   document.querySelectorAll("[data-toggle-star]").forEach(el => el.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -3651,6 +3731,23 @@ body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11
   ["directCost", "price", "directPackaging", "directShipping", "directOther"].forEach(f => {
     document.querySelectorAll(`[data-master-field="${f}"]`).forEach(el => el.addEventListener("input", refreshCostKpis));
   });
+
+  // ── 添加物キーワード管理 ──
+  document.querySelectorAll("[data-action='add-additive-kw']").forEach(el => el.addEventListener("click", () => {
+    const input = document.getElementById("additive-kw-input");
+    if (!input) return;
+    const kws = input.value.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
+    if (!kws.length) return;
+    userAdditiveKw = [...new Set([...userAdditiveKw, ...kws])];
+    safeSet("food-label-additive-kw", JSON.stringify(userAdditiveKw));
+    render();
+  }));
+  document.querySelectorAll("[data-del-additive-kw]").forEach(el => el.addEventListener("click", () => {
+    const i = parseInt(el.dataset.delAdditiveKw);
+    userAdditiveKw = userAdditiveKw.filter((_, idx) => idx !== i);
+    safeSet("food-label-additive-kw", JSON.stringify(userAdditiveKw));
+    render();
+  }));
 
   // ── AI相談 ──
   const consultSel = document.getElementById("consult-product-sel");

@@ -1328,9 +1328,9 @@ button:disabled {
     max-width: 100%; page-break-after: avoid;
   }
   /* 2カラムを維持して画像を小さく */
-  .spec-v2-body { grid-template-columns: 1fr 120px; gap: 12px; margin-bottom: 12px; }
-  .spec-v2-product-img { width: 110px; height: 110px; }
-  .spec-v2-product-img-placeholder { width: 110px; height: 110px; }
+  .spec-v2-body { grid-template-columns: 1fr 72px; gap: 8px; margin-bottom: 8px; }
+  .spec-v2-product-img { width: 68px; height: 68px; }
+  .spec-v2-product-img-placeholder { width: 68px; height: 68px; font-size: 18px; }
   .spec-v2-header { margin-bottom: 10px; padding-bottom: 8px; }
   .spec-v2-header h1 { font-size: 18px; }
   .spec-v2-section-label { font-size: 10px; padding: 3px 8px; margin-bottom: 2px; }

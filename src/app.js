@@ -745,7 +745,7 @@ function editorHtml(p) {
         ${manufacturerEditorHtml(p)}
         ${section("印刷・サイズ設定", printSettingsBodyHtml())}
         ${historyHtml(p)}
-        <datalist id="ing-master-list">${[...ingMaster, ...Object.keys(NUTRITION_DB)].filter((v,i,a)=>a.indexOf(v)===i).map(n => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
+        <datalist id="ing-master-list">${[...ingMaster, ...Object.keys(NUTRITION_DB)].filter((v,i,a)=>a.indexOf(v)===i && !v.includes("/") && !v.includes("／")).map(n => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
       </div>
       <div class="preview-column">${previewHtml(p, d)}</div>
     </div>

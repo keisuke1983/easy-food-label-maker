@@ -3104,21 +3104,69 @@ function aiConsultHtml() {
   if (!aiConsultProductId && productList.length) aiConsultProductId = productList[0].id;
   const rawP = products.find(x => x.id === aiConsultProductId);
   if (!rawP && productList.length === 0) {
-    return saasLayout("AI相談", "<div class=\"empty-state\"><p>商品を先に登録してください。</p><button class=\"action primary\" data-nav=\"products\">商品管理へ</button></div>");
+    return saasLayout("AI相談", `
+      <div class="empty-state">
+        <p>商品を先に登録してください。</p>
+        <button class="action primary" data-nav="products">商品管理へ</button>
+      </div>`);
   }
   const ep = rawP ? extendProductMaster(rawP) : extendProductMaster(productList[0]);
   const history = getConsultHistory(ep.id);
   const displayName = ep.internalName || ep.name || "（名称未入力）";
-  const productSelect = productList.map(px => "<option value=\"" + escapeHtml(px.id) + "\"" + (px.id === aiConsultProductId ? " selected" : "") + ">" + escapeHtml(px.internalName || px.name || "（名称未入力）") + "</option>").join("");
-  const templateBtns = CONSULT_TEMPLATES.map(t => "<button class=\"consult-tpl-btn\" data-consult-key=\"" + escapeHtml(t.key) + "\" data-consult-q=\"" + escapeHtml(t.label) + "\">" + escapeHtml(t.label) + "</button>").join("");
-  const histHtml = history.length
-    ? history.map(msg => "<div class=\"consult-msg consult-msg-" + escapeHtml(msg.role) + "\"><div class=\"consult-msg-label\">" + (msg.role === "user" ? "質問" : "🤖 AI回答") + "</div><div class=\"consult-msg-body\">" + (msg.role === "assistant" ? renderMarkdown(msg.content) : escapeHtml(msg.content)) + "</div></div>").join("")
-    : "<div class=\"consult-empty\">テンプレートを選ぶか、テキストボックスに質問を入力して送信してください。</div>";
-  const d2 = derive(ep);
-  const ls = "style=\"width:" + escapeHtml(String(printCfg.w || "90")) + "mm;font-size:" + escapeHtml(String(printCfg.fs || "7.5")) + "pt;\"";
-  const previewArea = printablePreviewHtml(ep, d2, ls, false);
   const hasApiKey = !!(sessionStorage.getItem("fmcc-openai-key") || "");
-  return saasLayout("AI相談", "<div class=\"consult-layout\">\n  <div class=\"consult-left\">\n    <div class=\"consult-top-bar\">\n      <label class=\"field-inline\"><span>商品</span><select id=\"consult-product-sel\">" + productSelect + "</select></label>\n      <button class=\"btn-sm btn-danger\" id=\"consult-clear\">履歴クリア</button>\n    </div>\n    <div class=\"consult-templates\">\n      <div class=\"consult-tpl-title\">ワンクリック質問</div>\n      <div class=\"consult-tpl-grid\">" + templateBtns + "</div>\n    </div>\n    <div class=\"consult-history\" id=\"consult-history\">" + histHtml + "</div>\n    <div class=\"consult-input-area\">\n      <textarea class=\"consult-textarea\" id=\"consult-input\" placeholder=\"食品表示についてご質問ください...\">" + escapeHtml(aiConsultInput) + "</textarea>\n      <button class=\"action primary consult-send-btn" + (aiConsultSending ? " disabled" : "") + "\" id=\"consult-send\"" + (aiConsultSending ? " disabled" : "") + ">" + (aiConsultSending ? "回答中..." : "送信 ▶") + "</button>\n    </div>\n    " + (hasApiKey ? "" : "<p class=\"notice\">💡 設定画面でOpenAI APIキーを登録すると、ChatGPTが直接回答します（現在はテンプレート回答）</p>") + "\n  </div>\n  <div class=\"consult-right\">\n    <div class=\"consult-preview-title\">ラベルプレビュー（" + escapeHtml(displayName) + "）</div>\n    <div class=\"consult-preview-wrap\">" + previewArea + "</div>\n  </div>\n</div>");
+
+  const productSelect = productList.map(px =>
+    `<option value="${escapeHtml(px.id)}"${px.id === aiConsultProductId ? " selected" : ""}>
+      ${escapeHtml(px.internalName || px.name || "（名称未入力）")}
+    </option>`
+  ).join("");
+
+  const templateBtns = CONSULT_TEMPLATES.map(t =>
+    `<button class="consult-tpl-btn" data-consult-key="${escapeHtml(t.key)}" data-consult-q="${escapeHtml(t.label)}">
+      ${escapeHtml(t.label)}
+    </button>`
+  ).join("");
+
+  const histHtml = history.length
+    ? history.map(msg => `
+        <div class="consult-msg consult-msg-${escapeHtml(msg.role)}">
+          <div class="consult-msg-label">${msg.role === "user" ? "質問" : "🤖 AI回答"}</div>
+          <div class="consult-msg-body">${msg.role === "assistant" ? renderMarkdown(msg.content) : escapeHtml(msg.content)}</div>
+        </div>`).join("")
+    : `<div class="consult-empty">テンプレートを選ぶか、テキストボックスに質問を入力して送信してください。</div>`;
+
+  const d2 = derive(ep);
+  const labelStyle = `style="width:${escapeHtml(String(printCfg.w || "90"))}mm;font-size:${escapeHtml(String(printCfg.fs || "7.5"))}pt;"`;
+  const previewArea = printablePreviewHtml(ep, d2, labelStyle, false);
+
+  return saasLayout("AI相談", `
+    <div class="consult-layout">
+      <div class="consult-left">
+        <div class="consult-top-bar">
+          <label class="field-inline">
+            <span>商品</span>
+            <select id="consult-product-sel">${productSelect}</select>
+          </label>
+          <button class="btn-sm btn-danger" id="consult-clear">履歴クリア</button>
+        </div>
+        <div class="consult-templates">
+          <div class="consult-tpl-title">ワンクリック質問</div>
+          <div class="consult-tpl-grid">${templateBtns}</div>
+        </div>
+        <div class="consult-history" id="consult-history">${histHtml}</div>
+        <div class="consult-input-area">
+          <textarea class="consult-textarea" id="consult-input" placeholder="食品表示についてご質問ください...">${escapeHtml(aiConsultInput)}</textarea>
+          <button class="action primary consult-send-btn${aiConsultSending ? " disabled" : ""}" id="consult-send"${aiConsultSending ? " disabled" : ""}>
+            ${aiConsultSending ? "回答中..." : "送信 ▶"}
+          </button>
+        </div>
+        ${hasApiKey ? "" : `<p class="notice">💡 <a class="field-link" data-nav="settings-nav">設定画面</a>でOpenAI APIキーを登録するとChatGPTが直接回答します（現在はテンプレート回答）</p>`}
+      </div>
+      <div class="consult-right">
+        <div class="consult-preview-title">ラベルプレビュー（${escapeHtml(displayName)}）</div>
+        <div class="consult-preview-wrap">${previewArea}</div>
+      </div>
+    </div>`);
 }
 
 // ── SaaSナビゲーション イベントバインド ──────────────────────────────

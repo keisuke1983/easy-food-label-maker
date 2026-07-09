@@ -1748,3 +1748,7 @@ button:disabled {
   .saas-layout { flex-direction: column; }
   .saas-sidebar { width: 100% !important; }
 }
+
+/* ── チーム共有 JSON (#10) ── */
+.share-btn { background: #f0fdf4; color: #15803d; border-color: #86efac; }
+.share-btn:hover { background: #dcfce7; }

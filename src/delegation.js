@@ -56,6 +56,7 @@ function setupDelegation() {
         case "download-image": downloadImageLabel(); return;
         case "batch-print": batchPrint(); return;
         case "export-csv": exportCsv(); return;
+        case "export-json": exportJson(); return;
         case "save-mfr-tpl": { const nameEl=document.getElementById("mfr-tpl-name"); const label=nameEl?.value?.trim(); if(!label){showStatus("テンプレート名を入力してください");return;} const p=currentProduct(); mfrTemplates=[...mfrTemplates.filter(t=>t.label!==label),{label,name:p.manufacturerName,postal:p.manufacturerPostal,address:p.manufacturerAddress,phone:p.manufacturerPhone}]; safeSet("food-label-mfr-templates",JSON.stringify(mfrTemplates)); showStatus(`「${label}」を保存しました`); return; }
         case "del-mfr-tpl": { const sel=document.querySelector("[data-mfr-tpl-select]"); const idx=Number(sel?.value); if(isNaN(idx)||!mfrTemplates[idx])return; mfrTemplates.splice(idx,1); safeSet("food-label-mfr-templates",JSON.stringify(mfrTemplates)); render(); return; }
         case "print-spec": doPrintSpec(); return;
@@ -275,6 +276,7 @@ function setupDelegation() {
     if (t.matches("[data-ai-product-select]")) { aiDescId=t.value; aiEditText=""; render(); return; }
     if (t.matches("[data-sel-print]"))         { t.checked?selectedForPrint.add(t.dataset.selPrint):selectedForPrint.delete(t.dataset.selPrint); render(); return; }
     if (t.matches("[data-csv-import]"))        { if(t.files[0]) importCsvFile(t.files[0]); return; }
+    if (t.matches("[data-json-import]"))       { if(!t.files[0]) return; const f=t.files[0]; showModal({message:`JSONをインポートします。\n\n既存データとの結合方法を選んでください。`,confirmLabel:"マージ追加",cancelLabel:"全て置き換え",onConfirm:()=>importJsonFile(f,"merge"),onCancel:()=>importJsonFile(f,"replace")}); return; }
     if (t.matches("[data-mfr-tpl-select]"))   { const idx=Number(t.value); if(isNaN(idx)||!mfrTemplates[idx])return; const tpl=mfrTemplates[idx]; const p=currentProduct(); Object.assign(p,{manufacturerName:tpl.name,manufacturerPostal:tpl.postal,manufacturerAddress:tpl.address,manufacturerPhone:tpl.phone}); render(); return; }
     if (t.matches("[data-print-cfg]"))         { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-size]"))              { printCfg={...(SIZE_PRESETS.find(s=>s.label===t.value)||SIZE_PRESETS[1])}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); render(); return; }

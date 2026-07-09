@@ -1,164 +1,4 @@
-﻿const NUTRITION_DB = {
-  "米粉": { kcal: 356, protein: 6.0, fat: 0.7, carbs: 79.8, salt: 0 },
-  "砂糖": { kcal: 384, protein: 0, fat: 0, carbs: 99.2, salt: 0 },
-  "きび糖": { kcal: 382, protein: 0.1, fat: 0.1, carbs: 98.4, salt: 0 },
-  "木綿豆腐": { kcal: 72, protein: 6.6, fat: 4.2, carbs: 1.6, salt: 0 },
-  "絹ごし豆腐": { kcal: 56, protein: 4.9, fat: 3.0, carbs: 2.0, salt: 0 },
-  "豆腐": { kcal: 56, protein: 4.9, fat: 3.0, carbs: 2.0, salt: 0 },
-  "タピオカ粉": { kcal: 356, protein: 0.2, fat: 0.2, carbs: 87.8, salt: 0 },
-  "ベーキングパウダー": { kcal: 100, protein: 0.5, fat: 0.5, carbs: 28, salt: 10 },
-  "食塩": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 99 },
-  "塩": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 99 },
-  "アーモンドパウダー": { kcal: 609, protein: 18.6, fat: 54.1, carbs: 21, salt: 0 },
-  "なたね油": { kcal: 921, protein: 0, fat: 100, carbs: 0, salt: 0 },
-  "ショートニング": { kcal: 900, protein: 0, fat: 99.9, carbs: 0, salt: 0 },
-  "小麦粉": { kcal: 368, protein: 8, fat: 1.5, carbs: 75.8, salt: 0 },
-  "薄力粉": { kcal: 368, protein: 8, fat: 1.5, carbs: 75.8, salt: 0 },
-  "強力粉": { kcal: 365, protein: 11.8, fat: 1.5, carbs: 71.7, salt: 0 },
-  "バター": { kcal: 745, protein: 0.6, fat: 81, carbs: 0.2, salt: 1.9 },
-  "卵": { kcal: 151, protein: 12.3, fat: 10.3, carbs: 0.3, salt: 0.4 },
-  "牛乳": { kcal: 61, protein: 3.3, fat: 3.8, carbs: 4.8, salt: 0.1 },
-  "生クリーム": { kcal: 433, protein: 2, fat: 45, carbs: 3.1, salt: 0.1 },
-  "はちみつ": { kcal: 294, protein: 0.2, fat: 0, carbs: 79.7, salt: 0 },
-  "片栗粉": { kcal: 338, protein: 0.1, fat: 0.1, carbs: 81.6, salt: 0 },
-  "ごま": { kcal: 599, protein: 20.3, fat: 54.2, carbs: 18.5, salt: 0 },
-  "黒糖": { kcal: 354, protein: 1.7, fat: 0, carbs: 89.7, salt: 0.1 },
-  "オリーブ油": { kcal: 921, protein: 0, fat: 100, carbs: 0, salt: 0 },
-  "豆乳": { kcal: 46, protein: 3.6, fat: 2, carbs: 3.1, salt: 0 },
-  "乳化剤": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0 },
-  "増粘剤": { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0 },
-  "味噌": { kcal: 198, protein: 12.5, fat: 6.0, carbs: 21.9, salt: 12.4 },
-  "醤油": { kcal: 71, protein: 7.7, fat: 0, carbs: 7.9, salt: 14.5 },
-  "しょうゆ": { kcal: 71, protein: 7.7, fat: 0, carbs: 7.9, salt: 14.5 },
-  "みりん": { kcal: 241, protein: 0.3, fat: 0, carbs: 43.2, salt: 0 },
-  "酒": { kcal: 109, protein: 0.4, fat: 0, carbs: 5.0, salt: 0 },
-  "料理酒": { kcal: 109, protein: 0.4, fat: 0, carbs: 5.0, salt: 0 },
-  "酢": { kcal: 25, protein: 0.1, fat: 0, carbs: 2.4, salt: 0 },
-  "米酢": { kcal: 46, protein: 0.2, fat: 0, carbs: 7.4, salt: 0 },
-  "コーンスターチ": { kcal: 354, protein: 0.8, fat: 0.7, carbs: 86.3, salt: 0 },
-  "抹茶": { kcal: 324, protein: 29.6, fat: 5.3, carbs: 39.5, salt: 0 },
-  "ココアパウダー": { kcal: 271, protein: 18.5, fat: 21.6, carbs: 18.5, salt: 0 },
-  "チョコレート": { kcal: 558, protein: 6.9, fat: 34.1, carbs: 55.8, salt: 0.1 },
-  "クリームチーズ": { kcal: 346, protein: 8.2, fat: 33.0, carbs: 2.3, salt: 0.7 },
-  "コンデンスミルク": { kcal: 331, protein: 7.7, fat: 8.7, carbs: 56.3, salt: 0.3 },
-  "ヨーグルト": { kcal: 62, protein: 3.6, fat: 3.0, carbs: 4.9, salt: 0.1 },
-  "サワークリーム": { kcal: 260, protein: 2.4, fat: 25.0, carbs: 3.5, salt: 0.1 },
-  "マーガリン": { kcal: 769, protein: 0.4, fat: 83.1, carbs: 0.5, salt: 1.3 },
-  "ラード": { kcal: 898, protein: 0, fat: 99.7, carbs: 0, salt: 0 },
-  "ごま油": { kcal: 921, protein: 0, fat: 100, carbs: 0, salt: 0 },
-  "バニラエッセンス": { kcal: 230, protein: 0.1, fat: 0, carbs: 12.5, salt: 0 },
-  "シナモン": { kcal: 364, protein: 3.9, fat: 1.2, carbs: 79.9, salt: 0 },
-  "塩麹": { kcal: 65, protein: 2.0, fat: 0.5, carbs: 13.4, salt: 8.5 },
-  "レモン汁": { kcal: 26, protein: 0.4, fat: 0.2, carbs: 8.6, salt: 0 },
-  "りんごジュース": { kcal: 44, protein: 0.1, fat: 0.1, carbs: 10.9, salt: 0 },
-  "くるみ": { kcal: 674, protein: 14.6, fat: 68.8, carbs: 11.7, salt: 0 },
-  "カシューナッツ": { kcal: 576, protein: 19.8, fat: 47.6, carbs: 26.7, salt: 0 },
-  "干しぶどう": { kcal: 301, protein: 2.7, fat: 0.2, carbs: 80.3, salt: 0 },
-  "レーズン": { kcal: 301, protein: 2.7, fat: 0.2, carbs: 80.3, salt: 0 },
-  "小豆": { kcal: 304, protein: 20.3, fat: 2.2, carbs: 40.9, salt: 0 },
-  "こしあん": { kcal: 155, protein: 9.0, fat: 0.6, carbs: 32.5, salt: 0 },
-  "粒あん": { kcal: 239, protein: 5.6, fat: 0.6, carbs: 54.0, salt: 0 },
-  "白玉粉": { kcal: 369, protein: 6.3, fat: 1.0, carbs: 80.0, salt: 0 },
-  "もち粉": { kcal: 369, protein: 6.3, fat: 1.0, carbs: 80.0, salt: 0 },
-  "きな粉": { kcal: 437, protein: 36.7, fat: 25.7, carbs: 26.4, salt: 0 },
-};
-
-const FUZZY = [["上白糖", "砂糖"], ["グラニュー糖", "砂糖"], ["てんさい糖", "きび糖"], ["製菓用米粉", "米粉"], ["上新粉", "米粉"], ["アーモンド粉", "アーモンドパウダー"], ["菜種油", "なたね油"], ["サラダ油", "なたね油"], ["植物油", "なたね油"], ["マーガリン", "ショートニング"], ["小麦", "小麦粉"], ["卵白", "卵"], ["卵黄", "卵"], ["鶏卵", "卵"], ["蜂蜜", "はちみつ"], ["胡麻", "ごま"], ["脱脂粉乳", "牛乳"], ["スキムミルク", "牛乳"]];
-const ADDITIVE_KW_DEFAULT = ["ベーキングパウダー", "膨張剤", "膨脹剤", "乳化剤", "香料", "酸化防止剤", "着色料", "保存料", "増粘剤", "甘味料", "酸味料", "pH調整剤", "トレハロース", "ソルビトール", "加工澱粉", "加工でんぷん", "凝固剤", "安定剤", "ゲル化剤", "漂白剤", "防かび剤", "防カビ剤", "発色剤", "光沢剤", "豆腐用凝固剤", "にがり", "塩化マグネシウム", "グルコノデルタラクトン", "硫酸カルシウム", "調味料", "酵素", "苦味料", "軟化剤"];
-let userAdditiveKw = (() => { try { return JSON.parse(safeGet("food-label-additive-kw") || "[]"); } catch { return []; } })();
-function getAdditiveKw() { return [...ADDITIVE_KW_DEFAULT, ...userAdditiveKw]; }
-// 後方互換: ADDITIVE_KW を参照している箇所が isAdditive() 経由になっているため定数は残す
-const ADDITIVE_KW = ADDITIVE_KW_DEFAULT;
-const ALLERGEN_RULES = [
-  ["えび", ["えび", "エビ", "海老"]], ["かに", ["かに", "カニ", "蟹"]], ["くるみ", ["くるみ", "クルミ", "胡桃"]],
-  ["小麦", ["小麦", "薄力粉", "強力粉", "中力粉", "小麦粉", "全粒粉"]], ["そば", ["そば", "蕎麦"]],
-  ["卵", ["卵", "たまご", "全卵", "卵白", "卵黄", "鶏卵"]], ["乳", ["乳", "牛乳", "ミルク", "バター", "チーズ", "クリーム", "ヨーグルト", "脱脂粉乳"]],
-  ["落花生", ["落花生", "ピーナッツ"]], ["アーモンド", ["アーモンド"]], ["オレンジ", ["オレンジ"]], ["カシューナッツ", ["カシューナッツ"]],
-  ["キウイフルーツ", ["キウイ"]], ["牛肉", ["牛肉", "ビーフ"]], ["ごま", ["ごま", "胡麻", "ゴマ"]],
-  ["さけ", ["さけ", "鮭", "サーモン"]], ["さば", ["さば", "鯖"]], ["大豆", ["大豆", "豆腐", "きな粉", "味噌", "しょうゆ", "醤油", "豆乳", "納豆", "枝豆", "豆腐粉"]],
-  ["鶏肉", ["鶏肉", "チキン"]], ["バナナ", ["バナナ"]], ["豚肉", ["豚肉", "ポーク", "ハム", "ベーコン"]],
-  ["もも", ["もも", "桃", "ピーチ"]], ["やまいも", ["やまいも", "山芋", "長芋"]], ["りんご", ["りんご", "リンゴ", "林檎"]], ["ゼラチン", ["ゼラチン"]],
-];
-const STORAGE_OPTS = ["直射日光・高温多湿を避けて保存", "高温多湿を避けて保存", "常温保存", "冷蔵保存（10℃以下）", "冷凍保存（-18℃以下）", "自由入力"];
-const MFR_TYPES = ["製造者", "販売者", "製造所", "加工者"];
-const VOLUME_UNITS = ["個", "g", "袋", "本", "枚", "箱", "ml", "セット", "その他"];
-const DATE_PRESETS = [
-  ["today", "今日", 0],
-  ["7d", "7日後", 7],
-  ["14d", "14日後", 14],
-  ["1m", "1か月後", 30],
-  ["3m", "3か月後", 90],
-];
-const SIZE_PRESETS = [
-  { label: "70×50mm", w: "70", h: "50", margin: "2", fs: "6.5" },
-  { label: "90×60mm", w: "90", h: "60", margin: "3", fs: "7.5" },
-  { label: "100×70mm", w: "100", h: "70", margin: "4", fs: "8" },
-  { label: "A4シール用", w: "190", h: "277", margin: "10", fs: "10" },
-  { label: "小袋用", w: "60", h: "40", margin: "2", fs: "6" },
-  { label: "冷凍商品用", w: "90", h: "60", margin: "3", fs: "7" },
-  { label: "自由サイズ", w: "90", h: "", margin: "3", fs: "7.5" },
-];
-const PLANS = {
-  free: { label: "無料", price: "0円/月", limit: 1, note: "1商品まで無料" },
-  starter: { label: "スタンダード", price: "980円/月", limit: 10, note: "月10商品まで保存・PDF出力" },
-  pro: { label: "プロ", price: "1980円/月", limit: Infinity, note: "無制限" },
-};
-
-let products = loadProducts();
-let draft = null;
-let currentPlan = safeGet("food-label-plan") || "free";
-let view = "saas";
-let editId = null;
-let printTarget = "both";
-let printCfg = (() => { try { const s = JSON.parse(safeGet("food-label-print-cfg") || "null"); return s && s.w ? s : SIZE_PRESETS[1]; } catch { return SIZE_PRESETS[1]; } })();
-let renderTimer = null;
-let printPreviewOpen = false;
-let assistMessage = "";
-let statusMessage = "";
-let openSections = new Set(["商品情報", "原材料", "印刷・サイズ設定"]);
-let autoSaveTimer = null;
-let autoSaveStatus = "";
-let previewZoom = 100;
-let dragSrcIdx = null;
-let recentStorage = JSON.parse(safeGet("food-label-recent-storage") || "[]");
-let savedSearch = "";
-let savedSort = "updatedAt";
-let savedFilter = "all";
-let selectedForPrint = new Set();
-let ingMaster = JSON.parse(safeGet("food-label-ing-master") || "[]");
-let mfrTemplates = JSON.parse(safeGet("food-label-mfr-templates") || "[]");
-let printOffsetX = safeGet("food-label-offset-x") || "0";
-let printOffsetY = safeGet("food-label-offset-y") || "0";
-let globalHandlersBound = false;
-let showTutorial = !safeGet("food-label-tutorial-done");
-let tutorialStep = 0;
-let showAiPanel = false;
-let highlightField = null; // ジャンプ後に強調する field selector
-
-// ── 食品商品管理クラウド 拡張状態 ──────────────────────────────────────
-let saasView = safeGet("fmcc-view") || "dashboard";
-let productDetailId = null;
-let productDetailTab = "basic";
-let specSheetId = null;
-let specShowCost = false;
-let specShowSig = true;
-let aiDescId = null;
-let aiDescChannel = "rakuten";
-let aiEditText = "";
-let aiConsultProductId = null;
-let aiConsultInput = "";
-let aiConsultSending = false;
-let registerMenuOpen = false;
-let aiRegChatMessages = [];
-let aiRegChatInput = "";
-let aiRegChatStep = 0;
-let aiRegChatDraft = {};
-let aiRegAnalysisStep = -1;
-let sidebarOpen = false;
-let masterSearch = "";
-let masterFilter = "all";
-
-/* ── チュートリアル ── */
+﻿/* ── チュートリアル ── */
 const TUTORIAL_STEPS = [
   { num: 1, title: "商品情報を入力", desc: "名称・内容量・賞味期限を入力してください。", hint: "左の「商品情報」セクションから始めましょう。" },
   { num: 2, title: "原材料・栄養成分を確認", desc: "原材料を追加すると栄養成分が自動計算されます。", hint: "重量(g)を入力すると計算精度が上がります。" },
@@ -420,92 +260,7 @@ function showStatus(message) {
   }, 2200);
 }
 
-function uid() { return Math.random().toString(36).slice(2, 9); }
-function escapeHtml(s = "") { return String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
-function safeGet(key) {
-  try { return localStorage.getItem(key); }
-  catch { return ""; }
-}
-function safeSet(key, value) {
-  try { localStorage.setItem(key, value); }
-  catch (e) {
-    if (e && e.name === "QuotaExceededError") {
-      alert("保存容量が不足しています。商品画像を削除するか、不要な商品を整理してください。");
-    }
-  }
-}
-function emptyProduct() {
-  return {
-    id: uid(), name: "", internalName: "", volume: "", volumeCustomUnit: false, bestBefore: "", serving: "", janCode: "",
-    storage: STORAGE_OPTS[0], storageCustom: "",
-    ingredients: [{ id: uid(), name: "", weight: "" }],
-    nutritionMode: "auto", nutritionManual: { kcal: "", protein: "", fat: "", carbs: "", salt: "" },
-    allergensMode: "auto", allergensManual: "",
-    contaminationEnabled: false, contaminationAllergens: "", contaminationText: "",
-    manufacturerType: "製造者", manufacturerTypes: ["製造者"], manufacturerName: "", manufacturerPostal: "", manufacturerAddress: "", manufacturerPhone: "",
-    starred: false,
-    updatedAt: new Date().toLocaleDateString("ja-JP"),
-  };
-}
-function loadProducts() {
-  try {
-    const saved = JSON.parse(safeGet("food-label-products-static"));
-    return Array.isArray(saved) ? saved.filter((p) => p.id !== "demo1") : [];
-  }
-  catch { return []; }
-}
-function saveProducts() { safeSet("food-label-products-static", JSON.stringify(products)); }
-function estimateNutrition(name) {
-  const t = name.trim();
-  if (!t) return null;
-  if (NUTRITION_DB[t]) return { data: NUTRITION_DB[t], estimated: false, key: t };
-  for (const [kw, dk] of FUZZY) if (t.includes(kw) || kw.includes(t)) return { data: NUTRITION_DB[dk], estimated: true, key: dk };
-  for (const [k, d] of Object.entries(NUTRITION_DB)) if (t.includes(k) || k.includes(t)) return { data: d, estimated: true, key: k };
-  return { data: { kcal: 320, protein: 5, fat: 8, carbs: 55, salt: 0.3 }, estimated: true, key: "一般加工食品" };
-}
-function isAdditive(name) { return getAdditiveKw().some((k) => name.includes(k)); }
-function calcNutrition(ingredients) {
-  const sum = { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0 };
-  let total = 0, hasEst = false;
-  ingredients.forEach((i) => {
-    const w = parseFloat(i.weight) || 0;
-    if (!i.name.trim() || w === 0) return;
-    const est = estimateNutrition(i.name);
-    total += w;
-    if (est.estimated) hasEst = true;
-    sum.kcal += est.data.kcal * w / 100;
-    sum.protein += est.data.protein * w / 100;
-    sum.fat += est.data.fat * w / 100;
-    sum.carbs += est.data.carbs * w / 100;
-    sum.salt += est.data.salt * w / 100;
-  });
-  if (!total) return { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0, hasEst };
-  const f = 100 / total;
-  return { kcal: Math.round(sum.kcal * f), protein: Math.round(sum.protein * f * 10) / 10, fat: Math.round(sum.fat * f * 10) / 10, carbs: Math.round(sum.carbs * f * 10) / 10, salt: Math.round(sum.salt * f * 100) / 100, hasEst };
-}
-function detectAllergens(names) {
-  const found = new Set();
-  names.forEach((n) => {
-    const lower = n.toLowerCase();
-    ALLERGEN_RULES.forEach(([a, kws]) => { if (kws.some((kw) => lower.includes(kw.toLowerCase()))) found.add(a); });
-  });
-  return [...found];
-}
-function buildIngLabel(ingredients) {
-  const named = ingredients.filter((i) => i.name.trim());
-  const withW = named.filter((i) => (parseFloat(i.weight) || 0) > 0).sort((a, b) => (parseFloat(b.weight) || 0) - (parseFloat(a.weight) || 0));
-  const noW = named.filter((i) => !((parseFloat(i.weight) || 0) > 0));
-  const sorted = [...withW, ...noW];
-  const normal = sorted.filter((i) => !isAdditive(i.name)).map((i) => i.name).join("、");
-  const add = sorted.filter((i) => isAdditive(i.name)).map((i) => i.name).join("、");
-  if (!normal && !add) return "";
-  if (!add) return normal;
-  if (!normal) return `／${add}`;
-  return `${normal}／${add}`;
-}
-function stripOrigin(text) {
-  return String(text || "").replace(/[（(][^）)]*[）)]/g, "").trim();
-}
+
 function derive(p) {
   const autoNutrition = calcNutrition(p.ingredients);
   const nutrition = p.nutritionMode === "manual" ? { ...autoNutrition, ...p.nutritionManual } : autoNutrition;
@@ -673,7 +428,7 @@ function render() {
     pageHtml = editorHtml(currentProduct());
   }
   document.getElementById("root").innerHTML = `${pageHtml}${statusMessage ? `<div class="status-toast">${escapeHtml(statusMessage)}</div>` : ""}${tutorialHtml()}`;
-  bindEvents();
+  bindDynamic();
   window.scrollTo({ top: scrollY, behavior: "instant" });
   const fc = document.querySelector(".form-column");
   const pc = document.querySelector(".preview-column");
@@ -3606,6 +3361,105 @@ async function sendConsultMessage(questionKey) {
   }, 80);
 }
 
+// ── ⑨ 引き上げ関数（setupDelegation から参照） ─────────────────────────
+function saveCostItems() {
+  const p = products.find(x => x.id === productDetailId);
+  if (!p) return;
+  [["data-cost-name","name"],["data-cost-amount","amount"],["data-cost-unit","unit"],
+   ["data-cost-price","unitPrice"],["data-cost-punit","priceUnit"],["data-cost-loss","lossRate"]
+  ].forEach(([attr, field]) => {
+    document.querySelectorAll(`[${attr}]`).forEach(el => {
+      const i = parseInt(el.dataset[attr.replace("data-","").replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]);
+      if (p.costItems[i]) p.costItems[i][field] = el.value;
+    });
+  });
+  saveProducts();
+}
+
+function refreshCostKpis() {
+  const p = products.find(x => x.id === productDetailId);
+  if (!p) return;
+  const mode = p.costMode || "direct";
+  const price    = parseFloat(document.querySelector("[data-master-field='price']")?.value) || 0;
+  const rawCost  = mode === "direct" ? (parseFloat(document.querySelector("[data-master-field='directCost']")?.value) || 0) : 0;
+  const packaging= parseFloat(document.querySelector("[data-master-field='directPackaging']")?.value) || 0;
+  const shipping = parseFloat(document.querySelector("[data-master-field='directShipping']")?.value)  || 0;
+  const other    = parseFloat(document.querySelector("[data-master-field='directOther']")?.value)     || 0;
+  const totalCost = rawCost + packaging + shipping + other;
+  const gross = price - totalCost;
+  const costRate = price > 0 ? Math.round(totalCost / price * 100) : null;
+  const fmt = n => "¥" + Math.round(n).toLocaleString();
+  const $ = id => document.getElementById(id);
+  if ($("ck-total"))  $("ck-total").textContent  = fmt(totalCost);
+  if ($("ck-price"))  $("ck-price").textContent  = price > 0 ? fmt(price) : "—";
+  if ($("ck-gross")) { $("ck-gross").textContent = price > 0 ? fmt(gross) : "—"; $("ck-gross").className = "cost-kpi-value " + (gross >= 0 ? "profit-pos" : "profit-neg"); }
+  const mc = costRateClass(costRate);
+  if ($("ck-profit")) $("ck-profit").textContent = costRate !== null ? (100 - costRate) + "%" : "—";
+  if ($("ck-cost"))   $("ck-cost").textContent   = costRate !== null ? costRate + "%" : "—";
+  ["ck-profit-wrap","ck-cost-wrap"].forEach(id => { if ($(id)) $(id).className = "cost-kpi " + mc; });
+}
+
+function handleImageFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  if (file.size > 5 * 1024 * 1024) { showStatus("画像は5MB以下にしてください"); return; }
+  const pid = productDetailId;
+  const p = products.find(x => x.id === pid);
+  if (!p) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX = 800; let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) { if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; } }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      p.imageDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      p.updatedAt = new Date().toLocaleDateString("ja-JP");
+      saveProducts(); showStatus("画像を登録しました"); render();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function doPrintSpec() {
+  const area = document.getElementById("spec-print-area");
+  if (!area) return;
+  const w = window.open("", "_blank");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>商品規格書</title><style>
+@page{size:A4 portrait;margin:8mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11px;color:#1e293b;background:#fff}
+.spec-v2{padding:8mm;max-width:100%}
+.spec-v2-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #1e293b}
+.spec-v2-header h1{font-size:18px;font-weight:800;color:#1e293b}
+.spec-subtitle{font-size:13px;font-weight:600;color:#334155;margin-top:2px}
+.spec-display-name{font-size:11px;color:#64748b;margin-top:2px}
+.spec-v2-meta-block dl{display:flex;flex-direction:column;gap:2px;font-size:10px;color:#64748b;text-align:right}
+.spec-v2-meta-block dl div{display:flex;gap:4px;justify-content:flex-end}
+.spec-v2-meta-block dt{font-weight:600}
+.spec-v2-body{display:grid;grid-template-columns:1fr 72px;gap:8px;align-items:start;margin-bottom:8px}
+.spec-v2-image-col{display:flex;flex-direction:column;align-items:center;gap:6px}
+.spec-v2-product-img{width:68px;height:68px;object-fit:cover;border:1px solid #e2e8f0;border-radius:4px}
+.spec-v2-product-img-placeholder{width:68px;height:68px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:18px;color:#cbd5e1}
+.spec-v2-qr{width:72px;height:72px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;display:block}
+.spec-v2-section-label{font-size:9px;font-weight:700;color:#fff;background:#475569;padding:2px 6px;border-radius:3px;margin-bottom:2px;margin-top:6px;display:inline-block}
+.spec-v2-tables .spec-v2-section-label:first-child{margin-top:0}
+.spec-v2-table{width:100%;border-collapse:collapse;margin-bottom:4px}
+.spec-v2-table th,.spec-v2-table td{border:1px solid #e2e8f0;padding:3px 6px;font-size:10px;text-align:left;line-height:1.4}
+.spec-v2-table th{background:#f8fafc;width:32%;font-weight:600;color:#374151}
+.spec-v2-table td{color:#1e293b}
+.spec-v2-remark{font-size:10px;border:1px solid #e2e8f0;border-radius:4px;padding:6px;background:#f8fafc;margin-bottom:4px}
+.spec-v2-footer{border-top:1px solid #e2e8f0;padding-top:8px;display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px}
+.spec-v2-sig-row{display:flex;gap:16px}
+.spec-v2-sig-box{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9px;color:#64748b}
+.spec-v2-sig-line{width:70px;height:28px;border:1px solid #cbd5e1;border-radius:3px}
+.margin-good{color:#16a34a}.margin-warn{color:#d97706}.margin-bad{color:#dc2626}
+</style></head><body><div class="spec-v2">${area.innerHTML}</div><script>window.onload=()=>{window.print();}<\/script></body></html>`);
+  w.document.close();
+}
+
 function bindSaasEvents() {
   // ラベルエディタ → 商品管理に戻る
   document.querySelectorAll("[data-action='back-to-saas']").forEach(el => el.addEventListener("click", () => {
@@ -4319,6 +4173,7 @@ function sendAiChatMessage() {
 }
 
 render();
+setupDelegation(); // ⑨ デリゲーション登録（起動時1回）
 
 // ショートカットキー（起動時1回のみ登録）
 document.addEventListener("keydown", (e) => {

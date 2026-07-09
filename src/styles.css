@@ -1134,7 +1134,7 @@ button:disabled {
 .btn-sm { padding: 4px 10px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 12px; cursor: pointer; color: #374151; }
 .btn-sm:hover { background: #e0e7ff; }
 
-/* Responsive */
+/* ── Responsive (SAAS) ── */
 @media (max-width: 768px) {
   .saas-main { margin-left: 0; }
   .sidebar { transform: translateX(-100%); }
@@ -1147,12 +1147,63 @@ button:disabled {
   .detail-grid { grid-template-columns: 1fr; }
   .dash-quick-actions { flex-direction: column; }
   .spec-doc { padding: 20px; }
-  .saas-content { padding: 16px; }
+  .saas-content { padding: 16px 12px 80px; }
+
+  /* ヘッダーアクションボタン横スクロール */
+  .detail-header-actions { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: none; }
+  .detail-header-actions::-webkit-scrollbar { display: none; }
+  .detail-header-actions .action { flex-shrink: 0; }
+
+  /* タブ横スクロール */
+  .detail-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .detail-tabs::-webkit-scrollbar { display: none; }
+  .detail-tab { padding: 8px 14px; font-size: 13px; white-space: nowrap; }
+
+  /* タッチターゲット 44px最低保証 */
+  .action, button:not(.icon-btn):not(.bread-link):not(.nav-item) { min-height: 40px; }
+  input, select, textarea { min-height: 40px; font-size: 16px; } /* 16px以上でiOSズーム防止 */
+
+  /* 規格書コントロール */
+  .spec-controls { flex-wrap: wrap; gap: 8px; }
+  .spec-select { width: 100%; }
+
+  /* 商品一覧カード */
+  .product-card-actions { flex-direction: column; gap: 4px; }
+  .product-card { padding: 12px; }
+
+  /* 原価KPIカード */
+  .cost-kpis { grid-template-columns: 1fr 1fr; }
+
+  /* ダッシュボード原価サマリー */
+  .dash-cost-grid { gap: 12px; justify-content: space-around; }
 }
+
 @media (max-width: 560px) {
   .dash-stats { grid-template-columns: 1fr 1fr; }
   .master-toolbar { flex-direction: column; align-items: stretch; }
   .filter-btns { flex-wrap: wrap; }
+  .saas-content { padding: 12px 10px 80px; }
+
+  /* 商品詳細 各セクションの余白削減 */
+  .detail-section { padding: 14px; }
+  .detail-breadcrumb { font-size: 12px; }
+
+  /* ダッシュボード stat数値 */
+  .stat-num { font-size: 28px; }
+  .stat-card { padding: 14px; }
+
+  /* FABボタン調整 */
+  .fab-save { bottom: 12px; right: 12px; padding: 12px 18px; font-size: 13px; }
+
+  /* 食品表示チェック */
+  .check-issue { font-size: 12px; padding: 8px 10px; }
+
+  /* 原材料ラベルプレビュー */
+  .ing-label-preview { font-size: 12px; }
+
+  /* 設定画面 */
+  .api-key-row { flex-direction: column; }
+  .settings-card { padding: 14px; }
 }
 
 /* ══ ① TODO Card ══ */

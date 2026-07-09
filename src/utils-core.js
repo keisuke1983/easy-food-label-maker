@@ -25,6 +25,7 @@ function emptyProduct() {
     contaminationEnabled: false, contaminationAllergens: "", contaminationText: "",
     manufacturerType: "製造者", manufacturerTypes: ["製造者"], manufacturerName: "", manufacturerPostal: "", manufacturerAddress: "", manufacturerPhone: "",
     starred: false,
+    expiryDate: "",   // ISO日付 YYYY-MM-DD（管理用・ラベルには出力されない）
     updatedAt: new Date().toLocaleDateString("ja-JP"),
   };
 }

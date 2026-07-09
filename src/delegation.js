@@ -113,7 +113,25 @@ function setupDelegation() {
 
     // [data-del]
     const delEl = t.closest("[data-del]");
-    if (delEl) { const p=products.find(x=>x.id===delEl.dataset.del); if(!p)return; showModal({message:`「${p.name||"この商品"}」を削除しますか？\nこの操作は取り消せません。`,confirmLabel:"削除する",cancelLabel:"キャンセル",onConfirm:()=>{products=products.filter(x=>x.id!==p.id);safeDel(`food-label-history-${p.id}`);saveProducts();render();}}); return; }
+    if (delEl) {
+      const p = products.find(x=>x.id===delEl.dataset.del); if(!p) return;
+      const snapshot = structuredClone(p);
+      const histKey = `food-label-history-${p.id}`;
+      const histSnap = localStorage.getItem(histKey);
+      products = products.filter(x=>x.id!==p.id);
+      safeDel(histKey);
+      saveProducts(); render();
+      showStatus(`「${p.internalName||p.name||"商品"}」を削除しました`, {
+        undoLabel: "元に戻す",
+        onUndo: () => {
+          products = [snapshot, ...products];
+          if (histSnap) localStorage.setItem(histKey, histSnap);
+          saveProducts(); render();
+          showStatus("削除を取り消しました");
+        }
+      });
+      return;
+    }
 
     // [data-volume-unit]
     const volUnitEl = t.closest("[data-volume-unit]");
@@ -195,6 +213,7 @@ function setupDelegation() {
     const navEl = t.closest("[data-nav]");
     if (navEl) {
       const nav=navEl.dataset.nav; sidebarOpen=false;
+      if (navEl.dataset.setFilter) masterFilter = navEl.dataset.setFilter;
       if(nav==="label-nav"){if(products.length>0){editId=products[0].id;view="edit";saasView="label-nav";}else{view="edit";editId="new";draft=extendProductMaster(emptyProduct());saasView="label-nav";}}
       else if(nav==="spec-sheet-nav"){saasView="spec-sheet-nav";view="saas";if(!specSheetId&&products.length>0)specSheetId=products[0].id;}
       else if(nav==="ai-descriptions-nav"){saasView="ai-descriptions-nav";view="saas";if(!aiDescId&&products.length>0)aiDescId=products[0].id;}
@@ -224,7 +243,10 @@ function setupDelegation() {
 
     // [data-detail-tab]
     const dtEl = t.closest("[data-detail-tab]");
-    if (dtEl) { productDetailTab=dtEl.dataset.detailTab; render(); return; }
+    if (dtEl) { productDetailTab=dtEl.dataset.detailTab; render(); document.querySelector(".saas-content")?.scrollTo(0,0); return; }
+
+    // [data-clear-search]
+    if (t.closest("[data-clear-search]")) { masterSearch=""; render(); setTimeout(()=>document.querySelector("[data-master-search]")?.focus(),30); return; }
 
     // [data-master-filter]
     const mfEl = t.closest("[data-master-filter]");
@@ -235,7 +257,8 @@ function setupDelegation() {
     if (starEl) { const p=products.find(x=>x.id===starEl.dataset.toggleStar); if(p){p.starred=!p.starred;saveProducts();render();} return; }
 
     // [data-todo-key]
-    if (t.closest("[data-todo-key]")) { saasView="products";view="saas";safeSet("fmcc-view",saasView);render(); return; }
+    const todoEl = t.closest("[data-todo-key]");
+    if (todoEl) { saasView="products"; view="saas"; masterFilter=todoEl.dataset.todoKey; safeSet("fmcc-view",saasView); render(); return; }
 
     // [data-ai-ch]
     const aiChEl = t.closest("[data-ai-ch]");
@@ -256,6 +279,16 @@ function setupDelegation() {
     // [data-remove-ing]
     const remIngEl = t.closest("[data-remove-ing]");
     if (remIngEl) { const p=currentProduct(); p.ingredients.splice(Number(remIngEl.dataset.removeIng),1); if(!p.ingredients.length) p.ingredients.push({id:uid(),name:"",weight:""}); render(); return; }
+  });
+
+  // ── keydown: role="button" 要素のEnter/Spaceキー活性化 ──
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const t = e.target;
+    if (t.getAttribute("role") === "button" && t.tagName !== "BUTTON") {
+      e.preventDefault();
+      t.click();
+    }
   });
 
   // ── keydown: Enter移動（原材料入力の流れを快適に） ──
@@ -317,7 +350,7 @@ function setupDelegation() {
     if (t.matches("[data-ai-product-select]")) { aiDescId=t.value; aiEditText=""; render(); return; }
     if (t.matches("[data-sel-print]"))         { t.checked?selectedForPrint.add(t.dataset.selPrint):selectedForPrint.delete(t.dataset.selPrint); render(); return; }
     if (t.matches("[data-csv-import]"))        { if(t.files[0]) importCsvFile(t.files[0]); return; }
-    if (t.matches("[data-json-import]"))       { if(!t.files[0]) return; const f=t.files[0]; showModal({message:`JSONをインポートします。\n\n既存データとの結合方法を選んでください。`,confirmLabel:"マージ追加",cancelLabel:"全て置き換え",onConfirm:()=>importJsonFile(f,"merge"),onCancel:()=>importJsonFile(f,"replace")}); return; }
+    if (t.matches("[data-json-import]"))       { if(!t.files[0]) return; const f=t.files[0]; showModal({message:`JSONをインポートします。\n\n既存データとの結合方法を選んでください。`,confirmLabel:"マージ追加（既存を残す）",dangerLabel:"全て置き換え",cancelLabel:"キャンセル",onConfirm:()=>importJsonFile(f,"merge"),onDanger:()=>importJsonFile(f,"replace")}); return; }
     if (t.matches("[data-mfr-tpl-select]"))   { const idx=Number(t.value); if(isNaN(idx)||!mfrTemplates[idx])return; const tpl=mfrTemplates[idx]; const p=currentProduct(); Object.assign(p,{manufacturerName:tpl.name,manufacturerPostal:tpl.postal,manufacturerAddress:tpl.address,manufacturerPhone:tpl.phone}); render(); return; }
     if (t.matches("[data-print-cfg]"))         { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-size]"))              { printCfg={...(SIZE_PRESETS.find(s=>s.label===t.value)||SIZE_PRESETS[1])}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); render(); return; }
@@ -325,6 +358,8 @@ function setupDelegation() {
     if (t.id==="spec-show-sig")                { specShowSig=t.checked; render(); return; }
     if (t.matches("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]")) { saveCostItems(); render(); return; }
     if (t.matches("[data-master-field],[data-sales-ch]")) { scheduleAutoSaveMaster(); return; }
+    if (t.matches("[data-master-sort]")) { masterSort=t.value; render(); return; }
+    if (t.matches("[data-todo-filter-select]")) { masterFilter=t.value||"all"; render(); return; }
   });
 
   // ── グローバルキーボードショートカット ──

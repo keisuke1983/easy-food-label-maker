@@ -242,6 +242,31 @@ function setupDelegation() {
     if (remIngEl) { const p=currentProduct(); p.ingredients.splice(Number(remIngEl.dataset.removeIng),1); if(!p.ingredients.length) p.ingredients.push({id:uid(),name:"",weight:""}); render(); return; }
   });
 
+  // ── keydown: Enter移動（原材料入力の流れを快適に） ──
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
+    const t = e.target;
+    if (t.matches("[data-ing-name]")) {
+      e.preventDefault();
+      const idx = Number(t.dataset.ingName);
+      const weightEl = document.querySelector(`[data-ing-weight="${idx}"]`);
+      if (weightEl) { weightEl.focus(); weightEl.select(); }
+      return;
+    }
+    if (t.matches("[data-ing-weight]")) {
+      e.preventDefault();
+      const idx = Number(t.dataset.ingWeight);
+      const p = currentProduct(); if (!p) return;
+      const nextNameEl = document.querySelector(`[data-ing-name="${idx + 1}"]`);
+      if (nextNameEl) { nextNameEl.focus(); return; }
+      // 最後の行なら新しい行を追加してフォーカス
+      p.ingredients.push({ id: uid(), name: "", weight: "" });
+      render();
+      setTimeout(() => document.querySelector(`[data-ing-name="${idx + 1}"]`)?.focus(), 30);
+      return;
+    }
+  });
+
   // ── input ──
   document.addEventListener("input", e => {
     const t = e.target;

@@ -298,7 +298,7 @@ function batchPrint() {
   setTimeout(cleanup, 5000); // フォールバック
   window.print();
 }
-function showStatus(message) {
+function showStatus(message, { undoLabel, onUndo } = {}) {
   statusMessage = message;
   let toast = document.getElementById("status-toast-el");
   if (!toast) {
@@ -307,14 +307,24 @@ function showStatus(message) {
     toast.className = "status-toast";
     document.body.appendChild(toast);
   }
-  toast.textContent = message;
-  toast.style.display = message ? "block" : "none";
   clearTimeout(showStatus._timer);
+  if (onUndo) {
+    toast.innerHTML = `<span>${escapeHtml(message)}</span><button class="toast-undo-btn" id="toast-undo-btn">${escapeHtml(undoLabel||"元に戻す")}</button>`;
+    document.getElementById("toast-undo-btn").addEventListener("click", () => {
+      onUndo();
+      toast.style.display = "none";
+      statusMessage = "";
+      clearTimeout(showStatus._timer);
+    }, { once: true });
+  } else {
+    toast.textContent = message;
+  }
+  toast.style.display = message ? "block" : "none";
   if (message) {
     showStatus._timer = setTimeout(() => {
       statusMessage = "";
       toast.style.display = "none";
-    }, 2200);
+    }, onUndo ? 5000 : 2200);
   }
 }
 
@@ -428,7 +438,7 @@ function normalizeLabelText(p) {
   return { next, changes };
 }
 
-function showModal({ message, confirmLabel = "OK", cancelLabel = null, onConfirm, onCancel }) {
+function showModal({ message, confirmLabel = "OK", cancelLabel = null, dangerLabel = null, onConfirm, onCancel, onDanger }) {
   document.querySelector(".app-modal")?.remove();
   const modal = document.createElement("div");
   modal.className = "app-modal";
@@ -437,6 +447,7 @@ function showModal({ message, confirmLabel = "OK", cancelLabel = null, onConfirm
       <p class="app-modal-msg">${escapeHtml(message)}</p>
       <div class="app-modal-actions">
         ${cancelLabel ? `<button class="action app-modal-cancel">${escapeHtml(cancelLabel)}</button>` : ""}
+        ${dangerLabel ? `<button class="action danger-outline app-modal-danger">${escapeHtml(dangerLabel)}</button>` : ""}
         <button class="action primary app-modal-confirm">${escapeHtml(confirmLabel)}</button>
       </div>
     </div>`;
@@ -444,7 +455,9 @@ function showModal({ message, confirmLabel = "OK", cancelLabel = null, onConfirm
   const close = () => modal.remove();
   modal.querySelector(".app-modal-confirm").addEventListener("click", () => { close(); onConfirm?.(); });
   modal.querySelector(".app-modal-cancel")?.addEventListener("click", () => { close(); onCancel?.(); });
-  modal.addEventListener("click", (e) => { if (e.target === modal) { close(); onCancel?.(); } });
+  modal.querySelector(".app-modal-danger")?.addEventListener("click", () => { close(); onDanger?.(); });
+  // 背景クリックは単純にモーダルを閉じるだけ（破壊的アクションは実行しない）
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
 }
 
 function focusKey(el) {
@@ -710,7 +723,7 @@ function menuHtml() {
 function headerHtml(title, showSave = true) {
   const saveStatusCls = autoSaveStatus === "保存済み" ? "autosave-ok" : autoSaveStatus === "保存中" ? "autosave-saving" : "autosave-editing";
   const saveStatusHtml = autoSaveStatus ? `<span class="autosave-status ${saveStatusCls}">${escapeHtml(autoSaveStatus)}</span>` : "";
-  return `<header class="topbar"><button class="back" data-action="back-to-saas">← 商品管理</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${saveStatusHtml}${statusMessage ? `<span class="toast">${escapeHtml(statusMessage)}</span>` : ""}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
+  return `<header class="topbar"><button class="back" data-action="back-to-saas">← 商品管理</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${saveStatusHtml}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
 }
 function savedHtml() {
   let filtered = products.filter((p) => {
@@ -1515,14 +1528,14 @@ function extendProductMaster(p) {
 // ── ナビゲーション ────────────────────────────────────────────────────
 function sidebarHtml() {
   const items = [
-    { id:"dashboard",         label:"ダッシュボード", ico:"⊞" },
-    { id:"products",          label:"商品管理",       ico:"⊡" },
-    { id:"label-nav",         label:"ラベル作成",     ico:"⊟" },
-    { id:"spec-sheet-nav",    label:"商品規格書",     ico:"≡" },
-    { id:"ai-descriptions-nav",label:"AI説明文",      ico:"✦" },
-    { id:"ai-consult-nav",      label:"AI相談",       ico:"💬" },
+    { id:"dashboard",           label:"ダッシュボード", ico:"🏠" },
+    { id:"products",            label:"商品管理",       ico:"📦" },
+    { id:"label-nav",           label:"ラベル作成",     ico:"🏷" },
+    { id:"spec-sheet-nav",      label:"商品規格書",     ico:"📋" },
+    { id:"ai-descriptions-nav", label:"AI説明文",      ico:"✨" },
+    { id:"ai-consult-nav",      label:"AI相談",        ico:"💬" },
   ];
-  const settingItem = { id:"settings-nav", label:"設定", ico:"⊕" };
+  const settingItem = { id:"settings-nav", label:"設定", ico:"⚙️" };
   const active = saasView;
   const navLink = (it) => `<button class="nav-item${active===it.id?" active":""}" data-nav="${it.id}">
     <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>
@@ -1557,17 +1570,22 @@ function saasLayout(title, content) {
   </div>`;
 }
 
-// ── TODO集計 ─────────────────────────────────────────────────────────
-function calcTodo() {
+// ── TODO集計（derivedAll を渡すと derive() の二重呼び出しを回避できる）──
+function calcTodo(derivedAll) {
   if (!products.length) return [];
+  const da = derivedAll || products.map(p => ({ p, d: derive(p) }));
+  const todayIso  = new Date().toISOString().split("T")[0];
+  const soonIso   = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
   return [
-    { key:"incomplete",    label:"完成度100%未満の商品", count: products.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; }).length },
-    { key:"noBestBefore",  label:"賞味期限未設定",       count: products.filter(p=>!p.bestBefore?.trim()).length },
-    { key:"noIngredients", label:"原材料未入力",          count: products.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim())).length },
-    { key:"noMfr",         label:"製造者未設定",          count: products.filter(p=>!p.manufacturerName?.trim()).length },
-    { key:"noJan",         label:"JANコード未登録",       count: products.filter(p=>!p.janCode?.trim()).length },
-    { key:"noImage",       label:"商品画像未登録",        count: products.filter(p=>!p.imageDataUrl).length },
-    { key:"noCost",        label:"原価未設定",            count: products.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
+    { key:"expired",       label:"🚨 賞味期限切れ",         count: products.filter(p=>p.expiryDate&&p.expiryDate<todayIso).length },
+    { key:"expiringSoon",  label:"⏰ 30日以内に賞味期限切れ", count: products.filter(p=>p.expiryDate&&p.expiryDate>=todayIso&&p.expiryDate<=soonIso).length },
+    { key:"incomplete",    label:"完成度100%未満の商品",     count: da.filter(({p,d})=>calcCompletion(p,d).pct<100).length },
+    { key:"noBestBefore",  label:"賞味期限未設定",           count: products.filter(p=>!p.bestBefore?.trim()).length },
+    { key:"noIngredients", label:"原材料未入力",              count: products.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim())).length },
+    { key:"noMfr",         label:"製造者未設定",              count: products.filter(p=>!p.manufacturerName?.trim()).length },
+    { key:"noJan",         label:"JANコード未登録",           count: products.filter(p=>!p.janCode?.trim()).length },
+    { key:"noImage",       label:"商品画像未登録",            count: products.filter(p=>!p.imageDataUrl).length },
+    { key:"noCost",        label:"原価未設定",                count: products.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
   ].filter(t=>t.count>0);
 }
 
@@ -1815,29 +1833,74 @@ function imageUploadSectionHtml(p) {
 }
 
 // ── ダッシュボード ────────────────────────────────────────────────────
+function dashboardEmptyHtml() {
+  const STEPS = [
+    { ico: "📦", title: "商品を登録", desc: "商品名・原材料・製造者情報を入力" },
+    { ico: "🏷", title: "ラベルを自動生成", desc: "食品表示法に沿ったラベルをリアルタイム作成" },
+    { ico: "🤖", title: "AIが法令チェック", desc: "未入力項目の指摘・改善提案を自動実行" },
+  ];
+  return `<div class="onboarding-wrap">
+    <div class="onboarding-hero">
+      <img src="./assets/app-icon.svg" alt="" class="onboarding-icon">
+      <h1 class="onboarding-title">食品商品管理クラウドへようこそ</h1>
+      <p class="onboarding-sub">食品メーカー・小規模食品事業者のための<br>AI搭載・商品管理＆食品表示ラベル作成ツール</p>
+      <button class="action primary onboarding-cta" data-quick-new="1">＋ 最初の商品を登録する</button>
+    </div>
+    <div class="onboarding-steps">
+      ${STEPS.map((s, i) => `
+        <div class="onboarding-step">
+          <div class="onboarding-step-num">${i + 1}</div>
+          <div class="onboarding-step-ico">${s.ico}</div>
+          <div class="onboarding-step-title">${s.title}</div>
+          <div class="onboarding-step-desc">${s.desc}</div>
+        </div>`).join('<div class="onboarding-arrow">→</div>')}
+    </div>
+    <div class="onboarding-features">
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>食品表示法チェックリスト自動生成</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>原材料重量から栄養成分を自動計算</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>アレルゲン自動検出（28品目対応）</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>商品規格書・AI商品説明文の一括生成</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>原価・粗利管理ダッシュボード</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>ラベルPDF印刷・画像エクスポート</div>
+    </div>
+    <div class="onboarding-import">
+      <p>既存データをお持ちの場合：</p>
+      <button class="action" data-nav="saved">保存済みラベルを開く（CSV/JSONインポート）</button>
+    </div>
+  </div>`;
+}
+
 function dashboardHtml() {
+  if (products.length === 0) {
+    return saasLayout("ダッシュボード", dashboardEmptyHtml());
+  }
+
   const total = products.length;
-  const incomplete = products.filter(p => {
-    const d = derive(p);
-    return calcCompletion(p,d).pct < 100;
-  }).length;
-  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0,5);
-  const recentCards = recent.length ? recent.map(p => `
+  const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
+  const incomplete = derivedAll.filter(({ p, d }) => calcCompletion(p, d).pct < 100).length;
+  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 5);
+
+  const recentCards = recent.map(p => {
+    const rd = derivedAll.find(x=>x.p.id===p.id);
+    const comp = rd ? calcCompletion(rd.p, rd.d) : { pct: 0 };
+    const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+    return `
     <div class="dash-product-row">
       <div class="dash-product-info">
         <span class="dash-product-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
         ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
-
         ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
+        <span class="dash-comp-pct" style="color:${pctColor};font-size:11px;font-weight:600;">${comp.pct}%</span>
       </div>
       <div class="dash-product-actions">
         <button class="btn-sm" data-nav-product-detail="${escapeHtml(p.id)}">詳細</button>
         <button class="btn-sm" data-label-from="${escapeHtml(p.id)}">ラベル</button>
       </div>
-    </div>`).join("") : `<p class="empty-note">商品がまだ登録されていません。</p>`;
+    </div>`;
+  }).join("");
 
-  const todos = calcTodo();
-  const todoCard = total === 0 ? "" : `<div class="todo-card">
+  const todos = calcTodo(derivedAll);
+  const todoCard = `<div class="todo-card">
     <div class="todo-card-title">📋 今日やること</div>
     ${todos.length === 0
       ? `<div class="todo-all-done">✅ すべて完了しています！</div>`
@@ -1845,14 +1908,13 @@ function dashboardHtml() {
           <button class="todo-item" data-todo-key="${t.key}">
             <span class="todo-count">${t.count}</span>
             <span class="todo-label">${escapeHtml(t.label)}</span>
-            <span style="color:#94a3b8;font-size:11px">→ 一覧へ</span>
+            <span class="todo-arrow">→ 一覧へ</span>
           </button>`).join("")}
         </div>`}
   </div>`;
 
-  const costSummary = (() => {
-    const withCost = products.map(p => ({ p, c: calcCosts(p) })).filter(({c}) => c.totalCost > 0);
-    if (!withCost.length) return "";
+  const withCost = derivedAll.filter(({c}) => c.totalCost > 0);
+  const costSummary = withCost.length ? (() => {
     const rates = withCost.filter(({c}) => c.costRate !== null).map(({c}) => c.costRate);
     const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
     const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
@@ -1864,15 +1926,32 @@ function dashboardHtml() {
         <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
       </div>
     </div>`;
-  })();
+  })() : "";
+
+  const todayIso2 = new Date().toISOString().split("T")[0];
+  const soonIso2  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const expiredCount    = products.filter(p=>p.expiryDate&&p.expiryDate<todayIso2).length;
+  const expiringSoonCount = products.filter(p=>p.expiryDate&&p.expiryDate>=todayIso2&&p.expiryDate<=soonIso2).length;
+  const expiryAlert = expiredCount > 0
+    ? `<div class="expiry-alert expiry-alert--danger" role="alert">
+        🚨 <strong>${expiredCount}件</strong>の商品が賞味期限切れです。
+        <button class="expiry-alert-btn" data-todo-key="expired">確認する →</button>
+       </div>`
+    : expiringSoonCount > 0
+    ? `<div class="expiry-alert expiry-alert--warn" role="alert">
+        ⏰ <strong>${expiringSoonCount}件</strong>の商品が30日以内に賞味期限を迎えます。
+        <button class="expiry-alert-btn" data-todo-key="expiringSoon">確認する →</button>
+       </div>`
+    : "";
 
   return saasLayout("ダッシュボード", `
+    ${expiryAlert}
     ${todoCard}
     <div class="dash-stats">
-      <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">登録商品数</div></div>
-      <div class="stat-card warn"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
-      <div class="stat-card"><div class="stat-num">${products.filter(p=>p.starred).length}</div><div class="stat-lbl">お気に入り</div></div>
-      <div class="stat-card blue"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
+      <div class="stat-card clickable" data-nav="products" data-set-filter="all"><div class="stat-num">${total}</div><div class="stat-lbl">登録商品数</div></div>
+      <div class="stat-card${incomplete>0?" warn":""} clickable" data-todo-key="incomplete"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
+      <div class="stat-card clickable" data-nav="products" data-set-filter="starred"><div class="stat-num">${products.filter(p=>p.starred).length}</div><div class="stat-lbl">お気に入り</div></div>
+      <div class="stat-card blue clickable" data-nav="products" data-set-filter="active"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
     </div>
     ${costSummary}
     <div class="dash-quick-actions">
@@ -1890,12 +1969,31 @@ function dashboardHtml() {
 
 // ── 商品マスター一覧 ──────────────────────────────────────────────────
 function productsListHtml() {
+  const todayIso = new Date().toISOString().split("T")[0];
+  const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+
   let list = [...products];
   if (masterSearch) list = list.filter(p => (p.internalName||"").includes(masterSearch)||(p.name||"").includes(masterSearch)||(p.code||"").includes(masterSearch)||(p.category||"").includes(masterSearch));
-  if (masterFilter==="starred") list = list.filter(p=>p.starred);
-  if (masterFilter==="active") list = list.filter(p=>p.publishStatus==="active");
-  if (masterFilter==="draft") list = list.filter(p=>p.publishStatus==="draft");
-  list.sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||""));
+  if (masterFilter==="starred")       list = list.filter(p=>p.starred);
+  if (masterFilter==="active")        list = list.filter(p=>p.publishStatus==="active");
+  if (masterFilter==="draft")         list = list.filter(p=>p.publishStatus==="draft");
+  if (masterFilter==="incomplete")    list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; });
+  if (masterFilter==="noBestBefore")  list = list.filter(p=>!p.bestBefore?.trim());
+  if (masterFilter==="noIngredients") list = list.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim()));
+  if (masterFilter==="noMfr")         list = list.filter(p=>!p.manufacturerName?.trim());
+  if (masterFilter==="noJan")         list = list.filter(p=>!p.janCode?.trim());
+  if (masterFilter==="expired")       list = list.filter(p=>p.expiryDate&&p.expiryDate<todayIso);
+  if (masterFilter==="expiringSoon")  list = list.filter(p=>p.expiryDate&&p.expiryDate>=todayIso&&p.expiryDate<=soonIso);
+
+  // ── ソート ──
+  if (masterSort==="name") {
+    list.sort((a,b)=>(a.internalName||a.name||"").localeCompare(b.internalName||b.name||"","ja"));
+  } else if (masterSort==="completion") {
+    const keys = new Map(list.map(p=>{ const d=derive(p); return [p.id, calcCompletion(p,d).pct]; }));
+    list.sort((a,b)=>keys.get(a.id)-keys.get(b.id));
+  } else {
+    list.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""));
+  }
 
   const statusBadge = (p) => {
     const label = p.publishStatus==="active"?"公開中":p.publishStatus==="draft"?"下書き":"非公開";
@@ -1904,60 +2002,105 @@ function productsListHtml() {
   };
 
   const cards = list.length ? list.map(p => {
-    const d = derive(p);
-    const comp = calcCompletion(p,d);
+    const d = derive(p);         // derive()は一度だけ呼ぶ
+    const comp = calcCompletion(p, d);
     const thumb = p.imageDataUrl
       ? `<img class="product-thumb" src="${p.imageDataUrl}" alt="商品画像">`
       : `<div class="product-thumb-placeholder">📦</div>`;
     const missingHtml = comp.missing.length
       ? `<div class="comp-missing">${comp.missing.map(m=>`<span class="comp-missing-item">${escapeHtml(m)}</span>`).join("")}</div>`
       : "";
-    return `<div class="master-card">
+    const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+    const expiryChip = p.expiryDate && p.expiryDate < todayIso
+      ? `<span class="expiry-chip expired">🚨 期限切れ</span>`
+      : p.expiryDate && p.expiryDate <= soonIso
+      ? `<span class="expiry-chip soon">⏰ ${Math.max(0,Math.ceil((new Date(p.expiryDate)-Date.now())/864e5))}日後</span>`
+      : "";
+    return `<div class="master-card" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集">
       <div class="master-card-inner">
         ${thumb}
         <div class="master-card-body">
           <div class="master-card-title-row">
             <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
-
             ${statusBadge(p)}
-            <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}">${p.starred?"★":"☆"}</button>
+            <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}" onclick="event.stopPropagation()">${p.starred?"★":"☆"}</button>
           </div>
           <div class="master-card-meta">
             ${p.code?`<span class="meta-item">品番：${escapeHtml(p.code)}</span>`:""}
             ${p.category?`<span class="meta-item">${escapeHtml(p.category)}</span>`:""}
             ${p.price?`<span class="meta-item">¥${escapeHtml(p.price)}</span>`:""}
             <span class="meta-item">更新：${escapeHtml(p.updatedAt||"")}</span>
+            ${expiryChip}
           </div>
           <div class="comp-section">
             <div class="comp-bar-row">
-              <div class="comp-bar-wrap" style="max-width:160px"><div class="comp-bar-fill" style="width:${comp.pct}%"></div></div>
-              <span class="comp-pct">完成度 ${comp.pct}%</span>
+              <div class="comp-bar-wrap" style="max-width:160px"><div class="comp-bar-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
+              <span class="comp-pct" style="color:${pctColor}">完成度 ${comp.pct}%</span>
             </div>
             ${missingHtml}
           </div>
           ${productStatusBadges(p, d)}
         </div>
       </div>
-      <div class="master-card-actions" style="margin-top:12px">
-        <button class="btn-action" data-nav-product-detail="${escapeHtml(p.id)}">✎ 詳細編集</button>
+      <div class="master-card-actions" onclick="event.stopPropagation()">
         <button class="btn-action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル</button>
         <button class="btn-action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
         <button class="btn-action" data-ai-from="${escapeHtml(p.id)}">✦ AI説明文</button>
         <button class="btn-action danger" data-del="${escapeHtml(p.id)}">削除</button>
       </div>
     </div>`;
-  }).join("") : `<div class="empty-state"><p>商品がまだ登録されていません。</p><button class="action primary" data-quick-new="1">＋ 最初の商品を登録する</button></div>`;
+  }).join("") : "";
+
+  const TODO_LABELS = {
+    incomplete:"完成度100%未満", noBestBefore:"賞味期限未設定",
+    noIngredients:"原材料未入力", noMfr:"製造者未設定", noJan:"JANコード未登録",
+    expired:"賞味期限切れ", expiringSoon:"30日以内に期限切れ",
+  };
+  const emptyHtml = !cards
+    ? TODO_LABELS[masterFilter]
+      ? `<div class="empty-state"><p>✅ ${TODO_LABELS[masterFilter]}に該当する商品はありません！</p><button class="action" data-master-filter="all">すべての商品を表示</button></div>`
+      : masterSearch
+        ? `<div class="empty-state"><p>「${escapeHtml(masterSearch)}」に一致する商品が見つかりません。</p></div>`
+        : `<div class="empty-state"><p>商品がまだ登録されていません。</p><button class="action primary" data-quick-new="1">＋ 最初の商品を登録する</button></div>`
+    : "";
+
+  const resultCount = list.length !== products.length
+    ? `<span class="result-count">${list.length}件</span>`
+    : "";
+
+  const SORT_LABELS = { updatedAt:"更新日（新しい順）", name:"商品名（あいうえお順）", completion:"完成度（低い順）" };
+
+  // 課題フィルター: calcTodo から件数 > 0 の項目だけ列挙（ダッシュボード不要でフィルター可能に）
+  const todoOpts = calcTodo();
+  const isTodoFilter = !!TODO_LABELS[masterFilter];
+  const todoFilterSelect = todoOpts.length ? `
+    <select class="todo-filter-select" data-todo-filter-select title="課題でフィルター">
+      <option value="">📋 課題フィルター...</option>
+      ${todoOpts.map(o=>`<option value="${o.key}"${masterFilter===o.key?" selected":""}>${o.label}（${o.count}件）</option>`).join("")}
+    </select>` : "";
 
   return saasLayout("商品管理", `
     <div class="master-toolbar">
-      <input class="search-box" placeholder="商品名・品番・カテゴリで検索..." data-master-search value="${escapeHtml(masterSearch)}">
+      <div class="search-wrap">
+        <input class="search-box" placeholder="商品名・品番・カテゴリで検索... (/ キー)" data-master-search value="${escapeHtml(masterSearch)}">
+        ${masterSearch ? `<button class="search-clear-btn" data-clear-search title="検索をクリア">✕</button>` : ""}
+      </div>
       <div class="filter-btns">
         ${["all","starred","active","draft"].map(f=>`<button class="filter-btn${masterFilter===f?" active":""}" data-master-filter="${f}">${{all:"すべて",starred:"★お気に入り",active:"公開中",draft:"下書き"}[f]}</button>`).join("")}
+        ${isTodoFilter?`<span class="filter-active-tag">📋 ${TODO_LABELS[masterFilter]}<button class="filter-clear-btn" data-master-filter="all">✕</button></span>`:""}
+        ${resultCount}
       </div>
-      ${registerBtnHtml()}
+      <div class="toolbar-right">
+        ${todoFilterSelect}
+        <select class="sort-select" data-master-sort title="並び替え">
+          ${Object.entries(SORT_LABELS).map(([v,l])=>`<option value="${v}"${masterSort===v?" selected":""}>${l}</option>`).join("")}
+        </select>
+        ${registerBtnHtml()}
+      </div>
     </div>
-    <div class="master-list">${cards}</div>
+    <div class="kbd-hints"><kbd>/</kbd> 検索 &nbsp;·&nbsp; <kbd>N</kbd> 新規登録 &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>S</kbd> 保存</div>
+    <div class="master-list">${cards || emptyHtml}</div>
   `);
 }
 
@@ -1972,13 +2115,33 @@ function productDetailHtml() {
   const statusOpts = [["active","公開中"],["draft","下書き"],["inactive","非公開"]].map(([v,l])=>`<option value="${v}"${p.publishStatus===v?" selected":""}>${l}</option>`).join("");
 
   const tab = productDetailTab || "basic";
+  const comp = calcCompletion(p, d);
+  const compColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+  const completionBanner = `<div class="detail-comp-banner">
+    <div class="dcb-bar-wrap"><div class="dcb-bar-fill" style="width:${comp.pct}%;background:${compColor}"></div></div>
+    <span class="dcb-pct" style="color:${compColor}">${comp.pct}%</span>
+    ${comp.missing.length
+      ? `<span class="dcb-missing">未入力: <strong>${comp.missing.join("・")}</strong></span>`
+      : `<span class="dcb-done">✅ 必須項目すべて入力済み</span>`}
+  </div>`;
+  // 未入力項目をタブへマッピングしてバッジ数を計算
+  const TAB_FIELDS = {
+    basic:       ["名称","内容量","賞味期限","保存方法","製造者名","製造者住所"],
+    ingredients: ["原材料名"],
+    cost:        [],
+    check:       [],
+  };
+  const tabBadge = (id) => {
+    const n = (TAB_FIELDS[id]||[]).filter(f => comp.missing.includes(f)).length;
+    return n > 0 ? `<span class="tab-badge">${n}</span>` : "";
+  };
   const tabs = [
-    { id:"basic",  label:"基本情報" },
+    { id:"basic",       label:"基本情報" },
     { id:"ingredients", label:"原材料" },
-    { id:"cost",   label:"原価" },
-    { id:"check",  label:"表示チェック" },
+    { id:"cost",        label:"原価" },
+    { id:"check",       label:"表示チェック" },
   ];
-  const tabNav = `<div class="detail-tabs">${tabs.map(t=>`<button class="detail-tab${tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}</button>`).join("")}</div>`;
+  const tabNav = `${completionBanner}<div class="detail-tabs">${tabs.map(t=>`<button class="detail-tab${tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div>`;
 
   // ── タブコンテンツ ──
   let tabContent = "";
@@ -2005,6 +2168,7 @@ function productDetailHtml() {
             </div>
             <label class="field"><span>内容量</span><input data-master-field="volume" value="${escapeHtml(p.volume||"")}" placeholder="例：100g"></label>
             <label class="field"><span>賞味期限</span><input data-master-field="bestBefore" value="${escapeHtml(p.bestBefore||"")}" placeholder="例：製造日より90日"></label>
+            <label class="field"><span>賞味期限日（管理用）<span class="field-hint">ラベル非表示・アラート用</span></span><input type="date" data-master-field="expiryDate" value="${escapeHtml(p.expiryDate||"")}"></label>
             <label class="field"><span>保存方法</span><input data-master-field="storage" value="${escapeHtml(p.storage||"")}" placeholder="例：高温多湿を避けて保存"></label>
           </div>
         </div>
@@ -2084,6 +2248,7 @@ function productDetailHtml() {
       <span>${escapeHtml(p.name||"新規商品")}</span>
     </div>
     <div class="detail-header-actions">
+      <span id="master-autosave-status" class="autosave-status${masterAutoSaveStatus==="saved"?" autosave-ok":masterAutoSaveStatus==="editing"?" autosave-editing":""}">${masterAutoSaveStatus==="saved"?"保存済み":masterAutoSaveStatus==="editing"?"編集中…":""}</span>
       <button class="action primary" data-action="save-master">保存する</button>
       <button class="action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル編集</button>
       <button class="action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
@@ -2545,15 +2710,23 @@ function newSettingsHtml() {
         </details>
       </div>
       <div class="settings-card">
-        <h3>OpenAI API キー</h3>
-        <p class="notice">登録するとAI相談・AI説明文でChatGPT（gpt-4o-mini）が直接回答します。未登録の場合はテンプレート回答になります。</p>
+        <h3>🤖 OpenAI API キー</h3>
+        <p class="notice">登録するとAI相談・AI食品表示法チェック・AI説明文でChatGPT（gpt-4o-mini）が直接回答します。未登録でもテンプレート回答で利用できます。</p>
         <div class="api-key-row">
-          <input id="openai-key-input" type="password" placeholder="sk-..." value="${escapeHtml(savedKey)}" style="flex:1;font-family:monospace">
+          <input id="openai-key-input" type="password" placeholder="sk-..." value="${escapeHtml(savedKey)}" autocomplete="off" style="flex:1;font-family:monospace">
           <button class="action primary" data-action="save-openai-key">保存</button>
-          ${savedKey ? `<button class="action" data-action="clear-openai-key">削除</button>` : ""}
+          ${savedKey ? `<button class="action" data-action="test-openai-key">接続テスト</button>` : ""}
+          ${savedKey ? `<button class="action danger-outline" data-action="clear-openai-key">削除</button>` : ""}
         </div>
-        ${savedKey ? `<p class="api-key-status ok">✓ APIキー登録済み（${escapeHtml(keyMasked)}）</p>` : `<p class="api-key-status">未登録</p>`}
-        <p class="notice" style="margin-top:8px">APIキーはセッション中のみ保持されます（タブを閉じると消えます）。外部サーバーには送信されません。<a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">APIキーを取得する →</a></p>
+        <div id="openai-key-status-wrap">
+          ${savedKey
+            ? `<p class="api-key-status ok">✓ APIキー登録済み（${escapeHtml(keyMasked)}）</p>`
+            : `<p class="api-key-status warn">⚠ 未登録 — AI機能はテンプレート回答になります</p>`}
+        </div>
+        <p class="notice" style="margin-top:8px">
+          <b>セキュリティ：</b>キーはこのタブのメモリのみに保持されます（タブを閉じると消えます）。外部サーバーへの送信はしません。<br>
+          <a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI APIキーを取得する →</a>
+        </p>
       </div>
       <div class="settings-card">
         <h3>プラン</h3>
@@ -2561,12 +2734,25 @@ function newSettingsHtml() {
         <div class="home-cta-wrap"><button class="home-next" data-action="menu">プランを変更する</button></div>
       </div>
       <div class="settings-card">
-        <h3>データ管理</h3>
-        <div class="settings-actions">
-          <button class="action" data-action="export-csv">↓ CSV出力（原価データ含む）</button>
-          <label class="action secondary import-label">↑ CSVインポート<input type="file" accept=".csv" data-csv-import style="display:none"></label>
+        <h3>💾 データ管理</h3>
+        <div class="settings-data-section">
+          <div class="settings-data-group">
+            <div class="settings-data-label">完全バックアップ（推奨）</div>
+            <div class="settings-actions">
+              <button class="action primary" data-action="export-json">📤 JSONで書き出す（全データ）</button>
+              <label class="action share-btn import-label">📥 JSONを読み込む<input type="file" accept=".json" data-json-import style="display:none"></label>
+            </div>
+            <p class="notice">原材料・アレルゲン・栄養成分・原価など全フィールドを含みます。チーム共有にも使えます。</p>
+          </div>
+          <div class="settings-data-group">
+            <div class="settings-data-label">CSVエクスポート（基本情報のみ）</div>
+            <div class="settings-actions">
+              <button class="action" data-action="export-csv">↓ CSV出力</button>
+              <label class="action secondary import-label">↑ CSVインポート<input type="file" accept=".csv" data-csv-import style="display:none"></label>
+            </div>
+          </div>
         </div>
-        <p class="notice">データはすべてこのブラウザのlocalStorageに保存されています。</p>
+        <p class="notice">データはすべてこのブラウザのlocalStorageに保存されています。定期的にJSONバックアップをお取りください。</p>
       </div>
       <div class="settings-card">
         <h3>添加物キーワード管理</h3>
@@ -2645,7 +2831,22 @@ async function supabasePull() {
 }
 
 // ── 商品マスター保存 ──────────────────────────────────────────────────
-function saveMaster() {
+function scheduleAutoSaveMaster() {
+  masterAutoSaveStatus = "editing";
+  updateMasterSaveStatus();
+  clearTimeout(masterAutoSaveTimer);
+  masterAutoSaveTimer = setTimeout(() => {
+    saveMaster(true);
+  }, 2000);
+}
+function updateMasterSaveStatus() {
+  const el = document.getElementById("master-autosave-status");
+  if (!el) return;
+  if (masterAutoSaveStatus === "editing") { el.textContent = "編集中…"; el.className = "autosave-status autosave-editing"; }
+  else if (masterAutoSaveStatus === "saved") { el.textContent = "保存済み"; el.className = "autosave-status autosave-ok"; }
+  else { el.textContent = ""; el.className = "autosave-status"; }
+}
+function saveMaster(isAuto = false) {
   const p = products.find(x=>x.id===productDetailId);
   if (!p) return;
   document.querySelectorAll("[data-master-field]").forEach(el => {
@@ -2683,12 +2884,15 @@ function saveMaster() {
   });
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
   saveProducts();
-  showStatus("保存しました");
+  masterAutoSaveStatus = "saved";
+  updateMasterSaveStatus();
+  if (!isAuto) showStatus("保存しました");
   document.querySelectorAll("[data-action='save-master']").forEach(btn => {
     btn.textContent = "✓ 保存済み";
     btn.disabled = true;
     setTimeout(() => { btn.textContent = "保存する"; btn.disabled = false; }, 2000);
   });
+  setTimeout(() => { masterAutoSaveStatus = ""; updateMasterSaveStatus(); }, 3000);
 }
 
 // ══ AI相談機能 ═══════════════════════════════════════════════════════════
@@ -3027,21 +3231,69 @@ function aiConsultHtml() {
   if (!aiConsultProductId && productList.length) aiConsultProductId = productList[0].id;
   const rawP = products.find(x => x.id === aiConsultProductId);
   if (!rawP && productList.length === 0) {
-    return saasLayout("AI相談", "<div class=\"empty-state\"><p>商品を先に登録してください。</p><button class=\"action primary\" data-nav=\"products\">商品管理へ</button></div>");
+    return saasLayout("AI相談", `
+      <div class="empty-state">
+        <p>商品を先に登録してください。</p>
+        <button class="action primary" data-nav="products">商品管理へ</button>
+      </div>`);
   }
   const ep = rawP ? extendProductMaster(rawP) : extendProductMaster(productList[0]);
   const history = getConsultHistory(ep.id);
   const displayName = ep.internalName || ep.name || "（名称未入力）";
-  const productSelect = productList.map(px => "<option value=\"" + escapeHtml(px.id) + "\"" + (px.id === aiConsultProductId ? " selected" : "") + ">" + escapeHtml(px.internalName || px.name || "（名称未入力）") + "</option>").join("");
-  const templateBtns = CONSULT_TEMPLATES.map(t => "<button class=\"consult-tpl-btn\" data-consult-key=\"" + escapeHtml(t.key) + "\" data-consult-q=\"" + escapeHtml(t.label) + "\">" + escapeHtml(t.label) + "</button>").join("");
+  const hasApiKey = !!(sessionStorage.getItem("fmcc-openai-key") || "");
+
+  const productSelect = productList.map(px =>
+    `<option value="${escapeHtml(px.id)}"${px.id === aiConsultProductId ? " selected" : ""}>
+      ${escapeHtml(px.internalName || px.name || "（名称未入力）")}
+    </option>`
+  ).join("");
+
+  const templateBtns = CONSULT_TEMPLATES.map(t =>
+    `<button class="consult-tpl-btn" data-consult-key="${escapeHtml(t.key)}" data-consult-q="${escapeHtml(t.label)}">
+      ${escapeHtml(t.label)}
+    </button>`
+  ).join("");
+
   const histHtml = history.length
-    ? history.map(msg => "<div class=\"consult-msg consult-msg-" + escapeHtml(msg.role) + "\"><div class=\"consult-msg-label\">" + (msg.role === "user" ? "質問" : "🤖 AI回答") + "</div><div class=\"consult-msg-body\">" + (msg.role === "assistant" ? renderMarkdown(msg.content) : escapeHtml(msg.content)) + "</div></div>").join("")
-    : "<div class=\"consult-empty\">テンプレートを選ぶか、テキストボックスに質問を入力して送信してください。</div>";
+    ? history.map(msg => `
+        <div class="consult-msg consult-msg-${escapeHtml(msg.role)}">
+          <div class="consult-msg-label">${msg.role === "user" ? "質問" : "🤖 AI回答"}</div>
+          <div class="consult-msg-body">${msg.role === "assistant" ? renderMarkdown(msg.content) : escapeHtml(msg.content)}</div>
+        </div>`).join("")
+    : `<div class="consult-empty">テンプレートを選ぶか、テキストボックスに質問を入力して送信してください。</div>`;
+
   const d2 = derive(ep);
-  const ls = "style=\"width:" + escapeHtml(String(printCfg.w || "90")) + "mm;font-size:" + escapeHtml(String(printCfg.fs || "7.5")) + "pt;\"";
-  const previewArea = printablePreviewHtml(ep, d2, ls, false);
-  const hasApiKey = !!safeGet("fmcc-openai-key");
-  return saasLayout("AI相談", "<div class=\"consult-layout\">\n  <div class=\"consult-left\">\n    <div class=\"consult-top-bar\">\n      <label class=\"field-inline\"><span>商品</span><select id=\"consult-product-sel\">" + productSelect + "</select></label>\n      <button class=\"btn-sm btn-danger\" id=\"consult-clear\">履歴クリア</button>\n    </div>\n    <div class=\"consult-templates\">\n      <div class=\"consult-tpl-title\">ワンクリック質問</div>\n      <div class=\"consult-tpl-grid\">" + templateBtns + "</div>\n    </div>\n    <div class=\"consult-history\" id=\"consult-history\">" + histHtml + "</div>\n    <div class=\"consult-input-area\">\n      <textarea class=\"consult-textarea\" id=\"consult-input\" placeholder=\"食品表示についてご質問ください...\">" + escapeHtml(aiConsultInput) + "</textarea>\n      <button class=\"action primary consult-send-btn" + (aiConsultSending ? " disabled" : "") + "\" id=\"consult-send\"" + (aiConsultSending ? " disabled" : "") + ">" + (aiConsultSending ? "回答中..." : "送信 ▶") + "</button>\n    </div>\n    " + (hasApiKey ? "" : "<p class=\"notice\">💡 設定画面でOpenAI APIキーを登録すると、ChatGPTが直接回答します（現在はテンプレート回答）</p>") + "\n  </div>\n  <div class=\"consult-right\">\n    <div class=\"consult-preview-title\">ラベルプレビュー（" + escapeHtml(displayName) + "）</div>\n    <div class=\"consult-preview-wrap\">" + previewArea + "</div>\n  </div>\n</div>");
+  const labelStyle = `style="width:${escapeHtml(String(printCfg.w || "90"))}mm;font-size:${escapeHtml(String(printCfg.fs || "7.5"))}pt;"`;
+  const previewArea = printablePreviewHtml(ep, d2, labelStyle, false);
+
+  return saasLayout("AI相談", `
+    <div class="consult-layout">
+      <div class="consult-left">
+        <div class="consult-top-bar">
+          <label class="field-inline">
+            <span>商品</span>
+            <select id="consult-product-sel">${productSelect}</select>
+          </label>
+          <button class="btn-sm btn-danger" id="consult-clear">履歴クリア</button>
+        </div>
+        <div class="consult-templates">
+          <div class="consult-tpl-title">ワンクリック質問</div>
+          <div class="consult-tpl-grid">${templateBtns}</div>
+        </div>
+        <div class="consult-history" id="consult-history">${histHtml}</div>
+        <div class="consult-input-area">
+          <textarea class="consult-textarea" id="consult-input" placeholder="食品表示についてご質問ください...">${escapeHtml(aiConsultInput)}</textarea>
+          <button class="action primary consult-send-btn${aiConsultSending ? " disabled" : ""}" id="consult-send"${aiConsultSending ? " disabled" : ""}>
+            ${aiConsultSending ? "回答中..." : "送信 ▶"}
+          </button>
+        </div>
+        ${hasApiKey ? "" : `<p class="notice">💡 <a class="field-link" data-nav="settings-nav">設定画面</a>でOpenAI APIキーを登録するとChatGPTが直接回答します（現在はテンプレート回答）</p>`}
+      </div>
+      <div class="consult-right">
+        <div class="consult-preview-title">ラベルプレビュー（${escapeHtml(displayName)}）</div>
+        <div class="consult-preview-wrap">${previewArea}</div>
+      </div>
+    </div>`);
 }
 
 // ── SaaSナビゲーション イベントバインド ──────────────────────────────

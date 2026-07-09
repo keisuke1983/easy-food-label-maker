@@ -73,6 +73,22 @@ function setupDelegation() {
         case "supabase-pull": supabasePull(); return;
         case "save-openai-key": { const inp=document.getElementById("openai-key-input"); if(!inp)return; const key=inp.value.trim(); if(!key){showStatus("APIキーを入力してください");return;} if(!key.startsWith("sk-")){showStatus("APIキーは sk- で始まる文字列です");return;} sessionStorage.setItem("fmcc-openai-key",key); showStatus("APIキーを保存しました（このセッション中のみ有効）"); render(); return; }
         case "clear-openai-key": sessionStorage.removeItem("fmcc-openai-key"); showStatus("APIキーを削除しました"); render(); return;
+        case "test-openai-key": {
+          const key = sessionStorage.getItem("fmcc-openai-key") || "";
+          if (!key) { showStatus("APIキーが登録されていません"); return; }
+          const wrap = document.getElementById("openai-key-status-wrap");
+          if (wrap) wrap.innerHTML = `<p class="api-key-status">🔄 接続テスト中...</p>`;
+          fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${key}` } })
+            .then(r => {
+              if (wrap) wrap.innerHTML = r.ok
+                ? `<p class="api-key-status ok">✅ 接続成功！AIが利用可能です</p>`
+                : `<p class="api-key-status error">❌ 認証失敗（ステータス ${r.status}）。キーを確認してください</p>`;
+            })
+            .catch(() => {
+              if (wrap) wrap.innerHTML = `<p class="api-key-status error">❌ 通信エラー。ネットワークを確認してください</p>`;
+            });
+          return;
+        }
         case "copy-output": copyLabels(); return;
         case "copy-image-output": copyImageLabels(); return;
       }
@@ -97,7 +113,25 @@ function setupDelegation() {
 
     // [data-del]
     const delEl = t.closest("[data-del]");
-    if (delEl) { const p=products.find(x=>x.id===delEl.dataset.del); if(!p)return; showModal({message:`「${p.name||"この商品"}」を削除しますか？\nこの操作は取り消せません。`,confirmLabel:"削除する",cancelLabel:"キャンセル",onConfirm:()=>{products=products.filter(x=>x.id!==p.id);safeDel(`food-label-history-${p.id}`);saveProducts();render();}}); return; }
+    if (delEl) {
+      const p = products.find(x=>x.id===delEl.dataset.del); if(!p) return;
+      const snapshot = structuredClone(p);
+      const histKey = `food-label-history-${p.id}`;
+      const histSnap = localStorage.getItem(histKey);
+      products = products.filter(x=>x.id!==p.id);
+      safeDel(histKey);
+      saveProducts(); render();
+      showStatus(`「${p.internalName||p.name||"商品"}」を削除しました`, {
+        undoLabel: "元に戻す",
+        onUndo: () => {
+          products = [snapshot, ...products];
+          if (histSnap) localStorage.setItem(histKey, histSnap);
+          saveProducts(); render();
+          showStatus("削除を取り消しました");
+        }
+      });
+      return;
+    }
 
     // [data-volume-unit]
     const volUnitEl = t.closest("[data-volume-unit]");
@@ -179,6 +213,7 @@ function setupDelegation() {
     const navEl = t.closest("[data-nav]");
     if (navEl) {
       const nav=navEl.dataset.nav; sidebarOpen=false;
+      if (navEl.dataset.setFilter) masterFilter = navEl.dataset.setFilter;
       if(nav==="label-nav"){if(products.length>0){editId=products[0].id;view="edit";saasView="label-nav";}else{view="edit";editId="new";draft=extendProductMaster(emptyProduct());saasView="label-nav";}}
       else if(nav==="spec-sheet-nav"){saasView="spec-sheet-nav";view="saas";if(!specSheetId&&products.length>0)specSheetId=products[0].id;}
       else if(nav==="ai-descriptions-nav"){saasView="ai-descriptions-nav";view="saas";if(!aiDescId&&products.length>0)aiDescId=products[0].id;}
@@ -208,7 +243,10 @@ function setupDelegation() {
 
     // [data-detail-tab]
     const dtEl = t.closest("[data-detail-tab]");
-    if (dtEl) { productDetailTab=dtEl.dataset.detailTab; render(); return; }
+    if (dtEl) { productDetailTab=dtEl.dataset.detailTab; render(); document.querySelector(".saas-content")?.scrollTo(0,0); return; }
+
+    // [data-clear-search]
+    if (t.closest("[data-clear-search]")) { masterSearch=""; render(); setTimeout(()=>document.querySelector("[data-master-search]")?.focus(),30); return; }
 
     // [data-master-filter]
     const mfEl = t.closest("[data-master-filter]");
@@ -219,7 +257,8 @@ function setupDelegation() {
     if (starEl) { const p=products.find(x=>x.id===starEl.dataset.toggleStar); if(p){p.starred=!p.starred;saveProducts();render();} return; }
 
     // [data-todo-key]
-    if (t.closest("[data-todo-key]")) { saasView="products";view="saas";safeSet("fmcc-view",saasView);render(); return; }
+    const todoEl = t.closest("[data-todo-key]");
+    if (todoEl) { saasView="products"; view="saas"; masterFilter=todoEl.dataset.todoKey; safeSet("fmcc-view",saasView); render(); return; }
 
     // [data-ai-ch]
     const aiChEl = t.closest("[data-ai-ch]");
@@ -242,6 +281,41 @@ function setupDelegation() {
     if (remIngEl) { const p=currentProduct(); p.ingredients.splice(Number(remIngEl.dataset.removeIng),1); if(!p.ingredients.length) p.ingredients.push({id:uid(),name:"",weight:""}); render(); return; }
   });
 
+  // ── keydown: role="button" 要素のEnter/Spaceキー活性化 ──
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const t = e.target;
+    if (t.getAttribute("role") === "button" && t.tagName !== "BUTTON") {
+      e.preventDefault();
+      t.click();
+    }
+  });
+
+  // ── keydown: Enter移動（原材料入力の流れを快適に） ──
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
+    const t = e.target;
+    if (t.matches("[data-ing-name]")) {
+      e.preventDefault();
+      const idx = Number(t.dataset.ingName);
+      const weightEl = document.querySelector(`[data-ing-weight="${idx}"]`);
+      if (weightEl) { weightEl.focus(); weightEl.select(); }
+      return;
+    }
+    if (t.matches("[data-ing-weight]")) {
+      e.preventDefault();
+      const idx = Number(t.dataset.ingWeight);
+      const p = currentProduct(); if (!p) return;
+      const nextNameEl = document.querySelector(`[data-ing-name="${idx + 1}"]`);
+      if (nextNameEl) { nextNameEl.focus(); return; }
+      // 最後の行なら新しい行を追加してフォーカス
+      p.ingredients.push({ id: uid(), name: "", weight: "" });
+      render();
+      setTimeout(() => document.querySelector(`[data-ing-name="${idx + 1}"]`)?.focus(), 30);
+      return;
+    }
+  });
+
   // ── input ──
   document.addEventListener("input", e => {
     const t = e.target;
@@ -257,7 +331,7 @@ function setupDelegation() {
     if (t.matches("[data-print-cfg]"))       { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-master-search]"))   { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{masterSearch=t.value;render();},200); return; }
     if (t.matches("[data-saved-search]"))    { clearTimeout(savedSearchTimer); savedSearchTimer=setTimeout(()=>{savedSearch=t.value;render();},200); return; }
-    if (t.matches("[data-master-field]"))    { const f=t.dataset.masterField; if(["directCost","price","directPackaging","directShipping","directOther"].includes(f)) refreshCostKpis(); return; }
+    if (t.matches("[data-master-field]"))    { const f=t.dataset.masterField; if(["directCost","price","directPackaging","directShipping","directOther"].includes(f)) refreshCostKpis(); scheduleAutoSaveMaster(); return; }
   });
 
   // ── change ──
@@ -276,13 +350,60 @@ function setupDelegation() {
     if (t.matches("[data-ai-product-select]")) { aiDescId=t.value; aiEditText=""; render(); return; }
     if (t.matches("[data-sel-print]"))         { t.checked?selectedForPrint.add(t.dataset.selPrint):selectedForPrint.delete(t.dataset.selPrint); render(); return; }
     if (t.matches("[data-csv-import]"))        { if(t.files[0]) importCsvFile(t.files[0]); return; }
-    if (t.matches("[data-json-import]"))       { if(!t.files[0]) return; const f=t.files[0]; showModal({message:`JSONをインポートします。\n\n既存データとの結合方法を選んでください。`,confirmLabel:"マージ追加",cancelLabel:"全て置き換え",onConfirm:()=>importJsonFile(f,"merge"),onCancel:()=>importJsonFile(f,"replace")}); return; }
+    if (t.matches("[data-json-import]"))       { if(!t.files[0]) return; const f=t.files[0]; showModal({message:`JSONをインポートします。\n\n既存データとの結合方法を選んでください。`,confirmLabel:"マージ追加（既存を残す）",dangerLabel:"全て置き換え",cancelLabel:"キャンセル",onConfirm:()=>importJsonFile(f,"merge"),onDanger:()=>importJsonFile(f,"replace")}); return; }
     if (t.matches("[data-mfr-tpl-select]"))   { const idx=Number(t.value); if(isNaN(idx)||!mfrTemplates[idx])return; const tpl=mfrTemplates[idx]; const p=currentProduct(); Object.assign(p,{manufacturerName:tpl.name,manufacturerPostal:tpl.postal,manufacturerAddress:tpl.address,manufacturerPhone:tpl.phone}); render(); return; }
     if (t.matches("[data-print-cfg]"))         { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-size]"))              { printCfg={...(SIZE_PRESETS.find(s=>s.label===t.value)||SIZE_PRESETS[1])}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); render(); return; }
     if (t.id==="spec-show-cost")               { specShowCost=t.checked; render(); return; }
     if (t.id==="spec-show-sig")                { specShowSig=t.checked; render(); return; }
     if (t.matches("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]")) { saveCostItems(); render(); return; }
+    if (t.matches("[data-master-field],[data-sales-ch]")) { scheduleAutoSaveMaster(); return; }
+    if (t.matches("[data-master-sort]")) { masterSort=t.value; render(); return; }
+    if (t.matches("[data-todo-filter-select]")) { masterFilter=t.value||"all"; render(); return; }
+  });
+
+  // ── グローバルキーボードショートカット ──
+  document.addEventListener("keydown", e => {
+    // 入力中・モーダル中は無視
+    const active = document.activeElement;
+    const inInput = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" || active.isContentEditable);
+    if (inInput && e.key !== "Escape") return;
+
+    // Escape: モーダル・パネルを閉じる
+    if (e.key === "Escape") {
+      if (document.querySelector(".app-modal")) { document.querySelector(".app-modal")?.remove(); return; }
+      if (showAiPanel) { showAiPanel = false; render(); return; }
+      if (printPreviewOpen) { printPreviewOpen = false; render(); return; }
+      return;
+    }
+
+    // Ctrl+S or Cmd+S: 保存
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      e.preventDefault();
+      if (view === "edit") { saveCurrent(); return; }
+      if (view === "saas" && saasView === "product-detail") { saveMaster(); return; }
+      return;
+    }
+
+    // SaaS画面でのみ有効なショートカット（入力フォーカスなし）
+    if (inInput) return;
+    if (view !== "saas") return;
+
+    // / : 検索ボックスにフォーカス
+    if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      const sb = document.querySelector("[data-master-search], [data-saved-search]");
+      if (sb) { sb.focus(); sb.select(); }
+      return;
+    }
+
+    // n : 新規商品作成
+    if (e.key === "n" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
+      assistMessage = ""; draft = emptyProduct(); editId = "new"; view = "edit"; render();
+      return;
+    }
   });
 }
 

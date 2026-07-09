@@ -2584,15 +2584,23 @@ function newSettingsHtml() {
         </details>
       </div>
       <div class="settings-card">
-        <h3>OpenAI API キー</h3>
-        <p class="notice">登録するとAI相談・AI説明文でChatGPT（gpt-4o-mini）が直接回答します。未登録の場合はテンプレート回答になります。</p>
+        <h3>🤖 OpenAI API キー</h3>
+        <p class="notice">登録するとAI相談・AI食品表示法チェック・AI説明文でChatGPT（gpt-4o-mini）が直接回答します。未登録でもテンプレート回答で利用できます。</p>
         <div class="api-key-row">
-          <input id="openai-key-input" type="password" placeholder="sk-..." value="${escapeHtml(savedKey)}" style="flex:1;font-family:monospace">
+          <input id="openai-key-input" type="password" placeholder="sk-..." value="${escapeHtml(savedKey)}" autocomplete="off" style="flex:1;font-family:monospace">
           <button class="action primary" data-action="save-openai-key">保存</button>
-          ${savedKey ? `<button class="action" data-action="clear-openai-key">削除</button>` : ""}
+          ${savedKey ? `<button class="action" data-action="test-openai-key">接続テスト</button>` : ""}
+          ${savedKey ? `<button class="action danger-outline" data-action="clear-openai-key">削除</button>` : ""}
         </div>
-        ${savedKey ? `<p class="api-key-status ok">✓ APIキー登録済み（${escapeHtml(keyMasked)}）</p>` : `<p class="api-key-status">未登録</p>`}
-        <p class="notice" style="margin-top:8px">APIキーはセッション中のみ保持されます（タブを閉じると消えます）。外部サーバーには送信されません。<a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">APIキーを取得する →</a></p>
+        <div id="openai-key-status-wrap">
+          ${savedKey
+            ? `<p class="api-key-status ok">✓ APIキー登録済み（${escapeHtml(keyMasked)}）</p>`
+            : `<p class="api-key-status warn">⚠ 未登録 — AI機能はテンプレート回答になります</p>`}
+        </div>
+        <p class="notice" style="margin-top:8px">
+          <b>セキュリティ：</b>キーはこのタブのメモリのみに保持されます（タブを閉じると消えます）。外部サーバーへの送信はしません。<br>
+          <a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI APIキーを取得する →</a>
+        </p>
       </div>
       <div class="settings-card">
         <h3>プラン</h3>

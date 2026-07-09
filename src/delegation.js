@@ -73,6 +73,22 @@ function setupDelegation() {
         case "supabase-pull": supabasePull(); return;
         case "save-openai-key": { const inp=document.getElementById("openai-key-input"); if(!inp)return; const key=inp.value.trim(); if(!key){showStatus("APIキーを入力してください");return;} if(!key.startsWith("sk-")){showStatus("APIキーは sk- で始まる文字列です");return;} sessionStorage.setItem("fmcc-openai-key",key); showStatus("APIキーを保存しました（このセッション中のみ有効）"); render(); return; }
         case "clear-openai-key": sessionStorage.removeItem("fmcc-openai-key"); showStatus("APIキーを削除しました"); render(); return;
+        case "test-openai-key": {
+          const key = sessionStorage.getItem("fmcc-openai-key") || "";
+          if (!key) { showStatus("APIキーが登録されていません"); return; }
+          const wrap = document.getElementById("openai-key-status-wrap");
+          if (wrap) wrap.innerHTML = `<p class="api-key-status">🔄 接続テスト中...</p>`;
+          fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${key}` } })
+            .then(r => {
+              if (wrap) wrap.innerHTML = r.ok
+                ? `<p class="api-key-status ok">✅ 接続成功！AIが利用可能です</p>`
+                : `<p class="api-key-status error">❌ 認証失敗（ステータス ${r.status}）。キーを確認してください</p>`;
+            })
+            .catch(() => {
+              if (wrap) wrap.innerHTML = `<p class="api-key-status error">❌ 通信エラー。ネットワークを確認してください</p>`;
+            });
+          return;
+        }
         case "copy-output": copyLabels(); return;
         case "copy-image-output": copyImageLabels(); return;
       }

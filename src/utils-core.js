@@ -30,7 +30,19 @@ function emptyProduct() {
 function loadProducts() {
   try {
     const saved = JSON.parse(safeGet("food-label-products-static"));
-    return Array.isArray(saved) ? saved.filter((p) => p.id !== "demo1") : [];
+    if (!Array.isArray(saved)) return [];
+    return saved.filter((p) => p.id !== "demo1").map(p => ({
+      ...p,
+      // 「食塩／トレハロース」のような ／ 入り原材料名を2行に自動分割
+      ingredients: (p.ingredients || []).flatMap(i => {
+        if (i.name && (i.name.includes("/") || i.name.includes("／"))) {
+          return i.name.split(/[\/／]/).map((name, idx) =>
+            idx === 0 ? { ...i, name: name.trim() } : { id: uid(), name: name.trim(), weight: "" }
+          );
+        }
+        return [i];
+      })
+    }));
   }
   catch { return []; }
 }

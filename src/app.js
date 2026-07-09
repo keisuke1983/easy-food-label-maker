@@ -200,6 +200,42 @@ function exportCsv() {
   URL.revokeObjectURL(url);
   showStatus("CSVをエクスポートしました");
 }
+function exportJson() {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    products: products,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url;
+  a.download = `food-labels-${new Date().toLocaleDateString("ja-JP").replace(/\//g, "-")}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showStatus("JSONをエクスポートしました（原材料・アレルゲン情報含む）");
+}
+function importJsonFile(file, mode) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const incoming = Array.isArray(data) ? data : (Array.isArray(data.products) ? data.products : null);
+      if (!incoming) { showStatus("JSONの形式が正しくありません"); return; }
+      const valid = incoming.filter(p => p && p.name);
+      if (!valid.length) { showStatus("有効な商品データが見つかりませんでした"); return; }
+      if (mode === "replace") {
+        products = valid.map(p => ({ ...emptyProduct(), ...p, id: p.id || uid() }));
+      } else {
+        const existingIds = new Set(products.map(p => p.id));
+        const toAdd = valid.map(p => ({ ...emptyProduct(), ...p, id: (p.id && !existingIds.has(p.id)) ? p.id : uid() }));
+        products = [...toAdd, ...products];
+      }
+      saveProducts(); render();
+      showStatus(`${valid.length}件をインポートしました`);
+    } catch { showStatus("JSONの読み込みに失敗しました"); }
+  };
+  reader.readAsText(file, "utf-8");
+}
 function parseCSVRow(line) {
   const fields = []; let cur = "", inQ = false;
   for (let i = 0; i < line.length; i++) {
@@ -701,6 +737,10 @@ function savedHtml() {
           <div class="btn-group">
             <button class="action" data-action="export-csv">↓ CSV出力</button>
             <label class="action csv-label">↑ CSV読込<input type="file" accept=".csv" data-csv-import style="display:none"></label>
+          </div>
+          <div class="btn-group">
+            <button class="action share-btn" data-action="export-json" title="原材料・アレルゲン情報含む完全データを出力">📤 共有用JSON出力</button>
+            <label class="action share-btn csv-label" title="チームメンバーから受け取ったJSONを取り込む">📥 JSON取込<input type="file" accept=".json" data-json-import style="display:none"></label>
           </div>
           ${batchBtn}
         </div>

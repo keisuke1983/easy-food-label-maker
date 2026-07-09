@@ -2122,6 +2122,7 @@ function productDetailHtml() {
       <span>${escapeHtml(p.name||"新規商品")}</span>
     </div>
     <div class="detail-header-actions">
+      <span id="master-autosave-status" class="autosave-status${masterAutoSaveStatus==="saved"?" autosave-ok":masterAutoSaveStatus==="editing"?" autosave-editing":""}">${masterAutoSaveStatus==="saved"?"保存済み":masterAutoSaveStatus==="editing"?"編集中…":""}</span>
       <button class="action primary" data-action="save-master">保存する</button>
       <button class="action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル編集</button>
       <button class="action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
@@ -2683,7 +2684,22 @@ async function supabasePull() {
 }
 
 // ── 商品マスター保存 ──────────────────────────────────────────────────
-function saveMaster() {
+function scheduleAutoSaveMaster() {
+  masterAutoSaveStatus = "editing";
+  updateMasterSaveStatus();
+  clearTimeout(masterAutoSaveTimer);
+  masterAutoSaveTimer = setTimeout(() => {
+    saveMaster(true);
+  }, 2000);
+}
+function updateMasterSaveStatus() {
+  const el = document.getElementById("master-autosave-status");
+  if (!el) return;
+  if (masterAutoSaveStatus === "editing") { el.textContent = "編集中…"; el.className = "autosave-status autosave-editing"; }
+  else if (masterAutoSaveStatus === "saved") { el.textContent = "保存済み"; el.className = "autosave-status autosave-ok"; }
+  else { el.textContent = ""; el.className = "autosave-status"; }
+}
+function saveMaster(isAuto = false) {
   const p = products.find(x=>x.id===productDetailId);
   if (!p) return;
   document.querySelectorAll("[data-master-field]").forEach(el => {
@@ -2721,12 +2737,15 @@ function saveMaster() {
   });
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
   saveProducts();
-  showStatus("保存しました");
+  masterAutoSaveStatus = "saved";
+  updateMasterSaveStatus();
+  if (!isAuto) showStatus("保存しました");
   document.querySelectorAll("[data-action='save-master']").forEach(btn => {
     btn.textContent = "✓ 保存済み";
     btn.disabled = true;
     setTimeout(() => { btn.textContent = "保存する"; btn.disabled = false; }, 2000);
   });
+  setTimeout(() => { masterAutoSaveStatus = ""; updateMasterSaveStatus(); }, 3000);
 }
 
 // ══ AI相談機能 ═══════════════════════════════════════════════════════════

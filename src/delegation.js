@@ -257,7 +257,7 @@ function setupDelegation() {
     if (t.matches("[data-print-cfg]"))       { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-master-search]"))   { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{masterSearch=t.value;render();},200); return; }
     if (t.matches("[data-saved-search]"))    { clearTimeout(savedSearchTimer); savedSearchTimer=setTimeout(()=>{savedSearch=t.value;render();},200); return; }
-    if (t.matches("[data-master-field]"))    { const f=t.dataset.masterField; if(["directCost","price","directPackaging","directShipping","directOther"].includes(f)) refreshCostKpis(); return; }
+    if (t.matches("[data-master-field]"))    { const f=t.dataset.masterField; if(["directCost","price","directPackaging","directShipping","directOther"].includes(f)) refreshCostKpis(); scheduleAutoSaveMaster(); return; }
   });
 
   // ── change ──
@@ -283,6 +283,7 @@ function setupDelegation() {
     if (t.id==="spec-show-cost")               { specShowCost=t.checked; render(); return; }
     if (t.id==="spec-show-sig")                { specShowSig=t.checked; render(); return; }
     if (t.matches("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]")) { saveCostItems(); render(); return; }
+    if (t.matches("[data-master-field],[data-sales-ch]")) { scheduleAutoSaveMaster(); return; }
   });
 }
 

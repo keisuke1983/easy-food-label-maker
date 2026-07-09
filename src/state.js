@@ -57,3 +57,5 @@ let ingBulkPasteOpen = false;
 let mobilePreviewTab = "form";
 let aiLabelCheckResult = null;
 let aiLabelCheckLoading = false;
+let masterAutoSaveTimer = null;
+let masterAutoSaveStatus = ""; // "" | "editing" | "saved"

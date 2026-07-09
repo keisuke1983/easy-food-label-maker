@@ -1752,3 +1752,31 @@ button:disabled {
 /* ── チーム共有 JSON (#10) ── */
 .share-btn { background: #f0fdf4; color: #15803d; border-color: #86efac; }
 .share-btn:hover { background: #dcfce7; }
+
+/* ── オンボーディング (初回空状態) ── */
+.onboarding-wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+.onboarding-hero { text-align: center; padding: 40px 16px 32px; }
+.onboarding-icon { width: 64px; height: 64px; margin-bottom: 16px; }
+.onboarding-title { font-size: 1.7rem; font-weight: 800; color: #1e293b; margin: 0 0 10px; }
+.onboarding-sub { color: #64748b; font-size: 0.95rem; line-height: 1.7; margin: 0 0 28px; }
+.onboarding-cta { font-size: 1.05rem; padding: 14px 36px; border-radius: 12px; }
+.onboarding-steps { display: flex; align-items: flex-start; justify-content: center; gap: 0; margin: 0 0 36px; flex-wrap: wrap; }
+.onboarding-step { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px 20px; text-align: center; flex: 1; min-width: 160px; max-width: 220px; }
+.onboarding-arrow { color: #cbd5e1; font-size: 1.5rem; align-self: center; padding: 0 8px; }
+.onboarding-step-num { width: 28px; height: 28px; border-radius: 50%; background: #2563eb; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; }
+.onboarding-step-ico { font-size: 1.8rem; margin-bottom: 8px; }
+.onboarding-step-title { font-weight: 700; color: #1e293b; font-size: 0.95rem; margin-bottom: 6px; }
+.onboarding-step-desc { color: #64748b; font-size: 0.8rem; line-height: 1.5; }
+.onboarding-features { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-bottom: 28px; }
+.onboarding-feat { display: flex; align-items: center; gap: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; color: #166534; }
+.feat-ico { color: #16a34a; font-weight: 700; flex-shrink: 0; }
+.onboarding-import { text-align: center; color: #64748b; font-size: 0.85rem; }
+.onboarding-import p { margin-bottom: 8px; }
+.todo-arrow { color: #94a3b8; font-size: 11px; }
+
+@media (max-width: 600px) {
+  .onboarding-steps { flex-direction: column; align-items: center; }
+  .onboarding-arrow { transform: rotate(90deg); padding: 4px 0; }
+  .onboarding-step { max-width: 100%; width: 100%; }
+  .onboarding-title { font-size: 1.3rem; }
+}

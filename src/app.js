@@ -710,7 +710,7 @@ function menuHtml() {
 function headerHtml(title, showSave = true) {
   const saveStatusCls = autoSaveStatus === "保存済み" ? "autosave-ok" : autoSaveStatus === "保存中" ? "autosave-saving" : "autosave-editing";
   const saveStatusHtml = autoSaveStatus ? `<span class="autosave-status ${saveStatusCls}">${escapeHtml(autoSaveStatus)}</span>` : "";
-  return `<header class="topbar"><button class="back" data-action="back-to-saas">← 商品管理</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${saveStatusHtml}${statusMessage ? `<span class="toast">${escapeHtml(statusMessage)}</span>` : ""}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
+  return `<header class="topbar"><button class="back" data-action="back-to-saas">← 商品管理</button><h1>${escapeHtml(title)}</h1><div class="topbar-right">${saveStatusHtml}<span class="plan-badge">${planInfo().label}</span>${showSave ? `<button class="action primary" data-action="save">保存</button>` : ""}</div></header>`;
 }
 function savedHtml() {
   let filtered = products.filter((p) => {
@@ -1815,29 +1815,68 @@ function imageUploadSectionHtml(p) {
 }
 
 // ── ダッシュボード ────────────────────────────────────────────────────
+function dashboardEmptyHtml() {
+  const STEPS = [
+    { ico: "📦", title: "商品を登録", desc: "商品名・原材料・製造者情報を入力" },
+    { ico: "🏷", title: "ラベルを自動生成", desc: "食品表示法に沿ったラベルをリアルタイム作成" },
+    { ico: "🤖", title: "AIが法令チェック", desc: "未入力項目の指摘・改善提案を自動実行" },
+  ];
+  return `<div class="onboarding-wrap">
+    <div class="onboarding-hero">
+      <img src="./assets/app-icon.svg" alt="" class="onboarding-icon">
+      <h1 class="onboarding-title">食品商品管理クラウドへようこそ</h1>
+      <p class="onboarding-sub">食品メーカー・小規模食品事業者のための<br>AI搭載・商品管理＆食品表示ラベル作成ツール</p>
+      <button class="action primary onboarding-cta" data-quick-new="1">＋ 最初の商品を登録する</button>
+    </div>
+    <div class="onboarding-steps">
+      ${STEPS.map((s, i) => `
+        <div class="onboarding-step">
+          <div class="onboarding-step-num">${i + 1}</div>
+          <div class="onboarding-step-ico">${s.ico}</div>
+          <div class="onboarding-step-title">${s.title}</div>
+          <div class="onboarding-step-desc">${s.desc}</div>
+        </div>`).join('<div class="onboarding-arrow">→</div>')}
+    </div>
+    <div class="onboarding-features">
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>食品表示法チェックリスト自動生成</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>原材料重量から栄養成分を自動計算</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>アレルゲン自動検出（28品目対応）</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>商品規格書・AI商品説明文の一括生成</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>原価・粗利管理ダッシュボード</div>
+      <div class="onboarding-feat"><span class="feat-ico">✓</span>ラベルPDF印刷・画像エクスポート</div>
+    </div>
+    <div class="onboarding-import">
+      <p>既存データをお持ちの場合：</p>
+      <button class="action" data-nav="saved">保存済みラベルを開く（CSV/JSONインポート）</button>
+    </div>
+  </div>`;
+}
+
 function dashboardHtml() {
+  if (products.length === 0) {
+    return saasLayout("ダッシュボード", dashboardEmptyHtml());
+  }
+
   const total = products.length;
-  const incomplete = products.filter(p => {
-    const d = derive(p);
-    return calcCompletion(p,d).pct < 100;
-  }).length;
-  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0,5);
-  const recentCards = recent.length ? recent.map(p => `
+  const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
+  const incomplete = derivedAll.filter(({ p, d }) => calcCompletion(p, d).pct < 100).length;
+  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 5);
+
+  const recentCards = recent.map(p => `
     <div class="dash-product-row">
       <div class="dash-product-info">
         <span class="dash-product-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
         ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
-
         ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
       </div>
       <div class="dash-product-actions">
         <button class="btn-sm" data-nav-product-detail="${escapeHtml(p.id)}">詳細</button>
         <button class="btn-sm" data-label-from="${escapeHtml(p.id)}">ラベル</button>
       </div>
-    </div>`).join("") : `<p class="empty-note">商品がまだ登録されていません。</p>`;
+    </div>`).join("");
 
   const todos = calcTodo();
-  const todoCard = total === 0 ? "" : `<div class="todo-card">
+  const todoCard = `<div class="todo-card">
     <div class="todo-card-title">📋 今日やること</div>
     ${todos.length === 0
       ? `<div class="todo-all-done">✅ すべて完了しています！</div>`
@@ -1845,14 +1884,13 @@ function dashboardHtml() {
           <button class="todo-item" data-todo-key="${t.key}">
             <span class="todo-count">${t.count}</span>
             <span class="todo-label">${escapeHtml(t.label)}</span>
-            <span style="color:#94a3b8;font-size:11px">→ 一覧へ</span>
+            <span class="todo-arrow">→ 一覧へ</span>
           </button>`).join("")}
         </div>`}
   </div>`;
 
-  const costSummary = (() => {
-    const withCost = products.map(p => ({ p, c: calcCosts(p) })).filter(({c}) => c.totalCost > 0);
-    if (!withCost.length) return "";
+  const withCost = derivedAll.filter(({c}) => c.totalCost > 0);
+  const costSummary = withCost.length ? (() => {
     const rates = withCost.filter(({c}) => c.costRate !== null).map(({c}) => c.costRate);
     const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
     const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
@@ -1864,13 +1902,13 @@ function dashboardHtml() {
         <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
       </div>
     </div>`;
-  })();
+  })() : "";
 
   return saasLayout("ダッシュボード", `
     ${todoCard}
     <div class="dash-stats">
       <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">登録商品数</div></div>
-      <div class="stat-card warn"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
+      <div class="stat-card${incomplete>0?" warn":""}"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
       <div class="stat-card"><div class="stat-num">${products.filter(p=>p.starred).length}</div><div class="stat-lbl">お気に入り</div></div>
       <div class="stat-card blue"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
     </div>
@@ -3040,7 +3078,7 @@ function aiConsultHtml() {
   const d2 = derive(ep);
   const ls = "style=\"width:" + escapeHtml(String(printCfg.w || "90")) + "mm;font-size:" + escapeHtml(String(printCfg.fs || "7.5")) + "pt;\"";
   const previewArea = printablePreviewHtml(ep, d2, ls, false);
-  const hasApiKey = !!safeGet("fmcc-openai-key");
+  const hasApiKey = !!(sessionStorage.getItem("fmcc-openai-key") || "");
   return saasLayout("AI相談", "<div class=\"consult-layout\">\n  <div class=\"consult-left\">\n    <div class=\"consult-top-bar\">\n      <label class=\"field-inline\"><span>商品</span><select id=\"consult-product-sel\">" + productSelect + "</select></label>\n      <button class=\"btn-sm btn-danger\" id=\"consult-clear\">履歴クリア</button>\n    </div>\n    <div class=\"consult-templates\">\n      <div class=\"consult-tpl-title\">ワンクリック質問</div>\n      <div class=\"consult-tpl-grid\">" + templateBtns + "</div>\n    </div>\n    <div class=\"consult-history\" id=\"consult-history\">" + histHtml + "</div>\n    <div class=\"consult-input-area\">\n      <textarea class=\"consult-textarea\" id=\"consult-input\" placeholder=\"食品表示についてご質問ください...\">" + escapeHtml(aiConsultInput) + "</textarea>\n      <button class=\"action primary consult-send-btn" + (aiConsultSending ? " disabled" : "") + "\" id=\"consult-send\"" + (aiConsultSending ? " disabled" : "") + ">" + (aiConsultSending ? "回答中..." : "送信 ▶") + "</button>\n    </div>\n    " + (hasApiKey ? "" : "<p class=\"notice\">💡 設定画面でOpenAI APIキーを登録すると、ChatGPTが直接回答します（現在はテンプレート回答）</p>") + "\n  </div>\n  <div class=\"consult-right\">\n    <div class=\"consult-preview-title\">ラベルプレビュー（" + escapeHtml(displayName) + "）</div>\n    <div class=\"consult-preview-wrap\">" + previewArea + "</div>\n  </div>\n</div>");
 }
 

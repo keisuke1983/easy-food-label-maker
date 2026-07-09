@@ -77,7 +77,8 @@ function buildIngLabel(ingredients) {
   const noW = named.filter((i) => !((parseFloat(i.weight) || 0) > 0));
   const sorted = [...withW, ...noW];
   const normal = sorted.filter((i) => !isAdditive(i.name)).map((i) => i.name).join("、");
-  const add = sorted.filter((i) => isAdditive(i.name)).map((i) => i.name).join("、");
+  // 「食塩／トレハロース」のようにキャリー／添加物形式の名前は、キャリー部分（／前）を除いて表示
+  const add = sorted.filter((i) => isAdditive(i.name)).map((i) => i.name.includes("／") ? i.name.split("／").slice(1).join("・") : i.name).join("、");
   if (!normal && !add) return "";
   if (!add) return normal;
   if (!normal) return `／${add}`;

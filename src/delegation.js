@@ -1,4 +1,8 @@
-﻿// ── ⑨ イベントデリゲーション（起動時1回のみ登録） ───────────────────────
+﻿function isDraftUnsaved() {
+  return editId === "new" && draft && (draft.name?.trim() || draft.ingredients?.some(i => i.name?.trim()));
+}
+
+// ── ⑨ イベントデリゲーション（起動時1回のみ登録） ───────────────────────
 function setupDelegation() {
   let masterSearchTimer, savedSearchTimer;
 
@@ -12,10 +16,10 @@ function setupDelegation() {
       const act = ael.dataset.action;
       switch (act) {
         case "new": if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。プランを変更してください。` }); return; } assistMessage = ""; draft = emptyProduct(); editId = "new"; view = "edit"; render(); return;
-        case "menu": view = "menu"; editId = null; draft = null; render(); return;
+        case "menu": { if(isDraftUnsaved()){showModal({message:"保存されていません。このまま移動しますか？",confirmLabel:"移動する",cancelLabel:"キャンセル",onConfirm:()=>{view="menu";editId=null;draft=null;render();}});return;} view="menu";editId=null;draft=null;render();return; }
         case "plan-page": view = "home"; editId = null; draft = null; render(); return;
-        case "saved": view = "saved"; render(); return;
-        case "home": view = "menu"; editId = null; draft = null; assistMessage = ""; render(); return;
+        case "saved": { if(isDraftUnsaved()){showModal({message:"保存されていません。このまま移動しますか？",confirmLabel:"移動する",cancelLabel:"キャンセル",onConfirm:()=>{view="saved";editId=null;draft=null;render();}});return;} view="saved";render();return; }
+        case "home": { if(isDraftUnsaved()){showModal({message:"保存されていません。このまま移動しますか？",confirmLabel:"移動する",cancelLabel:"キャンセル",onConfirm:()=>{view="menu";editId=null;draft=null;assistMessage="";render();}});return;} view="menu";editId=null;draft=null;assistMessage="";render();return; }
         case "save": saveCurrent(); return;
         case "save-master": saveMaster(); return;
         case "back-to-saas": saasView = productDetailId ? "product-detail" : "products"; view = "saas"; render(); return;
@@ -25,6 +29,23 @@ function setupDelegation() {
         case "open-print-preview": printPreviewOpen = true; render(); return;
         case "close-print-preview": printPreviewOpen = false; render(); return;
         case "add-ing": { const p = currentProduct(); p.ingredients.push({ id: uid(), name: "", weight: "" }); render(); return; }
+        case "toggle-bulk-paste": { ingBulkPasteOpen = !ingBulkPasteOpen; render(); return; }
+        case "confirm-bulk-paste": {
+          const ta = document.getElementById("bulk-paste-textarea");
+          if (!ta?.value.trim()) { ingBulkPasteOpen = false; render(); return; }
+          const p = currentProduct(); if (!p) return;
+          const newIngs = ta.value.split(/\n/).map(s => s.trim()).filter(Boolean).flatMap(line => {
+            const m = line.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*g?$/i);
+            const name = (m ? m[1] : line).replace(/[\/／]/g, "").trim();
+            if (!name) return [];
+            return [{ id: uid(), name, weight: m ? m[2] : "" }];
+          });
+          if (!newIngs.length) { ingBulkPasteOpen = false; render(); return; }
+          if (p.ingredients.length === 1 && !p.ingredients[0].name) p.ingredients = newIngs;
+          else p.ingredients = [...p.ingredients, ...newIngs];
+          ingBulkPasteOpen = false; render(); return;
+        }
+        case "run-ai-label-check": { runAiLabelCheck(); return; }
         case "sort-additives": { const p = currentProduct(); const n = p.ingredients.filter(i => !isAdditive(i.name)); const a = p.ingredients.filter(i => isAdditive(i.name)); p.ingredients = [...n,...a]; render(); return; }
         case "sort-by-weight": { const p = currentProduct(); p.ingredients = [...p.ingredients].sort((a,b) => (parseFloat(b.weight)||0)-(parseFloat(a.weight)||0)); render(); return; }
         case "normalize-label": { const p = currentProduct(); const { next, changes } = normalizeLabelText(p); assistMessage = changes.length ? `整えました：${changes.slice(0,4).join("、")}${changes.length>4?" ほか":""}` : "すでに食品表示向けに整っています。"; if (editId==="new") draft=next; else products=products.map(x=>x.id===p.id?next:x); render(); return; }
@@ -49,8 +70,8 @@ function setupDelegation() {
         case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("URLとAPIキーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("URLはhttps://で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("Supabase設定を保存しました"); render(); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
-        case "save-openai-key": { const inp=document.getElementById("openai-key-input"); if(!inp)return; const key=inp.value.trim(); if(!key){showStatus("APIキーを入力してください");return;} if(!key.startsWith("sk-")){showStatus("APIキーは sk- で始まる文字列です");return;} safeSet("fmcc-openai-key",key); showStatus("APIキーを保存しました"); render(); return; }
-        case "clear-openai-key": safeSet("fmcc-openai-key",""); showStatus("APIキーを削除しました"); render(); return;
+        case "save-openai-key": { const inp=document.getElementById("openai-key-input"); if(!inp)return; const key=inp.value.trim(); if(!key){showStatus("APIキーを入力してください");return;} if(!key.startsWith("sk-")){showStatus("APIキーは sk- で始まる文字列です");return;} sessionStorage.setItem("fmcc-openai-key",key); showStatus("APIキーを保存しました（このセッション中のみ有効）"); render(); return; }
+        case "clear-openai-key": sessionStorage.removeItem("fmcc-openai-key"); showStatus("APIキーを削除しました"); render(); return;
         case "copy-output": copyLabels(); return;
         case "copy-image-output": copyImageLabels(); return;
       }
@@ -75,7 +96,7 @@ function setupDelegation() {
 
     // [data-del]
     const delEl = t.closest("[data-del]");
-    if (delEl) { const p=products.find(x=>x.id===delEl.dataset.del); if(!p)return; showModal({message:`「${p.name||"この商品"}」を削除しますか？\nこの操作は取り消せません。`,confirmLabel:"削除する",cancelLabel:"キャンセル",onConfirm:()=>{products=products.filter(x=>x.id!==p.id);saveProducts();render();}}); return; }
+    if (delEl) { const p=products.find(x=>x.id===delEl.dataset.del); if(!p)return; showModal({message:`「${p.name||"この商品"}」を削除しますか？\nこの操作は取り消せません。`,confirmLabel:"削除する",cancelLabel:"キャンセル",onConfirm:()=>{products=products.filter(x=>x.id!==p.id);safeDel(`food-label-history-${p.id}`);saveProducts();render();}}); return; }
 
     // [data-volume-unit]
     const volUnitEl = t.closest("[data-volume-unit]");
@@ -136,6 +157,10 @@ function setupDelegation() {
     // [data-zoom]
     const zoomEl = t.closest("[data-zoom]");
     if (zoomEl) { previewZoom=zoomEl.dataset.zoom==="実寸"?"実寸":Number(zoomEl.dataset.zoom); render(); return; }
+
+    // [data-mobile-tab]
+    const mobileTabEl = t.closest("[data-mobile-tab]");
+    if (mobileTabEl) { mobilePreviewTab = mobileTabEl.dataset.mobileTab; render(); return; }
 
     // [data-toggle-section]
     const sectionEl = t.closest("[data-toggle-section]");

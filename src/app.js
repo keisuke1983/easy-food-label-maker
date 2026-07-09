@@ -200,6 +200,22 @@ function exportCsv() {
   URL.revokeObjectURL(url);
   showStatus("CSVをエクスポートしました");
 }
+function parseCSVRow(line) {
+  const fields = []; let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    if (inQ) {
+      if (line[i] === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (line[i] === '"') { inQ = false; }
+      else { cur += line[i]; }
+    } else {
+      if (line[i] === '"') { inQ = true; }
+      else if (line[i] === ',') { fields.push(cur.trim()); cur = ""; }
+      else { cur += line[i]; }
+    }
+  }
+  fields.push(cur.trim());
+  return fields;
+}
 function importCsvFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -207,25 +223,20 @@ function importCsvFile(file) {
       const text = e.target.result.replace(/^﻿/, "");
       const lines = text.split(/\r?\n/).filter(Boolean);
       if (lines.length < 2) { showStatus("CSVが空または形式が不正です"); return; }
-      const headers = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim());
-      const nameIdx = headers.indexOf("name");
-      if (nameIdx === -1) { showStatus("CSVにnameカラムが必要です"); return; }
+      const headers = parseCSVRow(lines[0]);
+      if (!headers.includes("name")) { showStatus("CSVにnameカラムが必要です"); return; }
+      const SAFE = new Set(["name","internalName","volume","bestBefore","storage","storageCustom",
+        "manufacturerName","manufacturerAddress","manufacturerPhone","manufacturerPostal",
+        "janCode","code","category","price","memo","publishStatus","updatedAt"]);
       let added = 0;
       lines.slice(1).forEach((line) => {
-        const cols = [];
-        let cur = ""; let inQ = false;
-        for (const ch of line) { if (ch === '"') { inQ = !inQ; } else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; } else { cur += ch; } }
-        cols.push(cur.trim());
-        const SAFE_CSV_FIELDS = new Set(["name","internalName","volume","bestBefore","storage","storageCustom",
-          "manufacturerName","manufacturerAddress","manufacturerPhone","manufacturerPostal",
-          "janCode","code","category","price","memo","publishStatus","updatedAt"]);
+        const cols = parseCSVRow(line);
         const row = {};
-        headers.forEach((h, i) => { if (SAFE_CSV_FIELDS.has(h)) row[h] = cols[i] || ""; });
+        headers.forEach((h, i) => { if (SAFE.has(h)) row[h] = String(cols[i] || "").slice(0, 500); });
         if (!row.name) return;
         const p = emptyProduct();
         Object.assign(p, row, { id: uid(), starred: false, ingredients: [{ id: uid(), name: "", weight: "" }] });
-        products = [p, ...products];
-        added++;
+        products = [p, ...products]; added++;
       });
       saveProducts(); render();
       showStatus(`${added}件をインポートしました`);
@@ -459,7 +470,30 @@ function render() {
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(render, 300);
+  renderTimer = setTimeout(() => {
+    if (view === "edit") {
+      const p = currentProduct();
+      const pc = document.querySelector(".preview-column");
+      if (p && pc) {
+        const d = derive(p);
+        pc.innerHTML = previewHtml(p, d);
+        // 完成度バーを部分更新
+        const { pct, missing } = calcCompletion(p, d);
+        const pctColor = pct >= 100 ? "#16a34a" : pct >= 60 ? "#2563eb" : "#d97706";
+        const fill = document.querySelector(".completion-bar-fill");
+        const strong = document.querySelector(".completion-bar-head strong");
+        const info = document.querySelector(".completion-missing, .completion-ok");
+        if (fill) { fill.style.width = `${pct}%`; fill.style.background = pctColor; }
+        if (strong) { strong.textContent = `${pct}%`; strong.style.color = pctColor; }
+        if (info) { info.className = missing.length ? "completion-missing" : "completion-ok"; info.textContent = missing.length ? `未入力：${missing.join("・")}` : "✓ すべて入力済み"; }
+        // 原材料ラベルプレビューも更新
+        const ingPrev = document.querySelector(".ing-preview");
+        if (ingPrev) ingPrev.textContent = d.ingLabel || "";
+        return;
+      }
+    }
+    render();
+  }, 300);
 }
 function scheduleAutoSave() {
   if (view !== "edit") return;
@@ -721,9 +755,10 @@ function editorHtml(p) {
   </div>`;
   const recentStorageOpts = recentStorage.filter((s) => STORAGE_OPTS.includes(s));
   const storageHtml = `${recentStorageOpts.length ? `<div class="recent-storage-label">よく使う保存方法</div><div class="choice-grid">${recentStorageOpts.map((s) => `<button class="${p.storage === s ? "selected" : ""}" data-storage="${escapeHtml(s)}">${p.storage === s ? "✓ " : ""}${escapeHtml(s)}</button>`).join("")}</div><div class="recent-storage-label">すべての保存方法</div>` : ""}<div class="choice-grid">${STORAGE_OPTS.map((s) => `<button class="${p.storage === s ? "selected" : ""}" data-storage="${escapeHtml(s)}">${p.storage === s ? "✓ " : ""}${escapeHtml(s)}</button>`).join("")}</div>${p.storage === "自由入力" ? `<label class="field"><span>保存方法</span><input data-field="storageCustom" value="${escapeHtml(p.storageCustom)}"></label>` : ""}`;
-  return `<div class="page">${headerHtml(p.name || "新商品ラベル作成")}
+  const mobileTabHtml = `<div class="mobile-tab-bar"><button class="mobile-tab${mobilePreviewTab==="form"?" active":""}" data-mobile-tab="form">✏️ 入力</button><button class="mobile-tab${mobilePreviewTab==="preview"?" active":""}" data-mobile-tab="preview">👁 プレビュー</button></div>`;
+  return `<div class="page">${headerHtml(p.name || "新商品ラベル作成")}${mobileTabHtml}
     <div class="editor-shell">
-      <div class="form-column">
+      <div class="form-column${mobilePreviewTab==="preview"?" mobile-hidden":""}">`+`
         ${completionHtml}
         ${section("商品情報", productInfoHtml(p))}
         ${janCodeHtml(p)}
@@ -748,7 +783,8 @@ function editorHtml(p) {
             <button class="action-sub" data-action="sort-additives">添加物を末尾へ</button>
           </div>`;
           const preview = d.ingLabel ? `<div class="ing-preview-wrap"><div class="ing-preview-label">ラベル表示プレビュー</div><div class="ing-preview">${escapeHtml(d.ingLabel)}</div></div>` : "";
-          return `<div class="ing-list" id="ing-list">${ingListHtml}</div><button class="action" data-action="add-ing">＋ 原材料を追加</button>${sortBtns}${preview}`;
+          const bulkPasteHtml = ingBulkPasteOpen ? `<div class="bulk-paste-area"><p class="notice">1行に1つ入力。「原材料名 重量」形式で重量も入力できます</p><textarea id="bulk-paste-textarea" rows="6" placeholder="例：&#10;小麦粉 100&#10;砂糖 50&#10;食塩&#10;加工でん粉"></textarea><div class="bulk-paste-btns"><button class="action primary" data-action="confirm-bulk-paste">追加する</button><button class="action" data-action="toggle-bulk-paste">閉じる</button></div></div>` : "";
+          return `<div class="ing-list" id="ing-list">${ingListHtml}</div><div class="ing-add-row"><button class="action" data-action="add-ing">＋ 1件追加</button><button class="action-sub" data-action="toggle-bulk-paste">📋 まとめて入力</button></div>${bulkPasteHtml}${sortBtns}${preview}`;
         })())}
         ${nutritionEditorHtml(p, d)}
         ${allergenEditorHtml(p, d)}
@@ -759,7 +795,7 @@ function editorHtml(p) {
         ${historyHtml(p)}
         <datalist id="ing-master-list">${[...ingMaster, ...Object.keys(NUTRITION_DB)].filter((v,i,a)=>a.indexOf(v)===i && !v.includes("/") && !v.includes("／")).map(n => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
       </div>
-      <div class="preview-column">${previewHtml(p, d)}</div>
+      <div class="preview-column${mobilePreviewTab==="form"?" mobile-hidden":""}">${previewHtml(p, d)}</div>
     </div>
     <button class="fab-save" data-action="save" title="保存する">保存する</button>
   </div>`;
@@ -879,6 +915,12 @@ function contaminationEditorHtml(p) {
 function labelAssistHtml(p, d) {
   const checks = labelChecklist(p, d);
   const okCount = checks.filter((c) => c.ok).length;
+  const hasKey = !!(sessionStorage.getItem("fmcc-openai-key") || "");
+  const aiCheckHtml = (() => {
+    if (aiLabelCheckLoading) return `<div class="ai-check-loading">🤖 AIが食品表示法を照合中...</div>`;
+    if (aiLabelCheckResult) return `<div class="ai-check-result">${renderMarkdown(aiLabelCheckResult)}<button class="action-sub" data-action="run-ai-label-check" style="margin-top:8px">再チェック</button></div>`;
+    return `<button class="action ai-check-btn" data-action="run-ai-label-check">🔍 AI食品表示法チェック${hasKey ? "" : "（テンプレート）"}</button>`;
+  })();
   return section("表示チェックリスト", `
     <div class="assist-actions">
       <button class="action primary" data-action="normalize-label">食品表示向けに整える</button>
@@ -887,6 +929,7 @@ function labelAssistHtml(p, d) {
     ${assistMessage ? `<p class="notice success">${escapeHtml(assistMessage)}</p>` : ""}
     <div class="checklist-summary"><span>${okCount} / ${checks.length} 項目OK</span>${okCount < checks.length ? `<span class="checklist-warn-hint">⬇ 要確認項目をクリックで該当欄へジャンプ</span>` : ""}</div>
     <div class="check-list">${checks.map((item) => `<div class="${item.ok ? "check-ok" : "check-warn check-jumpable"}" ${!item.ok ? `data-jump-label="${escapeHtml(item.label)}" title="クリックで該当欄へ移動"` : ""}><b>${item.ok ? "✓" : "!"}</b><span>${escapeHtml(item.label)}</span></div>`).join("")}</div>
+    <div class="ai-check-wrap">${aiCheckHtml}</div>
     <p class="notice">この機能は表示補助です。法令適合の最終確認は事業者の責任で行ってください。</p>`);
 }
 function labelChecklist(p, d) {
@@ -2427,7 +2470,7 @@ function newSettingsHtml() {
   const userKwList = userAdditiveKw.map((kw, i) =>
     `<div class="additive-kw-row"><span>${escapeHtml(kw)}</span><button class="icon-btn" data-del-additive-kw="${i}">×</button></div>`
   ).join("");
-  const savedKey = safeGet("fmcc-openai-key") || "";
+  const savedKey = sessionStorage.getItem("fmcc-openai-key") || "";
   const keyMasked = savedKey ? "sk-..." + savedKey.slice(-4) : "";
   const sbUrl = safeGet("fmcc-supabase-url") || "";
   const sbKey = safeGet("fmcc-supabase-key") || "";
@@ -2470,7 +2513,7 @@ function newSettingsHtml() {
           ${savedKey ? `<button class="action" data-action="clear-openai-key">削除</button>` : ""}
         </div>
         ${savedKey ? `<p class="api-key-status ok">✓ APIキー登録済み（${escapeHtml(keyMasked)}）</p>` : `<p class="api-key-status">未登録</p>`}
-        <p class="notice" style="margin-top:8px">APIキーはこのブラウザのlocalStorageにのみ保存されます。外部サーバーには送信されません。<a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">APIキーを取得する →</a></p>
+        <p class="notice" style="margin-top:8px">APIキーはセッション中のみ保持されます（タブを閉じると消えます）。外部サーバーには送信されません。<a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">APIキーを取得する →</a></p>
       </div>
       <div class="settings-card">
         <h3>プラン</h3>
@@ -2701,7 +2744,7 @@ function generateConsultResponse(p, questionKey) {
 
 // OpenAI API接続ポイント（APIキー設定で差し替え可能な設計）
 async function callConsultAI(p, userMessage, questionKey) {
-  const apiKey = safeGet("fmcc-openai-key") || "";
+  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
   if (apiKey) {
     try {
       const d = derive(p);
@@ -2718,6 +2761,47 @@ async function callConsultAI(p, userMessage, questionKey) {
   return generateConsultResponse(p, questionKey);
 }
 
+
+async function runAiLabelCheck() {
+  const p = currentProduct();
+  if (!p) return;
+  aiLabelCheckLoading = true; aiLabelCheckResult = null; render();
+  const d = derive(p);
+  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
+  const prompt = `以下の食品ラベル情報を日本の食品表示基準（食品表示法・JAS法）に照らして確認し、問題点や改善点をMarkdownで箇条書きにしてください。問題がなければ「問題なし」と記載してください。
+
+【名称】${p.name || "未入力"}
+【原材料名】${d.ingLabel || "未入力"}
+【内容量】${p.volume || "未入力"}
+【賞味期限】${p.bestBefore || "未入力"}
+【保存方法】${d.storage || "未入力"}
+【アレルゲン】${d.allergens.join("、") || "なし"}
+【製造者】${p.manufacturerName || "未入力"} ${p.manufacturerAddress || ""}`;
+
+  if (apiKey) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: "あなたは日本の食品表示法の専門家です。指摘は具体的かつ簡潔に、Markdown箇条書きで回答してください。" }, { role: "user", content: prompt }], max_tokens: 800 }),
+      });
+      const json = await res.json();
+      aiLabelCheckResult = json.choices?.[0]?.message?.content || "チェック結果を取得できませんでした。";
+    } catch { aiLabelCheckResult = "通信エラーが発生しました。APIキーを確認してください。"; }
+  } else {
+    const issues = [];
+    if (!p.name?.trim()) issues.push("❌ **名称が未入力**：食品表示法第4条で義務表示");
+    if (!d.ingLabel) issues.push("❌ **原材料名が未入力**：加工食品は原材料名の表示が義務");
+    if (!p.volume?.trim()) issues.push("❌ **内容量が未入力**：計量法による表示義務あり");
+    if (!p.bestBefore?.trim()) issues.push("❌ **賞味/消費期限が未入力**：食品表示基準で義務");
+    if (!d.storage?.trim()) issues.push("⚠️ **保存方法が未入力**：要冷蔵品等は表示義務あり");
+    if (!p.manufacturerName?.trim()) issues.push("❌ **製造者名が未入力**：食品表示基準で義務");
+    if (!p.manufacturerAddress?.trim()) issues.push("❌ **製造者住所が未入力**：食品表示基準で義務");
+    if (d.allergens.length === 0 && p.ingredients.some(i => i.name?.trim())) issues.push("ℹ️ アレルゲン未検出：原材料名を正確に入力することで自動検出精度が上がります");
+    aiLabelCheckResult = issues.length ? issues.join("\n") : "✅ **基本項目はすべて入力されています**\n\n※ このチェックはルールベースです。AIキーを設定すると詳細なGPTチェックが利用できます。";
+  }
+  aiLabelCheckLoading = false; render();
+}
 
 // ══ AI商品登録メニュー ══════════════════════════════════════════════════
 
@@ -3023,6 +3107,7 @@ function doPrintSpec() {
   const area = document.getElementById("spec-print-area");
   if (!area) return;
   const w = window.open("", "_blank");
+  if (!w) { showStatus("ポップアップがブロックされています。ブラウザの設定で許可してください。"); return; }
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>商品規格書</title><style>
 @page{size:A4 portrait;margin:8mm}
 *{box-sizing:border-box;margin:0;padding:0}

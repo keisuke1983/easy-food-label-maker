@@ -223,7 +223,7 @@ function setupDelegation() {
     if (t.matches("[data-volume-amount]"))   { const p=currentProduct(); const {unit}=splitVolume(p.volume); p.volume=buildVolume(t.value,p.volumeCustomUnit?unit:(unit||"個")); return; }
     if (t.matches("[data-volume-custom-unit]")) { const p=currentProduct(); const {amount}=splitVolume(p.volume); p.volumeCustomUnit=true; p.volume=buildVolume(amount,t.value); return; }
     if (t.matches("[data-ing-name]"))        { const p=currentProduct(); if(!p)return; const ing=p.ingredients[Number(t.dataset.ingName)]; if(!ing)return; ing.name=t.value.replace(/[\/／]/g,""); return; }
-    if (t.matches("[data-ing-weight]"))      { currentProduct().ingredients[Number(t.dataset.ingWeight)].weight=t.value; return; }
+    if (t.matches("[data-ing-weight]"))      { const p=currentProduct(); if(!p)return; const ing=p.ingredients[Number(t.dataset.ingWeight)]; if(!ing)return; ing.weight=t.value; return; }
     if (t.matches("[data-nutr]"))            { const p=currentProduct(); p.nutritionManual={...p.nutritionManual,[t.dataset.nutr]:t.value}; return; }
     if (t.matches("[data-bb-days]"))         { const v=parseInt(t.value)||1; currentProduct().bestBefore=`製造日より${v}日`; const prev=document.querySelector(".bb-preview strong"); if(prev) prev.textContent=`製造日より${v}日`; return; }
     if (t.matches("[data-bb-months]"))       { const v=parseInt(t.value)||1; currentProduct().bestBefore=`製造日より${v}ヶ月`; const prev=document.querySelector(".bb-preview strong"); if(prev) prev.textContent=`製造日より${v}ヶ月`; return; }
@@ -241,7 +241,7 @@ function setupDelegation() {
     if (t.matches("[data-volume-amount]"))     { const p=currentProduct(); const {unit}=splitVolume(p.volume); p.volume=buildVolume(t.value,p.volumeCustomUnit?unit:(unit||"個")); scheduleRender(); return; }
     if (t.matches("[data-volume-custom-unit]")){ const p=currentProduct(); const {amount}=splitVolume(p.volume); p.volumeCustomUnit=true; p.volume=buildVolume(amount,t.value); render(); return; }
     if (t.matches("[data-ing-name]"))          { const p=currentProduct(); if(!p)return; const v=t.value.replace(/[\/／]/g,""); t.value=v; const ing=p.ingredients[Number(t.dataset.ingName)]; if(!ing)return; ing.name=v; scheduleRender(); return; }
-    if (t.matches("[data-ing-weight]"))        { currentProduct().ingredients[Number(t.dataset.ingWeight)].weight=t.value; scheduleRender(); return; }
+    if (t.matches("[data-ing-weight]"))        { const p=currentProduct(); if(!p)return; const ing=p.ingredients[Number(t.dataset.ingWeight)]; if(!ing)return; ing.weight=t.value; scheduleRender(); return; }
     if (t.matches("[data-nutr]"))              { const p=currentProduct(); p.nutritionManual={...p.nutritionManual,[t.dataset.nutr]:t.value}; scheduleRender(); return; }
     if (t.matches("[data-date-input]"))        { currentProduct().bestBefore=dateInputToLabel(t.value); render(); return; }
     if (t.matches("[data-bb-days]"))           { render(); return; }

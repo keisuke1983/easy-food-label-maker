@@ -222,7 +222,7 @@ function setupDelegation() {
     if (t.matches("[data-field]"))           { const p=currentProduct(); p[t.dataset.field]=t.value; scheduleAutoSave(); return; }
     if (t.matches("[data-volume-amount]"))   { const p=currentProduct(); const {unit}=splitVolume(p.volume); p.volume=buildVolume(t.value,p.volumeCustomUnit?unit:(unit||"個")); return; }
     if (t.matches("[data-volume-custom-unit]")) { const p=currentProduct(); const {amount}=splitVolume(p.volume); p.volumeCustomUnit=true; p.volume=buildVolume(amount,t.value); return; }
-    if (t.matches("[data-ing-name]"))        { const v=t.value.replace(/[\/／]/g,""); if(v!==t.value){const sel=t.selectionStart-(t.value.length-v.length);t.value=v;t.setSelectionRange(sel,sel);} currentProduct().ingredients[Number(t.dataset.ingName)].name=v; return; }
+    if (t.matches("[data-ing-name]"))        { currentProduct().ingredients[Number(t.dataset.ingName)].name=t.value.replace(/[\/／]/g,""); return; }
     if (t.matches("[data-ing-weight]"))      { currentProduct().ingredients[Number(t.dataset.ingWeight)].weight=t.value; return; }
     if (t.matches("[data-nutr]"))            { const p=currentProduct(); p.nutritionManual={...p.nutritionManual,[t.dataset.nutr]:t.value}; return; }
     if (t.matches("[data-bb-days]"))         { const v=parseInt(t.value)||1; currentProduct().bestBefore=`製造日より${v}日`; const prev=document.querySelector(".bb-preview strong"); if(prev) prev.textContent=`製造日より${v}日`; return; }

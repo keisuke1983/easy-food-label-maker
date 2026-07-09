@@ -1950,16 +1950,16 @@ function productsListHtml() {
     const missingHtml = comp.missing.length
       ? `<div class="comp-missing">${comp.missing.map(m=>`<span class="comp-missing-item">${escapeHtml(m)}</span>`).join("")}</div>`
       : "";
-    return `<div class="master-card">
+    const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+    return `<div class="master-card" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集">
       <div class="master-card-inner">
         ${thumb}
         <div class="master-card-body">
           <div class="master-card-title-row">
             <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
-
             ${statusBadge(p)}
-            <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}">${p.starred?"★":"☆"}</button>
+            <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}" onclick="event.stopPropagation()">${p.starred?"★":"☆"}</button>
           </div>
           <div class="master-card-meta">
             ${p.code?`<span class="meta-item">品番：${escapeHtml(p.code)}</span>`:""}
@@ -1969,16 +1969,15 @@ function productsListHtml() {
           </div>
           <div class="comp-section">
             <div class="comp-bar-row">
-              <div class="comp-bar-wrap" style="max-width:160px"><div class="comp-bar-fill" style="width:${comp.pct}%"></div></div>
-              <span class="comp-pct">完成度 ${comp.pct}%</span>
+              <div class="comp-bar-wrap" style="max-width:160px"><div class="comp-bar-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
+              <span class="comp-pct" style="color:${pctColor}">完成度 ${comp.pct}%</span>
             </div>
             ${missingHtml}
           </div>
           ${productStatusBadges(p, d)}
         </div>
       </div>
-      <div class="master-card-actions" style="margin-top:12px">
-        <button class="btn-action" data-nav-product-detail="${escapeHtml(p.id)}">✎ 詳細編集</button>
+      <div class="master-card-actions" onclick="event.stopPropagation()">
         <button class="btn-action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル</button>
         <button class="btn-action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
         <button class="btn-action" data-ai-from="${escapeHtml(p.id)}">✦ AI説明文</button>
@@ -2608,12 +2607,25 @@ function newSettingsHtml() {
         <div class="home-cta-wrap"><button class="home-next" data-action="menu">プランを変更する</button></div>
       </div>
       <div class="settings-card">
-        <h3>データ管理</h3>
-        <div class="settings-actions">
-          <button class="action" data-action="export-csv">↓ CSV出力（原価データ含む）</button>
-          <label class="action secondary import-label">↑ CSVインポート<input type="file" accept=".csv" data-csv-import style="display:none"></label>
+        <h3>💾 データ管理</h3>
+        <div class="settings-data-section">
+          <div class="settings-data-group">
+            <div class="settings-data-label">完全バックアップ（推奨）</div>
+            <div class="settings-actions">
+              <button class="action primary" data-action="export-json">📤 JSONで書き出す（全データ）</button>
+              <label class="action share-btn import-label">📥 JSONを読み込む<input type="file" accept=".json" data-json-import style="display:none"></label>
+            </div>
+            <p class="notice">原材料・アレルゲン・栄養成分・原価など全フィールドを含みます。チーム共有にも使えます。</p>
+          </div>
+          <div class="settings-data-group">
+            <div class="settings-data-label">CSVエクスポート（基本情報のみ）</div>
+            <div class="settings-actions">
+              <button class="action" data-action="export-csv">↓ CSV出力</button>
+              <label class="action secondary import-label">↑ CSVインポート<input type="file" accept=".csv" data-csv-import style="display:none"></label>
+            </div>
+          </div>
         </div>
-        <p class="notice">データはすべてこのブラウザのlocalStorageに保存されています。</p>
+        <p class="notice">データはすべてこのブラウザのlocalStorageに保存されています。定期的にJSONバックアップをお取りください。</p>
       </div>
       <div class="settings-card">
         <h3>添加物キーワード管理</h3>

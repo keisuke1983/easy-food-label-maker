@@ -1044,7 +1044,9 @@ button:disabled {
 /* Product Master */
 .master-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
 .master-list { display: flex; flex-direction: column; gap: 12px; }
-.master-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+.master-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.05); cursor: pointer; transition: box-shadow .15s, border-color .15s; text-align: left; width: 100%; display: block; }
+.master-card:hover { box-shadow: 0 4px 12px rgba(37,99,235,.12); border-color: #93c5fd; }
+.master-card:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .master-card-hd { margin-bottom: 12px; }
 .master-card-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .master-card-name { font-size: 16px; font-weight: 700; color: #1e293b; }
@@ -1786,3 +1788,8 @@ button:disabled {
 .api-key-status.error { color: #dc2626; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 10px; font-size: 13px; margin-top: 8px; }
 .action.danger-outline { background: #fff; color: #dc2626; border-color: #fca5a5; }
 .action.danger-outline:hover { background: #fef2f2; }
+
+/* ── 設定画面 データ管理 ── */
+.settings-data-section { display: flex; flex-direction: column; gap: 16px; margin-bottom: 12px; }
+.settings-data-group { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
+.settings-data-label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }

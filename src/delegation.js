@@ -326,6 +326,50 @@ function setupDelegation() {
     if (t.matches("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]")) { saveCostItems(); render(); return; }
     if (t.matches("[data-master-field],[data-sales-ch]")) { scheduleAutoSaveMaster(); return; }
   });
+
+  // ── グローバルキーボードショートカット ──
+  document.addEventListener("keydown", e => {
+    // 入力中・モーダル中は無視
+    const active = document.activeElement;
+    const inInput = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT" || active.isContentEditable);
+    if (inInput && e.key !== "Escape") return;
+
+    // Escape: モーダル・パネルを閉じる
+    if (e.key === "Escape") {
+      if (document.querySelector(".app-modal")) { document.querySelector(".app-modal")?.remove(); return; }
+      if (showAiPanel) { showAiPanel = false; render(); return; }
+      if (printPreviewOpen) { printPreviewOpen = false; render(); return; }
+      return;
+    }
+
+    // Ctrl+S or Cmd+S: 保存
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      e.preventDefault();
+      if (view === "edit") { saveCurrent(); return; }
+      if (view === "saas" && saasView === "product-detail") { saveMaster(); return; }
+      return;
+    }
+
+    // SaaS画面でのみ有効なショートカット（入力フォーカスなし）
+    if (inInput) return;
+    if (view !== "saas") return;
+
+    // / : 検索ボックスにフォーカス
+    if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      const sb = document.querySelector("[data-master-search], [data-saved-search]");
+      if (sb) { sb.focus(); sb.select(); }
+      return;
+    }
+
+    // n : 新規商品作成
+    if (e.key === "n" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
+      assistMessage = ""; draft = emptyProduct(); editId = "new"; view = "edit"; render();
+      return;
+    }
+  });
 }
 
 // ── bindDynamic: render()毎に呼ばれる最小限バインド ─────────────────────

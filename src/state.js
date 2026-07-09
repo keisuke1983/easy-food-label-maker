@@ -53,3 +53,7 @@ let aiRegAnalysisStep = -1;
 let sidebarOpen = false;
 let masterSearch = "";
 let masterFilter = "all";
+let ingBulkPasteOpen = false;
+let mobilePreviewTab = "form";
+let aiLabelCheckResult = null;
+let aiLabelCheckLoading = false;

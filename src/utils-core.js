@@ -6,6 +6,7 @@ function safeGet(key) {
   try { return localStorage.getItem(key); }
   catch { return ""; }
 }
+function safeDel(key) { try { localStorage.removeItem(key); } catch {} }
 function safeSet(key, value) {
   try { localStorage.setItem(key, value); }
   catch (e) {

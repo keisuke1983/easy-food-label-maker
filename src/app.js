@@ -200,6 +200,22 @@ function exportCsv() {
   URL.revokeObjectURL(url);
   showStatus("CSVをエクスポートしました");
 }
+function parseCSVRow(line) {
+  const fields = []; let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    if (inQ) {
+      if (line[i] === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (line[i] === '"') { inQ = false; }
+      else { cur += line[i]; }
+    } else {
+      if (line[i] === '"') { inQ = true; }
+      else if (line[i] === ',') { fields.push(cur.trim()); cur = ""; }
+      else { cur += line[i]; }
+    }
+  }
+  fields.push(cur.trim());
+  return fields;
+}
 function importCsvFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -207,25 +223,20 @@ function importCsvFile(file) {
       const text = e.target.result.replace(/^﻿/, "");
       const lines = text.split(/\r?\n/).filter(Boolean);
       if (lines.length < 2) { showStatus("CSVが空または形式が不正です"); return; }
-      const headers = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim());
-      const nameIdx = headers.indexOf("name");
-      if (nameIdx === -1) { showStatus("CSVにnameカラムが必要です"); return; }
+      const headers = parseCSVRow(lines[0]);
+      if (!headers.includes("name")) { showStatus("CSVにnameカラムが必要です"); return; }
+      const SAFE = new Set(["name","internalName","volume","bestBefore","storage","storageCustom",
+        "manufacturerName","manufacturerAddress","manufacturerPhone","manufacturerPostal",
+        "janCode","code","category","price","memo","publishStatus","updatedAt"]);
       let added = 0;
       lines.slice(1).forEach((line) => {
-        const cols = [];
-        let cur = ""; let inQ = false;
-        for (const ch of line) { if (ch === '"') { inQ = !inQ; } else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; } else { cur += ch; } }
-        cols.push(cur.trim());
-        const SAFE_CSV_FIELDS = new Set(["name","internalName","volume","bestBefore","storage","storageCustom",
-          "manufacturerName","manufacturerAddress","manufacturerPhone","manufacturerPostal",
-          "janCode","code","category","price","memo","publishStatus","updatedAt"]);
+        const cols = parseCSVRow(line);
         const row = {};
-        headers.forEach((h, i) => { if (SAFE_CSV_FIELDS.has(h)) row[h] = cols[i] || ""; });
+        headers.forEach((h, i) => { if (SAFE.has(h)) row[h] = String(cols[i] || "").slice(0, 500); });
         if (!row.name) return;
         const p = emptyProduct();
         Object.assign(p, row, { id: uid(), starred: false, ingredients: [{ id: uid(), name: "", weight: "" }] });
-        products = [p, ...products];
-        added++;
+        products = [p, ...products]; added++;
       });
       saveProducts(); render();
       showStatus(`${added}件をインポートしました`);
@@ -246,18 +257,29 @@ function batchPrint() {
   style.textContent = `@media print { body>*{display:none!important} #batch-print-frame{display:block!important;position:fixed;inset:0;background:#fff;padding:${printCfg.margin||3}mm} .label-paper{width:${printCfg.w||90}mm!important;font-size:${printCfg.fs||7.5}pt!important;break-inside:avoid} }`;
   const frame = document.createElement("div"); frame.id = "batch-print-frame"; frame.innerHTML = `<style>${style.textContent.replace(/@media print \{|\}/g,"")}</style>${html}`;
   document.body.appendChild(frame); document.head.appendChild(style);
+  const cleanup = () => { frame.remove(); style.remove(); };
+  window.addEventListener("afterprint", cleanup, { once: true });
+  setTimeout(cleanup, 5000); // フォールバック
   window.print();
-  setTimeout(() => { frame.remove(); style.remove(); }, 1200);
 }
 function showStatus(message) {
   statusMessage = message;
-  render();
-  setTimeout(() => {
-    if (statusMessage === message) {
+  let toast = document.getElementById("status-toast-el");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "status-toast-el";
+    toast.className = "status-toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.style.display = message ? "block" : "none";
+  clearTimeout(showStatus._timer);
+  if (message) {
+    showStatus._timer = setTimeout(() => {
       statusMessage = "";
-      render();
-    }
-  }, 2200);
+      toast.style.display = "none";
+    }, 2200);
+  }
 }
 
 
@@ -429,7 +451,7 @@ function render() {
   } else {
     pageHtml = editorHtml(currentProduct());
   }
-  document.getElementById("root").innerHTML = `${pageHtml}${statusMessage ? `<div class="status-toast">${escapeHtml(statusMessage)}</div>` : ""}${tutorialHtml()}`;
+  document.getElementById("root").innerHTML = `${pageHtml}${tutorialHtml()}`;
   bindDynamic();
   window.scrollTo({ top: scrollY, behavior: "instant" });
   const fc = document.querySelector(".form-column");
@@ -448,7 +470,30 @@ function render() {
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(render, 300);
+  renderTimer = setTimeout(() => {
+    if (view === "edit") {
+      const p = currentProduct();
+      const pc = document.querySelector(".preview-column");
+      if (p && pc) {
+        const d = derive(p);
+        pc.innerHTML = previewHtml(p, d);
+        // 完成度バーを部分更新
+        const { pct, missing } = calcCompletion(p, d);
+        const pctColor = pct >= 100 ? "#16a34a" : pct >= 60 ? "#2563eb" : "#d97706";
+        const fill = document.querySelector(".completion-bar-fill");
+        const strong = document.querySelector(".completion-bar-head strong");
+        const info = document.querySelector(".completion-missing, .completion-ok");
+        if (fill) { fill.style.width = `${pct}%`; fill.style.background = pctColor; }
+        if (strong) { strong.textContent = `${pct}%`; strong.style.color = pctColor; }
+        if (info) { info.className = missing.length ? "completion-missing" : "completion-ok"; info.textContent = missing.length ? `未入力：${missing.join("・")}` : "✓ すべて入力済み"; }
+        // 原材料ラベルプレビューも更新
+        const ingPrev = document.querySelector(".ing-preview");
+        if (ingPrev) ingPrev.textContent = d.ingLabel || "";
+        return;
+      }
+    }
+    render();
+  }, 300);
 }
 function scheduleAutoSave() {
   if (view !== "edit") return;
@@ -457,9 +502,8 @@ function scheduleAutoSave() {
   autoSaveTimer = setTimeout(() => {
     const p = currentProduct();
     if (!p || !p.name?.trim()) return;
-    autoSaveStatus = "保存中";
-    render();
-    setTimeout(() => { saveCurrent(); autoSaveStatus = "保存済み"; render(); }, 300);
+    saveCurrent();
+    autoSaveStatus = "保存済み";
   }, 3000);
 }
 function currentProduct() { return editId === "new" ? draft : products.find((p) => p.id === editId); }
@@ -711,9 +755,10 @@ function editorHtml(p) {
   </div>`;
   const recentStorageOpts = recentStorage.filter((s) => STORAGE_OPTS.includes(s));
   const storageHtml = `${recentStorageOpts.length ? `<div class="recent-storage-label">よく使う保存方法</div><div class="choice-grid">${recentStorageOpts.map((s) => `<button class="${p.storage === s ? "selected" : ""}" data-storage="${escapeHtml(s)}">${p.storage === s ? "✓ " : ""}${escapeHtml(s)}</button>`).join("")}</div><div class="recent-storage-label">すべての保存方法</div>` : ""}<div class="choice-grid">${STORAGE_OPTS.map((s) => `<button class="${p.storage === s ? "selected" : ""}" data-storage="${escapeHtml(s)}">${p.storage === s ? "✓ " : ""}${escapeHtml(s)}</button>`).join("")}</div>${p.storage === "自由入力" ? `<label class="field"><span>保存方法</span><input data-field="storageCustom" value="${escapeHtml(p.storageCustom)}"></label>` : ""}`;
-  return `<div class="page">${headerHtml(p.name || "新商品ラベル作成")}
+  const mobileTabHtml = `<div class="mobile-tab-bar"><button class="mobile-tab${mobilePreviewTab==="form"?" active":""}" data-mobile-tab="form">✏️ 入力</button><button class="mobile-tab${mobilePreviewTab==="preview"?" active":""}" data-mobile-tab="preview">👁 プレビュー</button></div>`;
+  return `<div class="page">${headerHtml(p.name || "新商品ラベル作成")}${mobileTabHtml}
     <div class="editor-shell">
-      <div class="form-column">
+      <div class="form-column${mobilePreviewTab==="preview"?" mobile-hidden":""}">`+`
         ${completionHtml}
         ${section("商品情報", productInfoHtml(p))}
         ${janCodeHtml(p)}
@@ -738,7 +783,8 @@ function editorHtml(p) {
             <button class="action-sub" data-action="sort-additives">添加物を末尾へ</button>
           </div>`;
           const preview = d.ingLabel ? `<div class="ing-preview-wrap"><div class="ing-preview-label">ラベル表示プレビュー</div><div class="ing-preview">${escapeHtml(d.ingLabel)}</div></div>` : "";
-          return `<div class="ing-list" id="ing-list">${ingListHtml}</div><button class="action" data-action="add-ing">＋ 原材料を追加</button>${sortBtns}${preview}`;
+          const bulkPasteHtml = ingBulkPasteOpen ? `<div class="bulk-paste-area"><p class="notice">1行に1つ入力。「原材料名 重量」形式で重量も入力できます</p><textarea id="bulk-paste-textarea" rows="6" placeholder="例：&#10;小麦粉 100&#10;砂糖 50&#10;食塩&#10;加工でん粉"></textarea><div class="bulk-paste-btns"><button class="action primary" data-action="confirm-bulk-paste">追加する</button><button class="action" data-action="toggle-bulk-paste">閉じる</button></div></div>` : "";
+          return `<div class="ing-list" id="ing-list">${ingListHtml}</div><div class="ing-add-row"><button class="action" data-action="add-ing">＋ 1件追加</button><button class="action-sub" data-action="toggle-bulk-paste">📋 まとめて入力</button></div>${bulkPasteHtml}${sortBtns}${preview}`;
         })())}
         ${nutritionEditorHtml(p, d)}
         ${allergenEditorHtml(p, d)}
@@ -749,7 +795,7 @@ function editorHtml(p) {
         ${historyHtml(p)}
         <datalist id="ing-master-list">${[...ingMaster, ...Object.keys(NUTRITION_DB)].filter((v,i,a)=>a.indexOf(v)===i && !v.includes("/") && !v.includes("／")).map(n => `<option value="${escapeHtml(n)}">`).join("")}</datalist>
       </div>
-      <div class="preview-column">${previewHtml(p, d)}</div>
+      <div class="preview-column${mobilePreviewTab==="form"?" mobile-hidden":""}">${previewHtml(p, d)}</div>
     </div>
     <button class="fab-save" data-action="save" title="保存する">保存する</button>
   </div>`;
@@ -869,6 +915,12 @@ function contaminationEditorHtml(p) {
 function labelAssistHtml(p, d) {
   const checks = labelChecklist(p, d);
   const okCount = checks.filter((c) => c.ok).length;
+  const hasKey = !!(sessionStorage.getItem("fmcc-openai-key") || "");
+  const aiCheckHtml = (() => {
+    if (aiLabelCheckLoading) return `<div class="ai-check-loading">🤖 AIが食品表示法を照合中...</div>`;
+    if (aiLabelCheckResult) return `<div class="ai-check-result">${renderMarkdown(aiLabelCheckResult)}<button class="action-sub" data-action="run-ai-label-check" style="margin-top:8px">再チェック</button></div>`;
+    return `<button class="action ai-check-btn" data-action="run-ai-label-check">🔍 AI食品表示法チェック${hasKey ? "" : "（テンプレート）"}</button>`;
+  })();
   return section("表示チェックリスト", `
     <div class="assist-actions">
       <button class="action primary" data-action="normalize-label">食品表示向けに整える</button>
@@ -877,6 +929,7 @@ function labelAssistHtml(p, d) {
     ${assistMessage ? `<p class="notice success">${escapeHtml(assistMessage)}</p>` : ""}
     <div class="checklist-summary"><span>${okCount} / ${checks.length} 項目OK</span>${okCount < checks.length ? `<span class="checklist-warn-hint">⬇ 要確認項目をクリックで該当欄へジャンプ</span>` : ""}</div>
     <div class="check-list">${checks.map((item) => `<div class="${item.ok ? "check-ok" : "check-warn check-jumpable"}" ${!item.ok ? `data-jump-label="${escapeHtml(item.label)}" title="クリックで該当欄へ移動"` : ""}><b>${item.ok ? "✓" : "!"}</b><span>${escapeHtml(item.label)}</span></div>`).join("")}</div>
+    <div class="ai-check-wrap">${aiCheckHtml}</div>
     <p class="notice">この機能は表示補助です。法令適合の最終確認は事業者の責任で行ってください。</p>`);
 }
 function labelChecklist(p, d) {
@@ -1047,422 +1100,6 @@ function saveCurrent() {
   showStatus("保存しました");
 }
 
-function bindEvents() {
-  document.querySelectorAll("[data-action='new']").forEach((el) => el.addEventListener("click", () => {
-    if (!canCreateMore()) {
-      showModal({ message: `${planInfo().label}プランは${planInfo().note}です。プランを変更してください。` });
-      return;
-    }
-    assistMessage = "";
-    draft = emptyProduct();
-    editId = "new";
-    view = "edit";
-    render();
-  }));
-  document.querySelectorAll("[data-plan]").forEach((el) => el.addEventListener("click", () => {
-    currentPlan = el.dataset.plan;
-    safeSet("food-label-plan", currentPlan);
-    render();
-  }));
-  document.querySelectorAll("[data-action='menu']").forEach((el) => el.addEventListener("click", () => {
-    view = "menu";
-    editId = null;
-    draft = null;
-    render();
-  }));
-  document.querySelectorAll("[data-action='plan-page']").forEach((el) => el.addEventListener("click", () => {
-    view = "home";
-    editId = null;
-    draft = null;
-    render();
-  }));
-  document.querySelectorAll("[data-action='saved']").forEach((el) => el.addEventListener("click", () => {
-    view = "saved";
-    render();
-  }));
-  document.querySelectorAll("[data-action='home']").forEach((el) => el.addEventListener("click", () => {
-    view = "menu";
-    editId = null;
-    draft = null;
-    assistMessage = "";
-    render();
-  }));
-  document.querySelectorAll("[data-action='save']").forEach((el) => el.addEventListener("click", saveCurrent));
-  document.querySelectorAll("[data-edit]").forEach((el) => el.addEventListener("click", () => {
-    editId = el.dataset.edit;
-    view = "edit";
-    assistMessage = "";
-    render();
-  }));
-  document.querySelectorAll("[data-print]").forEach((el) => el.addEventListener("click", () => {
-    editId = el.dataset.print;
-    view = "edit";
-    render();
-  }));
-  document.querySelectorAll("[data-dup]").forEach((el) => el.addEventListener("click", () => {
-    if (!canCreateMore()) {
-      showModal({ message: `${planInfo().label}プランは${planInfo().note}です。プランを変更してください。` });
-      return;
-    }
-    const source = products.find((p) => p.id === el.dataset.dup);
-    if (!source) return;
-    products = [{ ...structuredClone(source), id: uid(), name: `${source.name}（複製）`, updatedAt: new Date().toLocaleDateString("ja-JP"), ingredients: source.ingredients.map((i) => ({ ...i, id: uid() })) }, ...products];
-    saveProducts();
-    render();
-  }));
-  document.querySelectorAll("[data-del]").forEach((el) => el.addEventListener("click", () => {
-    showModal({
-      message: "削除してよろしいですか？",
-      confirmLabel: "削除",
-      cancelLabel: "キャンセル",
-      onConfirm: () => {
-        products = products.filter((p) => p.id !== el.dataset.del);
-        saveProducts();
-        render();
-      },
-    });
-  }));
-  document.querySelectorAll("[data-field]").forEach((el) => el.addEventListener("input", () => {
-    const p = currentProduct();
-    p[el.dataset.field] = el.value;
-    scheduleAutoSave();
-  }));
-  document.querySelectorAll("[data-field]").forEach((el) => el.addEventListener("change", () => {
-    const p = currentProduct();
-    p[el.dataset.field] = el.value;
-    scheduleRender();
-  }));
-  document.querySelectorAll("[data-volume-amount]").forEach((el) => el.addEventListener("input", () => {
-    const p = currentProduct();
-    const { unit } = splitVolume(p.volume);
-    p.volume = buildVolume(el.value, p.volumeCustomUnit ? unit : (unit || "個"));
-  }));
-  document.querySelectorAll("[data-volume-amount]").forEach((el) => el.addEventListener("change", () => {
-    const p = currentProduct();
-    const { unit } = splitVolume(p.volume);
-    p.volume = buildVolume(el.value, p.volumeCustomUnit ? unit : (unit || "個"));
-    scheduleRender();
-  }));
-  document.querySelectorAll("[data-volume-unit]").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    const { amount } = splitVolume(p.volume);
-    p.volumeCustomUnit = el.dataset.volumeUnit === "その他";
-    p.volume = buildVolume(amount, el.dataset.volumeUnit === "その他" ? "" : el.dataset.volumeUnit);
-    render();
-  }));
-  document.querySelectorAll("[data-volume-custom-unit]").forEach((el) => el.addEventListener("input", () => {
-    const p = currentProduct();
-    const { amount } = splitVolume(p.volume);
-    p.volumeCustomUnit = true;
-    p.volume = buildVolume(amount, el.value);
-  }));
-  document.querySelectorAll("[data-volume-custom-unit]").forEach((el) => el.addEventListener("change", () => {
-    const p = currentProduct();
-    const { amount } = splitVolume(p.volume);
-    p.volumeCustomUnit = true;
-    p.volume = buildVolume(amount, el.value);
-    render();
-  }));
-  document.querySelectorAll("[data-date-input]").forEach((el) => el.addEventListener("change", () => {
-    currentProduct().bestBefore = dateInputToLabel(el.value);
-    render();
-  }));
-  document.querySelectorAll("[data-date-preset]").forEach((el) => el.addEventListener("click", () => {
-    const preset = DATE_PRESETS.find(([id]) => id === el.dataset.datePreset);
-    if (!preset) return;
-    currentProduct().bestBefore = presetDateValue(preset[2]);
-    render();
-  }));
-  // ⑨ 賞味期限 フォーマット切り替え
-  document.querySelectorAll("[data-bb-mode]").forEach(el => el.addEventListener("click", () => {
-    const p = currentProduct();
-    const mode = el.dataset.bbMode;
-    if (mode === "date") p.bestBefore = "";
-    else if (mode === "days") p.bestBefore = "製造日より1日";
-    else if (mode === "months") p.bestBefore = "製造日より1ヶ月";
-    else p.bestBefore = "";
-    render();
-  }));
-  document.querySelectorAll("[data-bb-days]").forEach(el => {
-    el.addEventListener("input", () => {
-      const v = parseInt(el.value) || 1;
-      currentProduct().bestBefore = `製造日より${v}日`;
-      const prev = document.querySelector(".bb-preview strong");
-      if (prev) prev.textContent = `製造日より${v}日`;
-    });
-    el.addEventListener("change", () => { render(); });
-  });
-  document.querySelectorAll("[data-bb-months]").forEach(el => {
-    el.addEventListener("input", () => {
-      const v = parseInt(el.value) || 1;
-      currentProduct().bestBefore = `製造日より${v}ヶ月`;
-      const prev = document.querySelector(".bb-preview strong");
-      if (prev) prev.textContent = `製造日より${v}ヶ月`;
-    });
-    el.addEventListener("change", () => { render(); });
-  });
-  document.querySelectorAll("[data-storage]").forEach((el) => el.addEventListener("click", () => {
-    const s = el.dataset.storage;
-    updateCurrent("storage", s);
-    if (s !== "自由入力") {
-      recentStorage = [s, ...recentStorage.filter((x) => x !== s)].slice(0, 3);
-      safeSet("food-label-recent-storage", JSON.stringify(recentStorage));
-    }
-  }));
-  document.querySelectorAll("[data-mfr]").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    const current = selectedMfrTypes(p);
-    const type = el.dataset.mfr;
-    const next = current.includes(type) ? current.filter((x) => x !== type) : [...current, type];
-    p.manufacturerTypes = next.length ? next : [type];
-    p.manufacturerType = p.manufacturerTypes[0];
-    render();
-  }));
-  document.querySelectorAll("[data-action='add-ing']").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    p.ingredients.push({ id: uid(), name: "", weight: "" });
-    render();
-  }));
-  // ⑧ 添加物を末尾に並べ直す
-  document.querySelectorAll("[data-action='sort-additives']").forEach(el => el.addEventListener("click", () => {
-    const p = currentProduct();
-    const normal = p.ingredients.filter(i => !isAdditive(i.name));
-    const additive = p.ingredients.filter(i => isAdditive(i.name));
-    p.ingredients = [...normal, ...additive];
-    render();
-  }));
-  // ② 重量順に並べ直す
-  document.querySelectorAll("[data-action='sort-by-weight']").forEach(el => el.addEventListener("click", () => {
-    const p = currentProduct();
-    p.ingredients = [...p.ingredients].sort((a, b) => (parseFloat(b.weight) || 0) - (parseFloat(a.weight) || 0));
-    render();
-  }));
-  document.querySelectorAll("[data-ing-name]").forEach((el) => el.addEventListener("input", () => {
-    currentProduct().ingredients[Number(el.dataset.ingName)].name = el.value;
-  }));
-  document.querySelectorAll("[data-ing-name]").forEach((el) => el.addEventListener("change", () => {
-    currentProduct().ingredients[Number(el.dataset.ingName)].name = el.value;
-    scheduleRender();
-  }));
-  document.querySelectorAll("[data-ing-weight]").forEach((el) => el.addEventListener("input", () => {
-    currentProduct().ingredients[Number(el.dataset.ingWeight)].weight = el.value;
-  }));
-  document.querySelectorAll("[data-ing-weight]").forEach((el) => el.addEventListener("change", () => {
-    currentProduct().ingredients[Number(el.dataset.ingWeight)].weight = el.value;
-    scheduleRender();
-  }));
-  document.querySelectorAll("[data-remove-ing]").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    p.ingredients.splice(Number(el.dataset.removeIng), 1);
-    if (!p.ingredients.length) p.ingredients.push({ id: uid(), name: "", weight: "" });
-    render();
-  }));
-  document.querySelectorAll("[data-nutr-mode]").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    if (el.dataset.nutrMode === "manual") p.nutritionManual = { ...derive(p).autoNutrition };
-    p.nutritionMode = el.dataset.nutrMode;
-    render();
-  }));
-  document.querySelectorAll(".nutr-unit-btn[data-value]").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    p.nutritionUnit = el.dataset.value;
-    render();
-  }));
-  document.querySelectorAll("[data-nutr]").forEach((el) => el.addEventListener("input", () => {
-    const p = currentProduct();
-    p.nutritionManual = { ...p.nutritionManual, [el.dataset.nutr]: el.value };
-  }));
-  document.querySelectorAll("[data-nutr]").forEach((el) => el.addEventListener("change", () => {
-    const p = currentProduct();
-    p.nutritionManual = { ...p.nutritionManual, [el.dataset.nutr]: el.value };
-    scheduleRender();
-  }));
-  document.querySelectorAll("[data-alg-mode]").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    if (el.dataset.algMode === "manual") p.allergensManual = derive(p).autoAllergens.join("、");
-    p.allergensMode = el.dataset.algMode;
-    render();
-  }));
-  document.querySelectorAll("[data-contamination]").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    p.contaminationEnabled = el.dataset.contamination === "on";
-    if (p.contaminationEnabled && !p.contaminationAllergens && !p.contaminationText) {
-      p.contaminationAllergens = derive(p).allergens.join("、");
-      p.contaminationText = buildContaminationText(p);
-    }
-    render();
-  }));
-  document.querySelectorAll("[data-action='normalize-label']").forEach((el) => el.addEventListener("click", () => {
-    const p = currentProduct();
-    const { next, changes } = normalizeLabelText(p);
-    assistMessage = changes.length ? `整えました：${changes.slice(0, 4).join("、")}${changes.length > 4 ? " ほか" : ""}` : "すでに食品表示向けに整っています。";
-    if (editId === "new") draft = next;
-    else products = products.map((x) => (x.id === p.id ? next : x));
-    render();
-  }));
-  // チュートリアル
-  document.querySelectorAll("[data-tutorial]").forEach((el) => el.addEventListener("click", () => {
-    const act = el.dataset.tutorial;
-    if (act === "next" && tutorialStep < TUTORIAL_STEPS.length - 1) { tutorialStep++; render(); }
-    else if (act === "prev" && tutorialStep > 0) { tutorialStep--; render(); }
-    else if (act === "done" || act === "skip") { showTutorial = false; safeSet("food-label-tutorial-done", "1"); render(); }
-  }));
-  document.querySelectorAll("[data-action='show-tutorial']").forEach((el) => el.addEventListener("click", () => {
-    showTutorial = true; tutorialStep = 0; safeSet("food-label-tutorial-done", ""); render();
-  }));
-  // AI相談
-  document.querySelectorAll("[data-action='open-ai-panel']").forEach((el) => el.addEventListener("click", () => { showAiPanel = true; render(); }));
-  document.querySelectorAll("[data-action='close-ai-panel']").forEach((el) => el.addEventListener("click", () => { showAiPanel = false; render(); }));
-  document.querySelectorAll("[data-ai-example]").forEach((el) => el.addEventListener("click", () => {
-    const ta = document.getElementById("ai-prompt-text");
-    if (ta) { ta.value = ta.value + "\n\n【質問】\n" + el.dataset.aiExample; }
-  }));
-  document.querySelectorAll("[data-action='copy-ai-prompt']").forEach((el) => el.addEventListener("click", () => {
-    const ta = document.getElementById("ai-prompt-text");
-    if (ta) { navigator.clipboard?.writeText(ta.value).then(() => showStatus("プロンプトをコピーしました")).catch(() => { ta.select(); document.execCommand("copy"); showStatus("コピーしました"); }); }
-  }));
-  // 画像保存
-  document.querySelectorAll("[data-action='download-image']").forEach((el) => el.addEventListener("click", downloadImageLabel));
-  // チェックリストジャンプ
-  document.querySelectorAll(".check-jumpable[data-jump-label]").forEach((el) => el.addEventListener("click", () => handleChecklistJump(el.dataset.jumpLabel)));
-  // 実寸含むズーム（data-zoom が "実寸" の場合も対応）
-  // 既存の zoom binding を上書きしないよう、ここでは実寸だけ追加で処理（既存は数値用）
-  // 保存済み検索・ソート・フィルター
-  document.querySelectorAll("[data-saved-search]").forEach((el) => {
-    let t; el.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { savedSearch = el.value; render(); }, 200); });
-  });
-  document.querySelectorAll("[data-saved-sort]").forEach((el) => el.addEventListener("click", () => { savedSort = el.dataset.savedSort; render(); }));
-  document.querySelectorAll("[data-saved-filter]").forEach((el) => el.addEventListener("click", () => { savedFilter = el.dataset.savedFilter; render(); }));
-  // お気に入りトグル
-  document.querySelectorAll("[data-toggle-star]").forEach((el) => el.addEventListener("click", () => {
-    const p = products.find((x) => x.id === el.dataset.toggleStar);
-    if (p) { p.starred = !p.starred; saveProducts(); render(); }
-  }));
-  // 一括印刷チェック
-  document.querySelectorAll("[data-sel-print]").forEach((el) => el.addEventListener("change", () => {
-    el.checked ? selectedForPrint.add(el.dataset.selPrint) : selectedForPrint.delete(el.dataset.selPrint);
-    render();
-  }));
-  document.querySelectorAll("[data-action='batch-print']").forEach((el) => el.addEventListener("click", batchPrint));
-  // CSV
-  document.querySelectorAll("[data-action='export-csv']").forEach((el) => el.addEventListener("click", exportCsv));
-  document.querySelectorAll("[data-csv-import]").forEach((el) => el.addEventListener("change", (e) => { if (e.target.files[0]) importCsvFile(e.target.files[0]); }));
-  // 製造者テンプレート
-  document.querySelectorAll("[data-mfr-tpl-select]").forEach((el) => el.addEventListener("change", () => {
-    const idx = Number(el.value);
-    if (isNaN(idx) || !mfrTemplates[idx]) return;
-    const tpl = mfrTemplates[idx];
-    const p = currentProduct();
-    Object.assign(p, { manufacturerName: tpl.name, manufacturerPostal: tpl.postal, manufacturerAddress: tpl.address, manufacturerPhone: tpl.phone });
-    render();
-  }));
-  document.querySelectorAll("[data-action='save-mfr-tpl']").forEach((el) => el.addEventListener("click", () => {
-    const nameEl = document.getElementById("mfr-tpl-name");
-    const label = nameEl?.value?.trim();
-    if (!label) { showStatus("テンプレート名を入力してください"); return; }
-    const p = currentProduct();
-    mfrTemplates = [...mfrTemplates.filter((t) => t.label !== label), { label, name: p.manufacturerName, postal: p.manufacturerPostal, address: p.manufacturerAddress, phone: p.manufacturerPhone }];
-    safeSet("food-label-mfr-templates", JSON.stringify(mfrTemplates));
-    showStatus(`「${label}」を保存しました`);
-    render();
-  }));
-  document.querySelectorAll("[data-action='del-mfr-tpl']").forEach((el) => el.addEventListener("click", () => {
-    const sel = document.querySelector("[data-mfr-tpl-select]");
-    const idx = Number(sel?.value);
-    if (isNaN(idx) || !mfrTemplates[idx]) return;
-    mfrTemplates.splice(idx, 1);
-    safeSet("food-label-mfr-templates", JSON.stringify(mfrTemplates));
-    render();
-  }));
-  // 履歴復元
-  document.querySelectorAll("[data-restore-history]").forEach((el) => el.addEventListener("click", () => {
-    const hist = loadHistory(el.dataset.historyPid);
-    const idx = Number(el.dataset.restoreHistory);
-    if (!hist[idx]) return;
-    showModal({ message: `${hist[idx].savedAt} の状態に戻しますか？`, confirmLabel: "復元", cancelLabel: "キャンセル", onConfirm: () => {
-      const restored = { ...hist[idx].snapshot };
-      products = products.map((x) => x.id === restored.id ? restored : x);
-      saveProducts(); render(); showStatus("復元しました");
-    }});
-  }));
-  // 印刷位置オフセット
-  document.querySelectorAll("[data-print-offset]").forEach((el) => el.addEventListener("input", () => {
-    if (el.dataset.printOffset === "x") { printOffsetX = el.value; safeSet("food-label-offset-x", el.value); }
-    else { printOffsetY = el.value; safeSet("food-label-offset-y", el.value); }
-  }));
-  // セクション折りたたみ
-  document.querySelectorAll("[data-toggle-section]").forEach((el) => el.addEventListener("click", () => {
-    const title = el.dataset.toggleSection;
-    if (openSections.has(title)) openSections.delete(title); else openSections.add(title);
-    render();
-  }));
-  // ズーム
-  document.querySelectorAll("[data-zoom]").forEach((el) => el.addEventListener("click", () => {
-    const z = el.dataset.zoom;
-    previewZoom = z === "実寸" ? "実寸" : Number(z);
-    render();
-  }));
-  // ドラッグ並び替え
-  document.querySelectorAll(".ing-row[data-ing-idx]").forEach((el) => {
-    el.addEventListener("dragstart", (e) => { dragSrcIdx = Number(el.dataset.ingIdx); el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
-    el.addEventListener("dragend", () => { el.classList.remove("dragging"); document.querySelectorAll(".ing-row").forEach((r) => r.classList.remove("drag-over")); });
-    el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("drag-over"); });
-    el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
-    el.addEventListener("drop", (e) => {
-      e.preventDefault();
-      const p = currentProduct();
-      const destIdx = Number(el.dataset.ingIdx);
-      if (dragSrcIdx !== null && dragSrcIdx !== destIdx) {
-        const arr = [...p.ingredients];
-        const [moved] = arr.splice(dragSrcIdx, 1);
-        arr.splice(destIdx, 0, moved);
-        p.ingredients = arr;
-        dragSrcIdx = null;
-        render();
-      }
-    });
-  });
-  document.querySelector("[data-size]")?.addEventListener("change", (e) => {
-    printCfg = { ...(SIZE_PRESETS.find((s) => s.label === e.target.value) || SIZE_PRESETS[1]) };
-    safeSet("food-label-print-cfg", JSON.stringify(printCfg));
-    render();
-  });
-  document.querySelectorAll("[data-print-cfg]").forEach((el) => el.addEventListener("input", () => {
-    printCfg = { ...printCfg, label: "自由入力", [el.dataset.printCfg]: el.value };
-    safeSet("food-label-print-cfg", JSON.stringify(printCfg));
-    scheduleRender();
-  }));
-  document.querySelectorAll("[data-print-cfg]").forEach((el) => el.addEventListener("change", () => {
-    printCfg = { ...printCfg, label: "自由入力", [el.dataset.printCfg]: el.value };
-    safeSet("food-label-print-cfg", JSON.stringify(printCfg));
-    scheduleRender();
-  }));
-  document.querySelectorAll("[data-target-choice]").forEach((el) => el.addEventListener("click", () => {
-    printTarget = el.dataset.targetChoice;
-    render();
-  }));
-  document.querySelectorAll("[data-action='copy-output']").forEach((el) => el.addEventListener("click", () => {
-    copyLabels();
-  }));
-  document.querySelectorAll("[data-action='copy-image-output']").forEach((el) => el.addEventListener("click", () => {
-    copyImageLabels();
-  }));
-  document.querySelectorAll("[data-action='open-print-preview']").forEach((el) => el.addEventListener("click", () => {
-    printPreviewOpen = true;
-    render();
-  }));
-  document.querySelectorAll("[data-action='close-print-preview']").forEach((el) => el.addEventListener("click", () => {
-    printPreviewOpen = false;
-    render();
-  }));
-  document.querySelectorAll("[data-action='confirm-print']").forEach((el) => el.addEventListener("click", () => {
-    printPreviewOpen = false;
-    render();
-    setTimeout(printLabels, 50);
-  }));
-  // SaaS拡張イベント
-  bindSaasEvents();
-}
 
 function printLabels() {
   const style = document.createElement("style");
@@ -2833,7 +2470,7 @@ function newSettingsHtml() {
   const userKwList = userAdditiveKw.map((kw, i) =>
     `<div class="additive-kw-row"><span>${escapeHtml(kw)}</span><button class="icon-btn" data-del-additive-kw="${i}">×</button></div>`
   ).join("");
-  const savedKey = safeGet("fmcc-openai-key") || "";
+  const savedKey = sessionStorage.getItem("fmcc-openai-key") || "";
   const keyMasked = savedKey ? "sk-..." + savedKey.slice(-4) : "";
   const sbUrl = safeGet("fmcc-supabase-url") || "";
   const sbKey = safeGet("fmcc-supabase-key") || "";
@@ -2876,7 +2513,7 @@ function newSettingsHtml() {
           ${savedKey ? `<button class="action" data-action="clear-openai-key">削除</button>` : ""}
         </div>
         ${savedKey ? `<p class="api-key-status ok">✓ APIキー登録済み（${escapeHtml(keyMasked)}）</p>` : `<p class="api-key-status">未登録</p>`}
-        <p class="notice" style="margin-top:8px">APIキーはこのブラウザのlocalStorageにのみ保存されます。外部サーバーには送信されません。<a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">APIキーを取得する →</a></p>
+        <p class="notice" style="margin-top:8px">APIキーはセッション中のみ保持されます（タブを閉じると消えます）。外部サーバーには送信されません。<a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">APIキーを取得する →</a></p>
       </div>
       <div class="settings-card">
         <h3>プラン</h3>
@@ -3107,7 +2744,7 @@ function generateConsultResponse(p, questionKey) {
 
 // OpenAI API接続ポイント（APIキー設定で差し替え可能な設計）
 async function callConsultAI(p, userMessage, questionKey) {
-  const apiKey = safeGet("fmcc-openai-key") || "";
+  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
   if (apiKey) {
     try {
       const d = derive(p);
@@ -3124,6 +2761,47 @@ async function callConsultAI(p, userMessage, questionKey) {
   return generateConsultResponse(p, questionKey);
 }
 
+
+async function runAiLabelCheck() {
+  const p = currentProduct();
+  if (!p) return;
+  aiLabelCheckLoading = true; aiLabelCheckResult = null; render();
+  const d = derive(p);
+  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
+  const prompt = `以下の食品ラベル情報を日本の食品表示基準（食品表示法・JAS法）に照らして確認し、問題点や改善点をMarkdownで箇条書きにしてください。問題がなければ「問題なし」と記載してください。
+
+【名称】${p.name || "未入力"}
+【原材料名】${d.ingLabel || "未入力"}
+【内容量】${p.volume || "未入力"}
+【賞味期限】${p.bestBefore || "未入力"}
+【保存方法】${d.storage || "未入力"}
+【アレルゲン】${d.allergens.join("、") || "なし"}
+【製造者】${p.manufacturerName || "未入力"} ${p.manufacturerAddress || ""}`;
+
+  if (apiKey) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: "あなたは日本の食品表示法の専門家です。指摘は具体的かつ簡潔に、Markdown箇条書きで回答してください。" }, { role: "user", content: prompt }], max_tokens: 800 }),
+      });
+      const json = await res.json();
+      aiLabelCheckResult = json.choices?.[0]?.message?.content || "チェック結果を取得できませんでした。";
+    } catch { aiLabelCheckResult = "通信エラーが発生しました。APIキーを確認してください。"; }
+  } else {
+    const issues = [];
+    if (!p.name?.trim()) issues.push("❌ **名称が未入力**：食品表示法第4条で義務表示");
+    if (!d.ingLabel) issues.push("❌ **原材料名が未入力**：加工食品は原材料名の表示が義務");
+    if (!p.volume?.trim()) issues.push("❌ **内容量が未入力**：計量法による表示義務あり");
+    if (!p.bestBefore?.trim()) issues.push("❌ **賞味/消費期限が未入力**：食品表示基準で義務");
+    if (!d.storage?.trim()) issues.push("⚠️ **保存方法が未入力**：要冷蔵品等は表示義務あり");
+    if (!p.manufacturerName?.trim()) issues.push("❌ **製造者名が未入力**：食品表示基準で義務");
+    if (!p.manufacturerAddress?.trim()) issues.push("❌ **製造者住所が未入力**：食品表示基準で義務");
+    if (d.allergens.length === 0 && p.ingredients.some(i => i.name?.trim())) issues.push("ℹ️ アレルゲン未検出：原材料名を正確に入力することで自動検出精度が上がります");
+    aiLabelCheckResult = issues.length ? issues.join("\n") : "✅ **基本項目はすべて入力されています**\n\n※ このチェックはルールベースです。AIキーを設定すると詳細なGPTチェックが利用できます。";
+  }
+  aiLabelCheckLoading = false; render();
+}
 
 // ══ AI商品登録メニュー ══════════════════════════════════════════════════
 
@@ -3429,6 +3107,7 @@ function doPrintSpec() {
   const area = document.getElementById("spec-print-area");
   if (!area) return;
   const w = window.open("", "_blank");
+  if (!w) { showStatus("ポップアップがブロックされています。ブラウザの設定で許可してください。"); return; }
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>商品規格書</title><style>
 @page{size:A4 portrait;margin:8mm}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -3462,537 +3141,6 @@ body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11
   w.document.close();
 }
 
-function bindSaasEvents() {
-  // ラベルエディタ → 商品管理に戻る
-  document.querySelectorAll("[data-action='back-to-saas']").forEach(el => el.addEventListener("click", () => {
-    saasView = productDetailId ? "product-detail" : "products";
-    view = "saas"; render();
-  }));
-
-  // サイドバー
-  document.querySelectorAll("[data-action='toggle-sidebar']").forEach(el => el.addEventListener("click", () => { sidebarOpen = !sidebarOpen; render(); }));
-  document.querySelectorAll("[data-action='close-sidebar']").forEach(el => el.addEventListener("click", () => { sidebarOpen = false; render(); }));
-
-  // ナビリンク
-  document.querySelectorAll("[data-nav]").forEach(el => el.addEventListener("click", () => {
-    const nav = el.dataset.nav;
-    sidebarOpen = false;
-    if (nav === "label-nav") {
-      if (products.length > 0) { editId = products[0].id; view = "edit"; saasView = "label-nav"; }
-      else { view = "edit"; editId = "new"; draft = extendProductMaster(emptyProduct()); saasView = "label-nav"; }
-    } else if (nav === "spec-sheet-nav") {
-      saasView = "spec-sheet-nav"; view = "saas";
-      if (!specSheetId && products.length > 0) specSheetId = products[0].id;
-    } else if (nav === "ai-descriptions-nav") {
-      saasView = "ai-descriptions-nav"; view = "saas";
-      if (!aiDescId && products.length > 0) aiDescId = products[0].id;
-    } else if (nav === "settings-nav") {
-      saasView = "settings-nav"; view = "saas";
-    } else {
-      saasView = nav; view = "saas";
-    }
-    safeSet("fmcc-view", saasView);
-    render();
-  }));
-
-  // 新規商品作成
-  document.querySelectorAll("[data-quick-new]").forEach(el => el.addEventListener("click", () => {
-    if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
-    draft = extendProductMaster(emptyProduct());
-    editId = "new"; view = "edit"; sidebarOpen = false;
-    render();
-  }));
-
-  // 商品詳細へ
-  document.querySelectorAll("[data-nav-product-detail]").forEach(el => el.addEventListener("click", () => {
-    productDetailId = el.dataset.navProductDetail;
-    saasView = "product-detail"; view = "saas";
-    safeSet("fmcc-view", saasView);
-    render();
-  }));
-
-  // ラベル編集（商品から）
-  document.querySelectorAll("[data-label-from]").forEach(el => el.addEventListener("click", () => {
-    const pid = el.dataset.labelFrom;
-    const p = products.find(x=>x.id===pid);
-    if (!p) return;
-    editId = pid; view = "edit"; sidebarOpen = false;
-    render();
-  }));
-
-  // 規格書（商品から）
-  document.querySelectorAll("[data-spec-from]").forEach(el => el.addEventListener("click", () => {
-    specSheetId = el.dataset.specFrom;
-    saasView = "spec-sheet-nav"; view = "saas"; sidebarOpen = false;
-    safeSet("fmcc-view", saasView);
-    render();
-  }));
-
-  // AI説明文（商品から）
-  document.querySelectorAll("[data-ai-from]").forEach(el => el.addEventListener("click", () => {
-    aiDescId = el.dataset.aiFrom;
-    saasView = "ai-descriptions-nav"; view = "saas"; sidebarOpen = false;
-    safeSet("fmcc-view", saasView);
-    render();
-  }));
-
-  // 商品詳細タブ
-  document.querySelectorAll("[data-detail-tab]").forEach(el => el.addEventListener("click", () => {
-    productDetailTab = el.dataset.detailTab;
-    render();
-  }));
-
-  // 商品マスター保存
-  document.querySelectorAll("[data-action='save-master']").forEach(el => el.addEventListener("click", saveMaster));
-
-  // 商品検索
-  document.querySelectorAll("[data-master-search]").forEach(el => {
-    el.addEventListener("input", () => { masterSearch = el.value; render(); });
-  });
-
-  // フィルター
-  document.querySelectorAll("[data-master-filter]").forEach(el => el.addEventListener("click", () => { masterFilter = el.dataset.masterFilter; render(); }));
-
-  // 規格書 商品選択
-  document.querySelectorAll("[data-spec-select]").forEach(el => el.addEventListener("change", () => { specSheetId = el.value; render(); }));
-
-  // 原価率表示トグル
-  document.getElementById("spec-show-cost")?.addEventListener("change", e => { specShowCost = e.target.checked; render(); });
-  document.getElementById("spec-show-sig")?.addEventListener("change", e => { specShowSig = e.target.checked; render(); });
-
-  // 規格書印刷
-  document.querySelectorAll("[data-action='print-spec']").forEach(el => el.addEventListener("click", () => {
-    const area = document.getElementById("spec-print-area");
-    if (!area) return;
-    const w = window.open("", "_blank");
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>商品規格書</title><style>
-@page{size:A4 portrait;margin:8mm}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;font-size:11px;color:#1e293b;background:#fff}
-.spec-v2{padding:8mm;max-width:100%}
-/* header */
-.spec-v2-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #1e293b}
-.spec-v2-header h1{font-size:18px;font-weight:800;color:#1e293b}
-.spec-subtitle{font-size:13px;font-weight:600;color:#334155;margin-top:2px}
-.spec-display-name{font-size:11px;color:#64748b;margin-top:2px}
-.spec-v2-meta-block dl{display:flex;flex-direction:column;gap:2px;font-size:10px;color:#64748b;text-align:right}
-.spec-v2-meta-block dl div{display:flex;gap:4px;justify-content:flex-end}
-.spec-v2-meta-block dt{font-weight:600}
-/* body grid */
-.spec-v2-body{display:grid;grid-template-columns:1fr 130px;gap:12px;align-items:start;margin-bottom:8px}
-.spec-v2-image-col{display:flex;flex-direction:column;align-items:center;gap:6px}
-.spec-v2-product-img{width:120px;height:120px;object-fit:cover;border:1px solid #e2e8f0;border-radius:4px}
-.spec-v2-product-img-placeholder{width:120px;height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:24px;color:#cbd5e1}
-.spec-v2-qr{width:72px;height:72px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;display:block}
-/* tables */
-.spec-v2-section-label{font-size:9px;font-weight:700;color:#fff;background:#475569;padding:2px 6px;border-radius:3px;margin-bottom:2px;margin-top:6px;display:inline-block}
-.spec-v2-tables .spec-v2-section-label:first-child{margin-top:0}
-.spec-v2-table{width:100%;border-collapse:collapse;margin-bottom:4px}
-.spec-v2-table th,.spec-v2-table td{border:1px solid #e2e8f0;padding:3px 6px;font-size:10px;text-align:left;line-height:1.4}
-.spec-v2-table th{background:#f8fafc;width:32%;font-weight:600;color:#374151}
-.spec-v2-table td{color:#1e293b}
-.spec-v2-remark{font-size:10px;border:1px solid #e2e8f0;border-radius:4px;padding:6px;background:#f8fafc;margin-bottom:4px}
-/* footer */
-.spec-v2-footer{border-top:1px solid #e2e8f0;padding-top:8px;display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px}
-.spec-v2-sig-row{display:flex;gap:16px}
-.spec-v2-sig-box{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9px;color:#64748b}
-.spec-v2-sig-line{width:70px;height:28px;border:1px solid #cbd5e1;border-radius:3px}
-/* cost rate colors */
-.margin-good{color:#16a34a}.margin-warn{color:#d97706}.margin-bad{color:#dc2626}
-</style></head><body><div class="spec-v2">${area.innerHTML}</div><script>window.onload=()=>{window.print();}<\/script></body></html>`);
-    w.document.close();
-  }));
-
-  // 規格書テキストコピー
-  document.querySelectorAll("[data-action='copy-spec']").forEach(el => el.addEventListener("click", () => {
-    const area = document.getElementById("spec-print-area");
-    if (!area) return;
-    const text = [...area.querySelectorAll("tr")].map(tr=>{
-      const th = tr.querySelector("th")?.textContent?.trim()||"";
-      const td = tr.querySelector("td")?.textContent?.trim()||"";
-      return th && td ? `${th}：${td}` : "";
-    }).filter(Boolean).join("\n");
-    copyPlainText(text);
-  }));
-
-  // AI説明文 商品選択
-  document.querySelectorAll("[data-ai-product-select]").forEach(el => el.addEventListener("change", () => {
-    aiDescId = el.value; aiEditText = ""; render();
-  }));
-
-  // AI説明文 チャネル選択
-  document.querySelectorAll("[data-ai-ch]").forEach(el => el.addEventListener("click", () => {
-    aiDescChannel = el.dataset.aiCh; aiEditText = ""; render();
-  }));
-
-  // AI説明文プロンプトコピー
-  document.querySelectorAll("[data-action='copy-ai-desc']").forEach(el => el.addEventListener("click", () => {
-    const ta = document.getElementById("ai-desc-prompt");
-    if (ta) copyPlainText(ta.value);
-  }));
-
-  // AI説明文 生成
-  document.querySelectorAll("[data-action='generate-ai-desc']").forEach(el => el.addEventListener("click", () => {
-    const pid = aiDescId || (products.find(x=>x.name?.trim())?.id);
-    const p = pid ? products.find(x=>x.id===pid) : null;
-    if (!p) return;
-    aiEditText = generateAiDesc(p, aiDescChannel);
-    render();
-  }));
-
-  // AI説明文 再生成
-  document.querySelectorAll("[data-action='regen-ai-desc']").forEach(el => el.addEventListener("click", () => {
-    const pid = aiDescId || (products.find(x=>x.name?.trim())?.id);
-    const p = pid ? products.find(x=>x.id===pid) : null;
-    if (!p) return;
-    aiEditText = generateAiDesc(p, aiDescChannel);
-    render();
-  }));
-
-  // AI説明文 結果コピー
-  document.querySelectorAll("[data-action='copy-ai-result']").forEach(el => el.addEventListener("click", () => {
-    const ta = document.getElementById("ai-result-text");
-    if (ta) { ta.select(); copyPlainText(ta.value); showStatus("コピーしました"); }
-  }));
-
-  // AI説明文 保存
-  document.querySelectorAll("[data-action='save-ai-result']").forEach(el => el.addEventListener("click", () => {
-    const ta = document.getElementById("ai-result-text");
-    if (!ta) return;
-    const pid = aiDescId || (products.find(x=>x.name?.trim())?.id);
-    if (!pid) return;
-    aiEditText = ta.value;
-    saveAiText(pid, aiDescChannel, ta.value);
-    showStatus("保存しました"); render();
-  }));
-
-  // AI結果テキストエリアの内容変化を追跡
-  const aiResultTa = document.getElementById("ai-result-text");
-  if (aiResultTa) {
-    aiResultTa.addEventListener("input", () => { aiEditText = aiResultTa.value; });
-  }
-
-  // 商品削除（確認モーダル付き）
-  document.querySelectorAll("[data-del]").forEach(el => el.addEventListener("click", () => {
-    const p = products.find(x => x.id === el.dataset.del);
-    if (!p) return;
-    showModal({
-      message: `「${p.name || "この商品"}」を削除しますか？\nこの操作は取り消せません。`,
-      confirmLabel: "削除する",
-      cancelLabel: "キャンセル",
-      onConfirm: () => { products = products.filter(x => x.id !== p.id); saveProducts(); render(); },
-    });
-  }));
-
-  // ★ お気に入りトグル
-  document.querySelectorAll("[data-toggle-star]").forEach(el => el.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const pid = el.dataset.toggleStar;
-    const p = products.find(x=>x.id===pid);
-    if (!p) return;
-    p.starred = !p.starred;
-    saveProducts(); render();
-  }));
-
-  // TODO アイテムクリック → 商品一覧へ
-  document.querySelectorAll("[data-todo-key]").forEach(el => el.addEventListener("click", () => {
-    saasView = "products"; view = "saas";
-    safeSet("fmcc-view", saasView);
-    render();
-  }));
-
-  // ── 画像アップロード ──
-  function handleImageFile(file) {
-    if (!file || !file.type.startsWith("image/")) return;
-    if (file.size > 5 * 1024 * 1024) { showStatus("画像は5MB以下にしてください"); return; }
-    const pid = productDetailId;
-    const p = products.find(x=>x.id===pid);
-    if (!p) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const MAX = 800;
-        let w = img.width, h = img.height;
-        if (w > MAX || h > MAX) {
-          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-          else { w = Math.round(w * MAX / h); h = MAX; }
-        }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        p.imageDataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        p.updatedAt = new Date().toLocaleDateString("ja-JP");
-        saveProducts(); showStatus("画像を登録しました"); render();
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  const imgInput = document.getElementById("product-image-input");
-  if (imgInput) {
-    imgInput.addEventListener("change", () => handleImageFile(imgInput.files[0]));
-    const dropZone = document.getElementById("image-drop-zone");
-    if (dropZone) {
-      dropZone.addEventListener("click", () => imgInput.click());
-      dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
-      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
-      dropZone.addEventListener("drop", (e) => {
-        e.preventDefault(); dropZone.classList.remove("drag-over");
-        handleImageFile(e.dataTransfer.files[0]);
-      });
-    }
-  }
-
-  document.querySelectorAll("[data-action='remove-product-image']").forEach(el => el.addEventListener("click", () => {
-    const p = products.find(x=>x.id===productDetailId);
-    if (!p) return;
-    p.imageDataUrl = "";
-    saveProducts(); render();
-  }));
-
-  // ── 原価管理 ──
-  document.querySelectorAll("[data-set-cost-mode]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const p = products.find(x => x.id === productDetailId);
-      if (!p) return;
-      saveMaster();
-      p.costMode = btn.dataset.setCostMode;
-      saveProducts(); render();
-    });
-  });
-
-  function saveCostItems() {
-    const p = products.find(x=>x.id===productDetailId);
-    if (!p) return;
-    [["data-cost-name","name"],["data-cost-amount","amount"],["data-cost-unit","unit"],
-     ["data-cost-price","unitPrice"],["data-cost-punit","priceUnit"],["data-cost-loss","lossRate"]
-    ].forEach(([attr, field]) => {
-      document.querySelectorAll(`[${attr}]`).forEach(el => {
-        const i = parseInt(el.dataset[attr.replace("data-","").replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]);
-        if (p.costItems[i]) p.costItems[i][field] = el.value;
-      });
-    });
-    saveProducts();
-  }
-
-  document.querySelectorAll("[data-action='add-cost-item']").forEach(el => el.addEventListener("click", () => {
-    const p = products.find(x=>x.id===productDetailId);
-    if (!p) return;
-    saveCostItems();
-    p.costItems = [...(p.costItems||[]), { id: uid(), name: "", amount: "", unit: "g", unitPrice: "" }];
-    saveProducts(); render();
-  }));
-
-  document.querySelectorAll("[data-remove-cost]").forEach(el => el.addEventListener("click", () => {
-    const p = products.find(x=>x.id===productDetailId);
-    if (!p) return;
-    saveCostItems();
-    const i = parseInt(el.dataset.removeCost);
-    p.costItems.splice(i, 1);
-    saveProducts(); render();
-  }));
-
-  // 原価フィールド変更時はリアルタイム再計算（フォーカスアウト）
-  document.querySelectorAll("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]").forEach(el => {
-    el.addEventListener("change", () => { saveCostItems(); render(); });
-  });
-
-  // ② KPI リアルタイム更新（input イベント、re-render なし）
-  function refreshCostKpis() {
-    const p = products.find(x => x.id === productDetailId);
-    if (!p) return;
-    const mode = p.costMode || "direct";
-    const price = parseFloat(document.querySelector("[data-master-field='price']")?.value) || 0;
-    const rawCost = mode === "direct" ? (parseFloat(document.querySelector("[data-master-field='directCost']")?.value) || 0) : 0;
-    const packaging = parseFloat(document.querySelector("[data-master-field='directPackaging']")?.value) || 0;
-    const shipping  = parseFloat(document.querySelector("[data-master-field='directShipping']")?.value)  || 0;
-    const other     = parseFloat(document.querySelector("[data-master-field='directOther']")?.value)     || 0;
-    const totalCost = rawCost + packaging + shipping + other;
-    const gross = price - totalCost;
-    const costRate = price > 0 ? Math.round(totalCost / price * 100) : null;
-    const fmt = n => "¥" + Math.round(n).toLocaleString();
-    const $ = id => document.getElementById(id);
-    if ($("ck-total")) $("ck-total").textContent = fmt(totalCost);
-    if ($("ck-price")) $("ck-price").textContent = price > 0 ? fmt(price) : "—";
-    if ($("ck-gross")) {
-      $("ck-gross").textContent = price > 0 ? fmt(gross) : "—";
-      $("ck-gross").className = "cost-kpi-value " + (gross >= 0 ? "profit-pos" : "profit-neg");
-    }
-    const mc = costRateClass(costRate);
-    if ($("ck-profit")) $("ck-profit").textContent = costRate !== null ? (100 - costRate) + "%" : "—";
-    if ($("ck-cost"))   $("ck-cost").textContent   = costRate !== null ? costRate + "%" : "—";
-    ["ck-profit-wrap", "ck-cost-wrap"].forEach(id => { if ($(id)) $(id).className = "cost-kpi " + mc; });
-  }
-  ["directCost", "price", "directPackaging", "directShipping", "directOther"].forEach(f => {
-    document.querySelectorAll(`[data-master-field="${f}"]`).forEach(el => el.addEventListener("input", refreshCostKpis));
-  });
-
-  // ── 添加物キーワード管理 ──
-  document.querySelectorAll("[data-action='add-additive-kw']").forEach(el => el.addEventListener("click", () => {
-    const input = document.getElementById("additive-kw-input");
-    if (!input) return;
-    const kws = input.value.split(/[、,，\s]+/).map(s => s.trim()).filter(Boolean);
-    if (!kws.length) return;
-    userAdditiveKw = [...new Set([...userAdditiveKw, ...kws])];
-    safeSet("food-label-additive-kw", JSON.stringify(userAdditiveKw));
-    render();
-  }));
-  document.querySelectorAll("[data-del-additive-kw]").forEach(el => el.addEventListener("click", () => {
-    const i = parseInt(el.dataset.delAdditiveKw);
-    userAdditiveKw = userAdditiveKw.filter((_, idx) => idx !== i);
-    safeSet("food-label-additive-kw", JSON.stringify(userAdditiveKw));
-    render();
-  }));
-
-  // ── Supabase設定 ──
-  document.querySelectorAll("[data-action='save-supabase-cfg']").forEach(el => el.addEventListener("click", () => {
-    const url = document.getElementById("sb-url-input")?.value?.trim();
-    const key = document.getElementById("sb-key-input")?.value?.trim();
-    if (!url || !key) { showStatus("URLとAPIキーを両方入力してください"); return; }
-    if (!url.startsWith("https://")) { showStatus("URLはhttps://で始まる必要があります"); return; }
-    safeSet("fmcc-supabase-url", url);
-    safeSet("fmcc-supabase-key", key);
-    showStatus("Supabase設定を保存しました");
-    render();
-  }));
-  document.querySelectorAll("[data-action='supabase-push']").forEach(el => el.addEventListener("click", supabasePush));
-  document.querySelectorAll("[data-action='supabase-pull']").forEach(el => el.addEventListener("click", supabasePull));
-
-  // ── OpenAI APIキー ──
-  document.querySelectorAll("[data-action='save-openai-key']").forEach(el => el.addEventListener("click", () => {
-    const input = document.getElementById("openai-key-input");
-    if (!input) return;
-    const key = input.value.trim();
-    if (!key) { showStatus("APIキーを入力してください"); return; }
-    if (!key.startsWith("sk-")) { showStatus("APIキーは sk- で始まる文字列です"); return; }
-    safeSet("fmcc-openai-key", key);
-    showStatus("APIキーを保存しました");
-    render();
-  }));
-  document.querySelectorAll("[data-action='clear-openai-key']").forEach(el => el.addEventListener("click", () => {
-    safeSet("fmcc-openai-key", "");
-    showStatus("APIキーを削除しました");
-    render();
-  }));
-
-  // ── AI相談 ──
-  const consultSel = document.getElementById("consult-product-sel");
-  if (consultSel) {
-    consultSel.addEventListener("change", () => {
-      aiConsultProductId = consultSel.value;
-      aiConsultInput = "";
-      render();
-    });
-  }
-  document.getElementById("consult-clear")?.addEventListener("click", () => {
-    if (!aiConsultProductId) return;
-    saveConsultHistory(aiConsultProductId, []);
-    render();
-  });
-  document.getElementById("consult-input")?.addEventListener("input", e => {
-    aiConsultInput = e.target.value;
-  });
-  document.querySelectorAll(".consult-tpl-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const q = btn.dataset.consultQ;
-      const key = btn.dataset.consultKey;
-      document.getElementById("consult-input").value = q;
-      aiConsultInput = q;
-      sendConsultMessage(key);
-    });
-  });
-  document.getElementById("consult-send")?.addEventListener("click", () => {
-    sendConsultMessage(null);
-  });
-  // Ctrl+Enterで送信
-  document.getElementById("consult-input")?.addEventListener("keydown", e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") sendConsultMessage(null);
-  });
-
-  // ── 商品登録メニュー ──
-  document.querySelector("[data-reg-toggle]")?.addEventListener("click", e => {
-    e.stopPropagation();
-    if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
-    registerMenuOpen = !registerMenuOpen;
-    render();
-  });
-  document.querySelectorAll("[data-reg-mode]").forEach(btn => {
-    btn.addEventListener("click", e => {
-      e.stopPropagation();
-      const mode = btn.dataset.regMode;
-      registerMenuOpen = false;
-      aiRegAnalysisStep = -1;
-      if (mode === "manual") {
-        draft = extendProductMaster(emptyProduct());
-        editId = "new"; view = "edit"; sidebarOpen = false;
-        render(); return;
-      }
-      if (mode === "ai-chat") {
-        aiRegChatMessages = [{ role: "ai", content: AI_CHAT_FLOW[0].q }];
-        aiRegChatInput = ""; aiRegChatStep = 0; aiRegChatDraft = {};
-        saasView = "reg-ai-chat";
-      } else {
-        saasView = mode === "photo" ? "reg-photo" : "reg-spec";
-      }
-      safeSet("fmcc-view", saasView); render();
-    });
-  });
-  // 外クリックでメニューを閉じる
-  if (registerMenuOpen) {
-    setTimeout(() => {
-      document.addEventListener("click", function closeReg(e) {
-        if (!e.target.closest(".reg-btn-wrap")) {
-          registerMenuOpen = false; render();
-          document.removeEventListener("click", closeReg);
-        }
-      });
-    }, 0);
-  }
-
-  // ── 写真/規格書アップロード ──
-  ["photo", "spec"].forEach(type => {
-    const dropZone = document.getElementById(`${type}-drop-zone`);
-    const fileInput = document.getElementById(`${type}-file-input`);
-    const selectBtn = document.getElementById(`${type}-select-btn`);
-    if (selectBtn) selectBtn.addEventListener("click", () => fileInput?.click());
-    if (fileInput) fileInput.addEventListener("change", () => {
-      const file = fileInput.files[0];
-      if (file) processRegFile(type, file);
-    });
-    if (dropZone) {
-      dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
-      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
-      dropZone.addEventListener("drop", e => {
-        e.preventDefault(); dropZone.classList.remove("drag-over");
-        const file = e.dataTransfer.files[0];
-        if (file) processRegFile(type, file);
-      });
-    }
-  });
-
-  // 解析完了後に商品編集へ
-  document.querySelector("[data-reg-go-editor]")?.addEventListener("click", () => {
-    aiRegAnalysisStep = -1;
-    draft = extendProductMaster(emptyProduct());
-    if (aiRegChatDraft && Object.keys(aiRegChatDraft).length) {
-      Object.assign(draft, aiRegChatDraft);
-      draft.name = draft.name || "AI登録商品";
-    } else {
-      draft.name = "AI解析済み商品（確認・修正してください）";
-    }
-    editId = "new"; view = "edit"; sidebarOpen = false;
-    render();
-  });
-
-  // ── AIチャット登録 ──
-  document.getElementById("ai-chat-input")?.addEventListener("input", e => { aiRegChatInput = e.target.value; });
-  document.getElementById("ai-chat-send")?.addEventListener("click", () => sendAiChatMessage());
-  document.getElementById("ai-chat-input")?.addEventListener("keydown", e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") sendAiChatMessage();
-  });
-}
 
 function startAiAnalysis(type) {
   aiRegAnalysisStep = 0;

@@ -393,6 +393,8 @@ function focusKey(el) {
   if (!el) return null;
   if (el.dataset.field) return `[data-field="${el.dataset.field}"]`;
   if (el.dataset.ingField && el.closest("[data-ing-id]")) return `[data-ing-id="${el.closest("[data-ing-id]").dataset.ingId}"] [data-ing-field="${el.dataset.ingField}"]`;
+  if ("ingName" in el.dataset) return `[data-ing-name="${el.dataset.ingName}"]`;
+  if ("ingWeight" in el.dataset) return `[data-ing-weight="${el.dataset.ingWeight}"]`;
   if (el.id) return `#${el.id}`;
   return null;
 }

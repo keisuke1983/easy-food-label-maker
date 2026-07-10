@@ -33,6 +33,6 @@ const SIZE_PRESETS = [
 ];
 const PLANS = {
   free: { label: "無料", price: "0円/月", limit: 1, note: "1商品まで無料" },
-  starter: { label: "スタンダード", price: "980円/月", limit: 10, note: "月10商品まで保存・PDF出力" },
-  pro: { label: "プロ", price: "1980円/月", limit: Infinity, note: "無制限" },
+  starter: { label: "スタンダード", price: "1,980円/月", limit: 10, note: "月10商品まで保存・PDF出力" },
+  pro: { label: "プロ", price: "3,980円/月", limit: Infinity, note: "無制限" },
 };

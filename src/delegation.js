@@ -142,24 +142,6 @@ function setupDelegation() {
         case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("URLとAPIキーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("URLはhttps://で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("Supabase設定を保存しました"); render(); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
-        case "save-openai-key": { const inp=document.getElementById("openai-key-input"); if(!inp)return; const key=inp.value.trim(); if(!key){showStatus("APIキーを入力してください");return;} if(!key.startsWith("sk-")){showStatus("APIキーは sk- で始まる文字列です");return;} sessionStorage.setItem("fmcc-openai-key",key); showStatus("APIキーを保存しました（このセッション中のみ有効）"); render(); return; }
-        case "clear-openai-key": sessionStorage.removeItem("fmcc-openai-key"); showStatus("APIキーを削除しました"); render(); return;
-        case "test-openai-key": {
-          const key = sessionStorage.getItem("fmcc-openai-key") || "";
-          if (!key) { showStatus("APIキーが登録されていません"); return; }
-          const wrap = document.getElementById("openai-key-status-wrap");
-          if (wrap) wrap.innerHTML = `<p class="api-key-status">🔄 接続テスト中...</p>`;
-          fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${key}` } })
-            .then(r => {
-              if (wrap) wrap.innerHTML = r.ok
-                ? `<p class="api-key-status ok">✅ 接続成功！AIが利用可能です</p>`
-                : `<p class="api-key-status error">❌ 認証失敗（ステータス ${r.status}）。キーを確認してください</p>`;
-            })
-            .catch(() => {
-              if (wrap) wrap.innerHTML = `<p class="api-key-status error">❌ 通信エラー。ネットワークを確認してください</p>`;
-            });
-          return;
-        }
         case "copy-output": copyLabels(); return;
         case "copy-image-output": copyImageLabels(); return;
       }
@@ -351,8 +333,11 @@ function setupDelegation() {
     // [data-clear-completion-filter]
     if (t.closest("[data-clear-completion-filter]")) { masterCompletionFilter=""; render(); return; }
 
+    // [data-clear-pipeline-filter]
+    if (t.closest("[data-clear-pipeline-filter]")) { masterPipelineFilter=""; render(); return; }
+
     // [data-clear-all-filters]
-    if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; render(); return; }
+    if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; masterPipelineFilter=""; render(); return; }
 
     // [data-master-filter]
     const mfEl = t.closest("[data-master-filter]");
@@ -380,7 +365,7 @@ function setupDelegation() {
       const label = saveSearchEl.dataset.saveSearch;
       if (!label) return;
       if (savedSearchPresets.some(s => s.label === label)) { showStatus("同じ条件はすでに保存されています"); return; }
-      savedSearchPresets = [...savedSearchPresets, { label, filter: masterFilter, category: masterCategoryFilter, completion: masterCompletionFilter, search: masterSearch }];
+      savedSearchPresets = [...savedSearchPresets, { label, filter: masterFilter, category: masterCategoryFilter, completion: masterCompletionFilter, pipeline: masterPipelineFilter, search: masterSearch }];
       safeSet("fmcc-saved-searches", JSON.stringify(savedSearchPresets));
       showStatus(`「${label}」を保存しました`);
       render(); return;
@@ -395,6 +380,7 @@ function setupDelegation() {
       masterFilter = s.filter || "all";
       masterCategoryFilter = s.category || "";
       masterCompletionFilter = s.completion || "";
+      masterPipelineFilter = s.pipeline || "";
       masterSearch = s.search || "";
       render(); return;
     }
@@ -510,6 +496,7 @@ function setupDelegation() {
     if (t.matches("[data-todo-filter-select]")) { masterFilter=t.value||"all"; render(); return; }
     if (t.matches("[data-master-category-filter]")) { masterCategoryFilter=t.value; render(); return; }
     if (t.matches("[data-master-completion-filter]")) { masterCompletionFilter=t.value; render(); return; }
+    if (t.matches("[data-master-pipeline-filter]")) { masterPipelineFilter=t.value; render(); return; }
   });
 
   // ── グローバルキーボードショートカット ──

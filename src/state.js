@@ -69,6 +69,8 @@ let savedSearchPresets = (() => { try { return JSON.parse(safeGet("fmcc-saved-se
 let teamMembers = (() => { try { return JSON.parse(safeGet("fmcc-team-members") || "[]"); } catch { return []; } })();
 let currentUserName = safeGet("fmcc-current-user") || "";
 
+let masterPipelineFilter = ""; // "" | PRODUCT_STATUSES の id
+
 // ── クラウド同期状態 ────────────────────────────────────────────────────
 let cloudSyncStatus = "idle"; // "idle" | "syncing" | "success" | "error"
 let cloudSyncLastAt = safeGet("fmcc-last-sync") || "";

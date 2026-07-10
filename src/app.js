@@ -804,8 +804,8 @@ function homeHtml() {
   return `<main class="home">
     <div class="home-hero">
       <div class="home-hero-logo"><img class="brand-mark app-icon" src="./assets/app-icon.svg" alt="ラベルプリンター"></div>
-      <h1 class="home-hero-title">食品表示ラベルを<br>かんたん作成</h1>
-      <p class="home-hero-sub">食品表示ラベルの作成・保存・再印刷を一元管理</p>
+      <h1 class="home-hero-title">FoodPilot</h1>
+      <p class="home-hero-sub">食品業界向け AI 搭載商品管理 SaaS</p>
     </div>
     ${planHtml()}
     <div class="home-cta-wrap">
@@ -833,8 +833,8 @@ function menuHtml() {
   return `<main class="home menu-page">
     <div class="menu-head"><button class="back" data-action="plan-page">← プラン変更</button><span class="plan-badge">${planInfo().label}プラン</span></div>
     <div class="home-hero">
-      <h1 class="home-hero-title">食品表示ラベルを<br>かんたん作成</h1>
-      <p class="home-hero-sub">食品表示ラベルの作成・保存・再印刷を一元管理</p>
+      <h1 class="home-hero-title">FoodPilot</h1>
+      <p class="home-hero-sub">食品業界向け AI 搭載商品管理 SaaS</p>
     </div>
     <div class="how-steps">
       <div class="how-step">
@@ -1148,11 +1148,10 @@ function contaminationEditorHtml(p) {
 function labelAssistHtml(p, d) {
   const checks = labelChecklist(p, d);
   const okCount = checks.filter((c) => c.ok).length;
-  const hasKey = !!(sessionStorage.getItem("fmcc-openai-key") || "");
   const aiCheckHtml = (() => {
     if (aiLabelCheckLoading) return `<div class="ai-check-loading">🤖 AIが食品表示法を照合中...</div>`;
     if (aiLabelCheckResult) return `<div class="ai-check-result">${renderMarkdown(aiLabelCheckResult)}<button class="action-sub" data-action="run-ai-label-check" style="margin-top:8px">再チェック</button></div>`;
-    return `<button class="action ai-check-btn" data-action="run-ai-label-check">🔍 AI食品表示法チェック${hasKey ? "" : "（テンプレート）"}</button>`;
+    return `<button class="action ai-check-btn" data-action="run-ai-label-check">🔍 AI食品表示法チェック</button>`;
   })();
   return section("表示チェックリスト", `
     <div class="assist-actions">
@@ -1731,12 +1730,12 @@ function sidebarHtml() {
   const roleLabel = { admin: "管理者", editor: "編集者", reviewer: "確認者" }[currentRole] || "";
   const userChip = currentUserName
     ? `<div class="sidebar-user-chip">👤 <span>${escapeHtml(currentUserName)}</span>${roleLabel ? `<span class="sidebar-user-role">${roleLabel}</span>` : ""}</div>`
-    : `<div class="sidebar-user-chip muted" data-nav="settings-nav">👤 ユーザーを設定する</div>`;
+    : `<div class="sidebar-user-chip muted" data-nav="team-approval">👤 ユーザーを設定する</div>`;
   return `<nav class="sidebar${sidebarOpen?" open":""}">
     <div class="sidebar-hd">
       <div class="sidebar-brand">
         <img src="./assets/app-icon.svg" alt="" class="sidebar-logo">
-        <div><div class="sidebar-name">食品商品管理</div><div class="sidebar-sub2">クラウド</div></div>
+        <div><div class="sidebar-name">FoodPilot</div><div class="sidebar-sub2">フードパイロット</div></div>
       </div>
       <button class="sidebar-close-btn" data-action="close-sidebar">✕</button>
     </div>
@@ -2040,7 +2039,7 @@ function dashboardEmptyHtml() {
   return `<div class="onboarding-wrap">
     <div class="onboarding-hero">
       <img src="./assets/app-icon.svg" alt="" class="onboarding-icon">
-      <h1 class="onboarding-title">食品商品管理クラウドへようこそ</h1>
+      <h1 class="onboarding-title">FoodPilot へようこそ</h1>
       <p class="onboarding-sub">食品メーカー・小規模食品事業者のための<br>AI搭載・商品管理＆食品表示ラベル作成ツール</p>
       <button class="action primary onboarding-cta" data-quick-new="1">＋ 最初の商品を登録する</button>
     </div>
@@ -2127,7 +2126,7 @@ function dashboardHtml() {
   const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
   // 今月追加（createdAt が "YYYY/M/D" または "YYYY-MM-DD" 形式）
   const ym = `${now.getFullYear()}/${now.getMonth()+1}`;
-  const thisMonthCount = products.filter(p => (p.createdAt||"").startsWith(ym)).length;
+  const thisMonthCount = products.filter(p => (p.createdAt || p.updatedAt || "").startsWith(ym)).length;
 
   // ── 期限アラート ──
   const expiredCount      = products.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
@@ -2249,21 +2248,26 @@ function dashboardHtml() {
   products.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category]||0)+1; });
   const catEntries = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxCat = catEntries.length ? catEntries[0][1] : 1;
-  const catHtml = catEntries.length >= 2 ? `<div class="dash-panel">
+  const catHtml = `<div class="dash-panel">
     <div class="dash-panel-hd">📊 カテゴリ別商品数</div>
-    <div class="cat-chart-list">
-      ${catEntries.map(([cat,count])=>`
-        <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
-          <span class="cat-chart-label">${escapeHtml(cat)}</span>
-          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
-          <span class="cat-chart-count">${count}件</span>
-        </button>`).join("")}
-    </div>
-  </div>` : "";
+    ${catEntries.length >= 2
+      ? `<div class="cat-chart-list">
+          ${catEntries.map(([cat,count])=>`
+            <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
+              <span class="cat-chart-label">${escapeHtml(cat)}</span>
+              <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
+              <span class="cat-chart-count">${count}件</span>
+            </button>`).join("")}
+        </div>`
+      : `<div class="dash-panel-empty">カテゴリが設定された商品が2件以上になると表示されます</div>`}
+  </div>`;
 
   // ── 原価サマリー ──
   const withCost = derivedAll.filter(({c})=>c.totalCost>0);
-  const costHtml = withCost.length ? (() => {
+  const costHtml = !withCost.length ? `<div class="dash-panel">
+    <div class="dash-panel-hd">💰 原価サマリー</div>
+    <div class="dash-panel-empty">原価を登録すると利益率サマリーが表示されます<br><button class="dash-panel-empty-btn" data-nav="products">商品に原価を登録する →</button></div>
+  </div>` : (() => {
     const rates = withCost.filter(({c})=>c.costRate!==null).map(({c})=>c.costRate);
     const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
     const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
@@ -2277,7 +2281,7 @@ function dashboardHtml() {
         <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
       </div>
     </div>`;
-  })() : "";
+  })();
 
   return saasLayout("ダッシュボード", `
     ${expiryAlert}
@@ -2320,6 +2324,7 @@ function productsListHtml() {
   if (masterFilter==="expiringSoon")  list = list.filter(p=>p.expiryDate&&p.expiryDate>=todayIso&&p.expiryDate<=soonIso);
   if (masterFilter==="noImage")       list = list.filter(p=>!p.imageDataUrl);
   if (masterFilter==="noCost")        list = list.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length);
+  if (masterPipelineFilter)           list = list.filter(p=>(p.productStatus||"draft")===masterPipelineFilter);
   if (masterCategoryFilter)           list = list.filter(p=>(p.category||"")===masterCategoryFilter);
   if (masterCompletionFilter==="lt100") list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; });
   else if (masterCompletionFilter==="lt60") list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<60; });
@@ -2363,7 +2368,8 @@ function productsListHtml() {
       : p.expiryDate && p.expiryDate <= soonIso
       ? `<span class="expiry-chip soon">⏰ ${Math.max(0,Math.ceil((new Date(p.expiryDate)-Date.now())/864e5))}日後</span>`
       : "";
-    return `<div class="master-card" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集">
+    const _psCard = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || "draft")) || PRODUCT_STATUSES[0];
+    return `<div class="master-card" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集" style="border-left: 4px solid ${_psCard.color};">
       <div class="master-card-inner">
         ${thumb}
         <div class="master-card-body">
@@ -2434,7 +2440,10 @@ function productsListHtml() {
   const completionChip = masterCompletionFilter
     ? `<span class="filter-active-tag">📊 ${COMPLETION_LABELS[masterCompletionFilter]}<button class="filter-clear-btn" data-clear-completion-filter title="完成度フィルターを解除">✕</button></span>`
     : "";
-  const activeFilterCount = (isTodoFilter?1:0) + (masterCategoryFilter?1:0) + (masterCompletionFilter?1:0);
+  const pipelineChip = masterPipelineFilter
+    ? (() => { const ps = PRODUCT_STATUSES.find(s=>s.id===masterPipelineFilter); return ps ? `<span class="filter-active-tag" style="color:${ps.color};background:${ps.bg}">● ${ps.label}<button class="filter-clear-btn" data-clear-pipeline-filter style="color:${ps.color}" title="ステータスフィルターを解除">✕</button></span>` : ""; })()
+    : "";
+  const activeFilterCount = (isTodoFilter?1:0) + (masterCategoryFilter?1:0) + (masterCompletionFilter?1:0) + (masterPipelineFilter?1:0);
   const resetAllBtn = activeFilterCount > 1
     ? `<button class="filter-reset-all-btn" data-clear-all-filters>✕ すべてリセット</button>`
     : "";
@@ -2446,6 +2455,13 @@ function productsListHtml() {
       <option value="">📋 課題フィルター...</option>
       ${todoOpts.map(o=>`<option value="${o.key}"${masterFilter===o.key?" selected":""}>${o.label}（${o.count}件）</option>`).join("")}
     </select>` : "";
+
+  // パイプラインステータスフィルター
+  const pipelineSelect = `
+    <select class="sort-select" data-master-pipeline-filter title="ステータスで絞り込み">
+      <option value="">ステータス: すべて</option>
+      ${PRODUCT_STATUSES.map(s=>`<option value="${s.id}"${masterPipelineFilter===s.id?" selected":""}>${s.label}</option>`).join("")}
+    </select>`;
 
   // カテゴリフィルター（複合フィルター: masterFilter と AND で機能）
   const allCats = [...new Set(products.map(p=>p.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
@@ -2463,10 +2479,11 @@ function productsListHtml() {
     </select>`;
 
   // 保存済み検索プリセット
-  const isAnyActive = masterFilter !== "all" || masterSearch || masterCategoryFilter || masterCompletionFilter;
+  const isAnyActive = masterFilter !== "all" || masterSearch || masterCategoryFilter || masterCompletionFilter || masterPipelineFilter;
   const COMP_LBL = { lt100:"完成度100%未満", lt60:"完成度60%未満", lt30:"完成度30%未満" };
   const currentLabel = [
     masterFilter !== "all" ? (TODO_LABELS[masterFilter] || {all:"すべて",starred:"★",active:"公開中",draft:"下書き"}[masterFilter] || masterFilter) : "",
+    masterPipelineFilter ? (PRODUCT_STATUSES.find(s=>s.id===masterPipelineFilter)?.label || masterPipelineFilter) : "",
     masterCategoryFilter ? masterCategoryFilter : "",
     masterCompletionFilter ? COMP_LBL[masterCompletionFilter] : "",
     masterSearch ? `"${masterSearch}"` : "",
@@ -2489,11 +2506,13 @@ function productsListHtml() {
         ${isTodoFilter?`<span class="filter-active-tag">📋 ${TODO_LABELS[masterFilter]}<button class="filter-clear-btn" data-master-filter="all">✕</button></span>`:""}
         ${catChip}
         ${completionChip}
+        ${pipelineChip}
         ${resetAllBtn}
         ${saveSearchBtn}
         ${resultCount}
       </div>
       <div class="toolbar-right">
+        ${pipelineSelect}
         ${todoFilterSelect}
         ${categorySelect}
         ${completionSelect}
@@ -3296,31 +3315,22 @@ function newSettingsHtml() {
   const userKwList = userAdditiveKw.map((kw, i) =>
     `<div class="additive-kw-row"><span>${escapeHtml(kw)}</span><button class="icon-btn" data-del-additive-kw="${i}">×</button></div>`
   ).join("");
-  const savedKey = sessionStorage.getItem("fmcc-openai-key") || "";
-  const keyMasked = savedKey ? "sk-..." + savedKey.slice(-4) : "";
   const sbUrl = safeGet("fmcc-supabase-url") || "";
   const sbKey = safeGet("fmcc-supabase-key") || "";
   const sbConnected = !!(sbUrl && sbKey);
   return saasLayout("設定", `
     <div class="settings-sections">
       <div class="settings-card">
-        <h3>🤖 AIアシスタント連携</h3>
-        <p class="notice">設定すると、AIが商品説明の作成・食品表示のチェック・商品に関する質問に答えてくれます。<br>設定しなくてもかんたんな定型回答で利用できます。</p>
-        <div class="api-key-row">
-          <input id="openai-key-input" type="password" placeholder="sk-..." value="${escapeHtml(savedKey)}" autocomplete="off" style="flex:1;font-family:monospace">
-          <button class="action primary" data-action="save-openai-key">保存</button>
-          ${savedKey ? `<button class="action" data-action="test-openai-key">動作確認</button>` : ""}
-          ${savedKey ? `<button class="action danger-outline" data-action="clear-openai-key">削除</button>` : ""}
+        <h3>🤖 FoodPilot AI</h3>
+        <div class="ai-builtin-status">
+          <span class="ai-builtin-dot"></span>
+          <span class="ai-builtin-label">FoodPilot AI は利用可能です</span>
         </div>
-        <div id="openai-key-status-wrap">
-          ${savedKey
-            ? `<p class="api-key-status ok">✓ AI連携キー登録済み（${escapeHtml(keyMasked)}）</p>`
-            : `<p class="api-key-status warn">⚠ 未設定 — AI機能はかんたん定型回答になります</p>`}
+        <p class="notice" style="margin-top:10px">FoodPilot のAIアシスタントはプランに含まれています。別途APIキーの設定は不要です。<br>AI説明文・食品表示チェック・AI相談がすぐにご利用いただけます。</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="action" data-nav="ai-descriptions-nav">✨ AI説明文を使う</button>
+          <button class="action" data-nav="ai-consult-nav">💬 AI相談を使う</button>
         </div>
-        <p class="notice" style="margin-top:8px">
-          🔒 <b>安全性について：</b>入力したキーはこのブラウザのタブを閉じると自動的に消えます。他のサーバーには送信しません。<br>
-          <a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">AIキーを取得する（OpenAI公式サイト）→</a>
-        </p>
       </div>
       <div class="settings-card">
         <h3>プラン</h3>
@@ -3641,22 +3651,7 @@ function generateConsultResponse(p, questionKey) {
   }
 }
 
-// OpenAI API接続ポイント（APIキー設定で差し替え可能な設計）
 async function callConsultAI(p, userMessage, questionKey) {
-  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
-  if (apiKey) {
-    try {
-      const d = derive(p);
-      const systemPrompt = "あなたは食品表示法の専門家AIアシスタントです。日本の食品表示法・JAS法・栄養表示基準に精通しています。\n商品情報：名称「" + (p.name || "未設定") + "」、社内名称「" + (p.internalName || "") + "」、原材料：" + ((p.ingredients || []).filter(i => i.name).map(i => i.name).join("、") || "未入力") + "\nアレルゲン：" + ((d.allergens || []).join("、") || "なし") + "\n正確で実用的なアドバイスをMarkdown形式で回答してください。";
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }], max_tokens: 1000 }),
-      });
-      const json = await res.json();
-      if (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) return json.choices[0].message.content;
-    } catch (e) { console.warn("OpenAI API error:", e); }
-  }
   return generateConsultResponse(p, questionKey);
 }
 
@@ -3666,39 +3661,16 @@ async function runAiLabelCheck() {
   if (!p) return;
   aiLabelCheckLoading = true; aiLabelCheckResult = null; render();
   const d = derive(p);
-  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
-  const prompt = `以下の食品ラベル情報を日本の食品表示基準（食品表示法・JAS法）に照らして確認し、問題点や改善点をMarkdownで箇条書きにしてください。問題がなければ「問題なし」と記載してください。
-
-【名称】${p.name || "未入力"}
-【原材料名】${d.ingLabel || "未入力"}
-【内容量】${p.volume || "未入力"}
-【賞味期限】${p.bestBefore || "未入力"}
-【保存方法】${d.storage || "未入力"}
-【アレルゲン】${d.allergens.join("、") || "なし"}
-【製造者】${p.manufacturerName || "未入力"} ${p.manufacturerAddress || ""}`;
-
-  if (apiKey) {
-    try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: "あなたは日本の食品表示法の専門家です。指摘は具体的かつ簡潔に、Markdown箇条書きで回答してください。" }, { role: "user", content: prompt }], max_tokens: 800 }),
-      });
-      const json = await res.json();
-      aiLabelCheckResult = json.choices?.[0]?.message?.content || "チェック結果を取得できませんでした。";
-    } catch { aiLabelCheckResult = "通信エラーが発生しました。APIキーを確認してください。"; }
-  } else {
-    const issues = [];
-    if (!p.name?.trim()) issues.push("❌ **名称が未入力**：食品表示法第4条で義務表示");
-    if (!d.ingLabel) issues.push("❌ **原材料名が未入力**：加工食品は原材料名の表示が義務");
-    if (!p.volume?.trim()) issues.push("❌ **内容量が未入力**：計量法による表示義務あり");
-    if (!p.bestBefore?.trim()) issues.push("❌ **賞味/消費期限が未入力**：食品表示基準で義務");
-    if (!d.storage?.trim()) issues.push("⚠️ **保存方法が未入力**：要冷蔵品等は表示義務あり");
-    if (!p.manufacturerName?.trim()) issues.push("❌ **製造者名が未入力**：食品表示基準で義務");
-    if (!p.manufacturerAddress?.trim()) issues.push("❌ **製造者住所が未入力**：食品表示基準で義務");
-    if (d.allergens.length === 0 && p.ingredients.some(i => i.name?.trim())) issues.push("ℹ️ アレルゲン未検出：原材料名を正確に入力することで自動検出精度が上がります");
-    aiLabelCheckResult = issues.length ? issues.join("\n") : "✅ **基本項目はすべて入力されています**\n\n※ このチェックはルールベースです。AIキーを設定すると詳細なGPTチェックが利用できます。";
-  }
+  const issues = [];
+  if (!p.name?.trim()) issues.push("❌ **名称が未入力**：食品表示法第4条で義務表示");
+  if (!d.ingLabel) issues.push("❌ **原材料名が未入力**：加工食品は原材料名の表示が義務");
+  if (!p.volume?.trim()) issues.push("❌ **内容量が未入力**：計量法による表示義務あり");
+  if (!p.bestBefore?.trim()) issues.push("❌ **賞味/消費期限が未入力**：食品表示基準で義務");
+  if (!d.storage?.trim()) issues.push("⚠️ **保存方法が未入力**：要冷蔵品等は表示義務あり");
+  if (!p.manufacturerName?.trim()) issues.push("❌ **製造者名が未入力**：食品表示基準で義務");
+  if (!p.manufacturerAddress?.trim()) issues.push("❌ **製造者住所が未入力**：食品表示基準で義務");
+  if (d.allergens.length === 0 && p.ingredients.some(i => i.name?.trim())) issues.push("ℹ️ アレルゲン未検出：原材料名を正確に入力することで自動検出精度が上がります");
+  aiLabelCheckResult = issues.length ? issues.join("\n") : "✅ **基本項目はすべて入力されています**\n\nアレルゲン表示・原材料配合順・栄養成分表示の最終確認もお忘れなく。";
   aiLabelCheckLoading = false; render();
 }
 
@@ -4135,14 +4107,6 @@ async function processRegFile(type, file) {
   aiRegChatDraft = {};
   aiRegError = "";
   if (type === "photo") {
-    const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
-    if (!apiKey) {
-      aiRegError = "OpenAI APIキーが登録されていません。\n設定画面でAPIキーを登録してから、写真からの登録をお試しください。";
-      aiRegAnalysisStep = -1;
-      saasView = "reg-photo";
-      render();
-      return;
-    }
     // 画像をbase64に変換
     let base64;
     try {
@@ -4161,33 +4125,18 @@ async function processRegFile(type, file) {
     }
     startAiAnalysis(type);
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      // FoodPilot AIバックエンド経由でOpenAI Vision APIを呼び出す
+      const res = await fetch("/api/ai-photo", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          max_tokens: 1200,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: "この画像は日本の食品パッケージ・食品表示ラベルです。以下の項目を読み取ってJSON形式のみで回答してください（説明文不要）。読み取れない項目は空文字にしてください。\n{\"name\":\"商品名\",\"volume\":\"内容量\",\"bestBefore\":\"賞味期限\",\"storage\":\"保存方法\",\"manufacturerName\":\"製造者名\",\"manufacturerAddress\":\"製造者住所\",\"ingredients\":[{\"name\":\"原材料名\",\"weight\":\"\"}],\"category\":\"カテゴリ（菓子/パン/惣菜/飲料/調味料/乾物/冷凍食品/その他）\"}" },
-              { type: "image_url", image_url: { url: base64, detail: "high" } }
-            ]
-          }]
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64 })
       });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        const msg = errJson.error?.message || `APIエラー（HTTP ${res.status}）`;
-        throw new Error(msg);
+        throw new Error(errJson.error || `サーバーエラー（HTTP ${res.status}）`);
       }
-      const json = await res.json();
-      const content = json.choices?.[0]?.message?.content || "";
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("AIが有効なデータを返しませんでした。食品表示ラベルや原材料表が写っている写真を使用してください。");
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = await res.json();
       aiRegChatDraft = parsed;
-      // 解析ステップをすべて完了に進める
       aiRegAnalysisStep = AI_ANALYSIS_STEPS.length;
       render();
     } catch(e) {

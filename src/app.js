@@ -247,18 +247,32 @@ function exportCsv() {
   showStatus("CSVをエクスポートしました（Excelで開いて編集できます）");
 }
 function exportJson() {
-  const data = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    products: products,
+  const hasImages = products.some(p => p.imageDataUrl);
+  const doExport = (withImages) => {
+    const exportProducts = withImages
+      ? products
+      : products.map(p => { const c = {...p}; delete c.imageDataUrl; return c; });
+    const data = { version: 1, exportedAt: new Date().toISOString(), products: exportProducts };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `food-labels-${new Date().toLocaleDateString("ja-JP").replace(/\//g, "-")}${withImages ? "" : "-noimages"}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus(withImages ? "JSONをエクスポートしました（画像含む完全バックアップ）" : "JSONをエクスポートしました（画像なし・軽量版）");
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url;
-  a.download = `food-labels-${new Date().toLocaleDateString("ja-JP").replace(/\//g, "-")}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showStatus("JSONをエクスポートしました（原材料・アレルゲン情報含む）");
+  if (hasImages) {
+    showModal({
+      message: "バックアップファイルの形式を選んでください。\n\n📦 画像を含む：完全バックアップ。ファイルサイズが大きくなります。\n📄 画像を除く：テキスト情報のみ。ファイルが小さく開きやすいです。",
+      confirmLabel: "📦 画像を含む",
+      dangerLabel: "📄 画像を除く",
+      cancelLabel: "キャンセル",
+      onConfirm: () => doExport(true),
+      onDanger: () => doExport(false),
+    });
+  } else {
+    doExport(false);
+  }
 }
 function importJsonFile(file, mode) {
   const reader = new FileReader();

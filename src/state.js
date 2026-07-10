@@ -60,3 +60,6 @@ let aiLabelCheckLoading = false;
 let masterAutoSaveTimer = null;
 let masterAutoSaveStatus = ""; // "" | "editing" | "saved"
 let masterSort = "updatedAt"; // "updatedAt" | "name" | "completion"
+let masterCategoryFilter = ""; // "" = すべて、それ以外はカテゴリ名で AND フィルタリング
+let masterCompletionFilter = ""; // "" | "lt100" | "lt60" | "lt30"
+let savedSearchPresets = (() => { try { return JSON.parse(safeGet("fmcc-saved-searches") || "[]"); } catch { return []; } })();

@@ -109,7 +109,18 @@ function setupDelegation() {
 
     // [data-dup]
     const dupEl = t.closest("[data-dup]");
-    if (dupEl) { if(!canCreateMore()){showModal({message:`${planInfo().label}プランは${planInfo().note}です。プランを変更してください。`});return;} const src=products.find(p=>p.id===dupEl.dataset.dup); if(!src)return; products=[{...structuredClone(src),id:uid(),name:`${src.name}（複製）`,updatedAt:new Date().toLocaleDateString("ja-JP"),ingredients:src.ingredients.map(i=>({...i,id:uid()}))},...products]; saveProducts(); render(); return; }
+    if (dupEl) { if(!canCreateMore()){showModal({message:`${planInfo().label}プランは${planInfo().note}です。プランを変更してください。`});return;} const src=products.find(p=>p.id===dupEl.dataset.dup); if(!src)return; const newDupId=uid(); products=[{...structuredClone(src),id:newDupId,name:`${src.name}（複製）`,updatedAt:new Date().toLocaleDateString("ja-JP"),ingredients:src.ingredients.map(i=>({...i,id:uid()}))},...products]; saveProducts(); showStatus("複製しました",{undoLabel:"元に戻す",onUndo:()=>{products=products.filter(p=>p.id!==newDupId);saveProducts();render();}}); render(); return; }
+
+    // [data-dup-goto] — 詳細画面からの複製: 複製後に新商品の詳細へ遷移
+    const dupGoEl = t.closest("[data-dup-goto]");
+    if (dupGoEl) {
+      if(!canCreateMore()){showModal({message:`${planInfo().label}プランは${planInfo().note}です。`});return;}
+      const src=products.find(p=>p.id===dupGoEl.dataset.dupGoto); if(!src)return;
+      const newId=uid();
+      products=[{...structuredClone(src),id:newId,name:`${src.name}（複製）`,updatedAt:new Date().toLocaleDateString("ja-JP"),ingredients:src.ingredients.map(i=>({...i,id:uid()}))},...products];
+      saveProducts(); productDetailId=newId; productDetailTab="basic"; saasView="product-detail";
+      showStatus("複製しました。コピーを編集しています。"); render(); return;
+    }
 
     // [data-del]
     const delEl = t.closest("[data-del]");
@@ -227,7 +238,7 @@ function setupDelegation() {
 
     // [data-nav-product-detail]
     const navPdEl = t.closest("[data-nav-product-detail]");
-    if (navPdEl) { productDetailId=navPdEl.dataset.navProductDetail;saasView="product-detail";view="saas";safeSet("fmcc-view",saasView);render(); return; }
+    if (navPdEl && !t.closest(".master-card-actions")) { productDetailId=navPdEl.dataset.navProductDetail;saasView="product-detail";view="saas";safeSet("fmcc-view",saasView);render(); return; }
 
     // [data-label-from]
     const lfEl = t.closest("[data-label-from]");
@@ -248,6 +259,15 @@ function setupDelegation() {
     // [data-clear-search]
     if (t.closest("[data-clear-search]")) { masterSearch=""; render(); setTimeout(()=>document.querySelector("[data-master-search]")?.focus(),30); return; }
 
+    // [data-clear-category-filter]
+    if (t.closest("[data-clear-category-filter]")) { masterCategoryFilter=""; render(); return; }
+
+    // [data-clear-completion-filter]
+    if (t.closest("[data-clear-completion-filter]")) { masterCompletionFilter=""; render(); return; }
+
+    // [data-clear-all-filters]
+    if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; render(); return; }
+
     // [data-master-filter]
     const mfEl = t.closest("[data-master-filter]");
     if (mfEl) { masterFilter=mfEl.dataset.masterFilter; render(); return; }
@@ -259,6 +279,48 @@ function setupDelegation() {
     // [data-todo-key]
     const todoEl = t.closest("[data-todo-key]");
     if (todoEl) { saasView="products"; view="saas"; masterFilter=todoEl.dataset.todoKey; safeSet("fmcc-view",saasView); render(); return; }
+
+    // [data-set-category]
+    const setCatEl = t.closest("[data-set-category]");
+    if (setCatEl) { masterCategoryFilter=setCatEl.dataset.setCategory; saasView="products"; view="saas"; safeSet("fmcc-view",saasView); render(); return; }
+
+    // [data-set-completion-filter] — ダッシュボード完成度ウィジェットからの遷移
+    const setCompEl = t.closest("[data-set-completion-filter]");
+    if (setCompEl) { masterCompletionFilter=setCompEl.dataset.setCompletionFilter; masterFilter="all"; masterCategoryFilter=""; saasView="products"; view="saas"; safeSet("fmcc-view",saasView); render(); return; }
+
+    // [data-save-search] — 保存済み検索プリセット保存
+    const saveSearchEl = t.closest("[data-save-search]");
+    if (saveSearchEl) {
+      const label = saveSearchEl.dataset.saveSearch;
+      if (!label) return;
+      if (savedSearchPresets.some(s => s.label === label)) { showStatus("同じ条件はすでに保存されています"); return; }
+      savedSearchPresets = [...savedSearchPresets, { label, filter: masterFilter, category: masterCategoryFilter, completion: masterCompletionFilter, search: masterSearch }];
+      safeSet("fmcc-saved-searches", JSON.stringify(savedSearchPresets));
+      showStatus(`「${label}」を保存しました`);
+      render(); return;
+    }
+
+    // [data-apply-search] — 保存済み検索プリセット適用
+    const applySearchEl = t.closest("[data-apply-search]");
+    if (applySearchEl) {
+      const idx = Number(applySearchEl.dataset.applySearch);
+      const s = savedSearchPresets[idx];
+      if (!s) return;
+      masterFilter = s.filter || "all";
+      masterCategoryFilter = s.category || "";
+      masterCompletionFilter = s.completion || "";
+      masterSearch = s.search || "";
+      render(); return;
+    }
+
+    // [data-del-search] — 保存済み検索プリセット削除
+    const delSearchEl = t.closest("[data-del-search]");
+    if (delSearchEl) {
+      const idx = Number(delSearchEl.dataset.delSearch);
+      savedSearchPresets = savedSearchPresets.filter((_,i) => i !== idx);
+      safeSet("fmcc-saved-searches", JSON.stringify(savedSearchPresets));
+      render(); return;
+    }
 
     // [data-ai-ch]
     const aiChEl = t.closest("[data-ai-ch]");
@@ -349,8 +411,8 @@ function setupDelegation() {
     if (t.matches("[data-spec-select]"))       { specSheetId=t.value; render(); return; }
     if (t.matches("[data-ai-product-select]")) { aiDescId=t.value; aiEditText=""; render(); return; }
     if (t.matches("[data-sel-print]"))         { t.checked?selectedForPrint.add(t.dataset.selPrint):selectedForPrint.delete(t.dataset.selPrint); render(); return; }
-    if (t.matches("[data-csv-import]"))        { if(t.files[0]) importCsvFile(t.files[0]); return; }
-    if (t.matches("[data-json-import]"))       { if(!t.files[0]) return; const f=t.files[0]; showModal({message:`JSONをインポートします。\n\n既存データとの結合方法を選んでください。`,confirmLabel:"マージ追加（既存を残す）",dangerLabel:"全て置き換え",cancelLabel:"キャンセル",onConfirm:()=>importJsonFile(f,"merge"),onDanger:()=>importJsonFile(f,"replace")}); return; }
+    if (t.matches("[data-csv-import]"))        { if(t.files[0]) previewImportCsv(t.files[0]); return; }
+    if (t.matches("[data-json-import]"))       { if(t.files[0]) previewImportJson(t.files[0]); return; }
     if (t.matches("[data-mfr-tpl-select]"))   { const idx=Number(t.value); if(isNaN(idx)||!mfrTemplates[idx])return; const tpl=mfrTemplates[idx]; const p=currentProduct(); Object.assign(p,{manufacturerName:tpl.name,manufacturerPostal:tpl.postal,manufacturerAddress:tpl.address,manufacturerPhone:tpl.phone}); render(); return; }
     if (t.matches("[data-print-cfg]"))         { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-size]"))              { printCfg={...(SIZE_PRESETS.find(s=>s.label===t.value)||SIZE_PRESETS[1])}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); render(); return; }
@@ -360,6 +422,8 @@ function setupDelegation() {
     if (t.matches("[data-master-field],[data-sales-ch]")) { scheduleAutoSaveMaster(); return; }
     if (t.matches("[data-master-sort]")) { masterSort=t.value; render(); return; }
     if (t.matches("[data-todo-filter-select]")) { masterFilter=t.value||"all"; render(); return; }
+    if (t.matches("[data-master-category-filter]")) { masterCategoryFilter=t.value; render(); return; }
+    if (t.matches("[data-master-completion-filter]")) { masterCompletionFilter=t.value; render(); return; }
   });
 
   // ── グローバルキーボードショートカット ──

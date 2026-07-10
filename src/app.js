@@ -167,8 +167,12 @@ function saveHistory(p) {
   try {
     const key = `food-label-history-${p.id}`;
     const hist = JSON.parse(safeGet(key) || "[]");
-    hist.unshift({ snapshot: JSON.parse(JSON.stringify(p)), savedAt: new Date().toLocaleString("ja-JP") });
-    safeSet(key, JSON.stringify(hist.slice(0, 5)));
+    hist.unshift({
+      snapshot: JSON.parse(JSON.stringify(p)),
+      savedAt: new Date().toLocaleString("ja-JP"),
+      savedBy: currentUserName || "—",
+    });
+    safeSet(key, JSON.stringify(hist.slice(0, 10)));
   } catch {}
 }
 function loadHistory(id) {
@@ -259,6 +263,11 @@ function exportJson() {
     a.download = `food-labels-${new Date().toLocaleDateString("ja-JP").replace(/\//g, "-")}${withImages ? "" : "-noimages"}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    try {
+      const hist = JSON.parse(safeGet("fmcc-backup-history") || "[]");
+      hist.unshift({ date: new Date().toLocaleString("ja-JP"), count: exportProducts.length, withImages });
+      safeSet("fmcc-backup-history", JSON.stringify(hist.slice(0, 20)));
+    } catch {}
     showStatus(withImages ? "JSONをエクスポートしました（画像含む完全バックアップ）" : "JSONをエクスポートしました（画像なし・軽量版）");
   };
   if (hasImages) {
@@ -1688,6 +1697,7 @@ function extendProductMaster(p) {
     specVersion: "1", specResponsible: "",
     specCreatedAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
     approvalStatus: "none", assignedTo: "", approvalComment: "", approverName: "", approvalDate: "",
+    productStatus: "draft",
     packaging: "", caseCount: "", productSize: "",
     ...p,
   };
@@ -2058,6 +2068,50 @@ function dashboardEmptyHtml() {
   </div>`;
 }
 
+// ── AIが能動的に提案するルールベースエンジン ─────────────────────────────
+function generateAiSuggestions(derivedAll) {
+  const sugs = [];
+  const todayIso  = new Date().toISOString().split("T")[0];
+  const soonIso   = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const staleDate = new Date(Date.now() - 30*24*60*60*1000).toLocaleDateString("ja-JP");
+
+  // Critical
+  const expired = products.filter(p => p.expiryDate && p.expiryDate < todayIso);
+  if (expired.length) sugs.push({ level:"critical", icon:"🚨", title:"賞味期限切れの商品があります", msg:`${expired.length}件の商品が賞味期限切れです。ラベルを早急に更新してください。`, action:"確認する", filterKey:"expired" });
+
+  const noIng = products.filter(p => !(p.ingredients||[]).some(i => i.name?.trim()));
+  if (noIng.length) sugs.push({ level:"critical", icon:"⚠️", title:"原材料が未入力の商品があります", msg:`${noIng.length}件で原材料名が未入力です。食品表示法の必須項目です。`, action:"確認する", filterKey:"noIngredients" });
+
+  // High
+  const reviewProd = products.filter(p => p.approvalStatus === "review");
+  if (reviewProd.length) sugs.push({ level:"high", icon:"👥", title:"承認待ちの商品があります", msg:`${reviewProd.length}件の商品が確認待ちです。速やかに確認してください。`, action:"承認画面へ", nav:"team-approval" });
+
+  const highCost = derivedAll.filter(({c}) => c.costRate !== null && c.costRate > 60);
+  if (highCost.length) sugs.push({ level:"high", icon:"📉", title:"原価率が高い商品があります", msg:`${highCost.length}件の商品で原価率が60%超です。価格設定を見直してください。`, action:"確認する", filterKey:"noCost" });
+
+  const noMfr = products.filter(p => !p.manufacturerName?.trim());
+  if (noMfr.length) sugs.push({ level:"high", icon:"🏭", title:"製造者情報が未入力です", msg:`${noMfr.length}件の商品で製造者情報が未入力です。食品表示法の必須項目です。`, action:"確認する", filterKey:"noMfr" });
+
+  // Medium
+  const noImg = products.filter(p => !p.imageDataUrl);
+  if (noImg.length) sugs.push({ level:"medium", icon:"📷", title:"商品画像が未登録の商品があります", msg:`${noImg.length}件に画像が登録されていません。ECサイト掲載に必要です。`, action:"確認する", filterKey:"noImage" });
+
+  const noCost = products.filter(p => (p.costMode||"direct")==="direct" ? !parseFloat(p.directCost) : !(p.costItems||[]).length);
+  if (noCost.length) sugs.push({ level:"medium", icon:"💰", title:"原価が未設定の商品があります", msg:`${noCost.length}件で原価が未設定です。利益率の把握に必要です。`, action:"確認する", filterKey:"noCost" });
+
+  const noNutr = derivedAll.filter(({d}) => !d.nutrition.kcal);
+  if (noNutr.length) sugs.push({ level:"medium", icon:"🔬", title:"栄養成分が計算されていない商品があります", msg:`${noNutr.length}件で栄養成分が未計算です。原材料の重量を入力してください。`, action:"確認する", filterKey:"incomplete" });
+
+  // Low
+  const noJan = products.filter(p => !p.janCode?.trim());
+  if (noJan.length) sugs.push({ level:"low", icon:"📊", title:"JANコードが未登録の商品があります", msg:`${noJan.length}件でJANコードが未登録です。在庫管理・EC連携に必要です。`, action:"確認する", filterKey:"noJan" });
+
+  const stale = products.filter(p => p.updatedAt && p.updatedAt < staleDate);
+  if (stale.length) sugs.push({ level:"low", icon:"🕐", title:"長期間更新されていない商品があります", msg:`${stale.length}件が30日以上更新されていません。内容が最新か確認してください。`, action:"確認する", filterKey:"all" });
+
+  return sugs.slice(0, 7);
+}
+
 function dashboardHtml() {
   if (products.length === 0) {
     return saasLayout("ダッシュボード", dashboardEmptyHtml());
@@ -2066,153 +2120,181 @@ function dashboardHtml() {
   const total = products.length;
   const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
   const incomplete = derivedAll.filter(({ p, d }) => calcCompletion(p, d).pct < 100).length;
-  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 5);
+  const completedCount = total - incomplete;
 
-  const recentCards = recent.map(p => {
-    const rd = derivedAll.find(x=>x.p.id===p.id);
-    const comp = rd ? calcCompletion(rd.p, rd.d) : { pct: 0 };
-    const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
-    return `
-    <div class="dash-product-row">
-      <div class="dash-product-info">
-        <span class="dash-product-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
-        ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
-        ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
-        <span class="dash-comp-pct" style="color:${pctColor};font-size:11px;font-weight:600;">${comp.pct}%</span>
-      </div>
-      <div class="dash-product-actions">
-        <button class="btn-sm" data-nav-product-detail="${escapeHtml(p.id)}">詳細</button>
-        <button class="btn-sm" data-label-from="${escapeHtml(p.id)}">ラベル</button>
-      </div>
-    </div>`;
-  }).join("");
+  const now = new Date();
+  const todayIso = now.toISOString().split("T")[0];
+  const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  // 今月追加（createdAt が "YYYY/M/D" または "YYYY-MM-DD" 形式）
+  const ym = `${now.getFullYear()}/${now.getMonth()+1}`;
+  const thisMonthCount = products.filter(p => (p.createdAt||"").startsWith(ym)).length;
 
+  // ── 期限アラート ──
+  const expiredCount      = products.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
+  const expiringSoonCount = products.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso).length;
+  const expiryAlert = expiredCount > 0
+    ? `<div class="expiry-alert expiry-alert--danger" role="alert">🚨 <strong>${expiredCount}件</strong>の商品が賞味期限切れです。<button class="expiry-alert-btn" data-todo-key="expired">確認する →</button></div>`
+    : expiringSoonCount > 0
+    ? `<div class="expiry-alert expiry-alert--warn" role="alert">⏰ <strong>${expiringSoonCount}件</strong>の商品が30日以内に期限を迎えます。<button class="expiry-alert-btn" data-todo-key="expiringSoon">確認する →</button></div>`
+    : "";
+
+  // ── KPI行 ──
+  const reviewCount = products.filter(p => p.approvalStatus === "review").length;
+  const kpiHtml = `<div class="dash-kpi-row">
+    <button class="dash-kpi-card" data-nav="products" data-set-filter="all">
+      <div class="dash-kpi-num">${total}</div><div class="dash-kpi-lbl">商品数</div>
+    </button>
+    <button class="dash-kpi-card kpi-green" data-todo-key="incomplete">
+      <div class="dash-kpi-num">${completedCount}</div><div class="dash-kpi-lbl">完成済み</div>
+    </button>
+    <button class="dash-kpi-card kpi-blue" data-nav="products" data-set-filter="active">
+      <div class="dash-kpi-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="dash-kpi-lbl">公開中</div>
+    </button>
+    <button class="dash-kpi-card kpi-amber" data-nav="products">
+      <div class="dash-kpi-num">${thisMonthCount}</div><div class="dash-kpi-lbl">今月追加</div>
+    </button>
+    <button class="dash-kpi-card" data-nav="products" data-set-filter="starred">
+      <div class="dash-kpi-num">${products.filter(p=>p.starred).length}</div><div class="dash-kpi-lbl">お気に入り</div>
+    </button>
+    <button class="dash-kpi-card kpi-purple" data-nav="team-approval">
+      <div class="dash-kpi-num">${reviewCount}</div><div class="dash-kpi-lbl">承認待ち</div>
+    </button>
+  </div>`;
+
+  // ── クイックアクションバー ──
+  const quickHtml = `<div class="dash-quick-bar">
+    ${registerBtnHtml()}
+    <button class="dash-qbtn" data-nav="products">📦 商品一覧</button>
+    <button class="dash-qbtn" data-nav="spec-sheet-nav">📋 規格書作成</button>
+    <button class="dash-qbtn" data-nav="ai-descriptions-nav">✨ AI説明文</button>
+    <button class="dash-qbtn" data-nav="ai-label-check-nav">🔬 表示チェック</button>
+    <button class="dash-qbtn" data-nav="team-approval">👥 チーム・承認</button>
+  </div>`;
+
+  // ── 今日やること ──
   const todos = calcTodo(derivedAll);
-  const todoCard = `<div class="todo-card">
-    <div class="todo-card-title">📋 今日やること</div>
+  const todoHtml = `<div class="dash-panel">
+    <div class="dash-panel-hd">📋 今日やること</div>
     ${todos.length === 0
-      ? `<div class="todo-all-done">✅ すべて完了しています！</div>`
-      : `<div class="todo-items">${todos.map(t=>`
+      ? `<div class="dash-panel-empty">✅ すべて完了しています！</div>`
+      : `<div class="todo-items">${todos.map(t => `
           <button class="todo-item" data-todo-key="${t.key}">
             <span class="todo-count">${t.count}</span>
             <span class="todo-label">${escapeHtml(t.label)}</span>
-            <span class="todo-arrow">→ 一覧へ</span>
-          </button>`).join("")}
-        </div>`}
+            <span class="todo-arrow">→</span>
+          </button>`).join("")}</div>`}
   </div>`;
 
-  const withCost = derivedAll.filter(({c}) => c.totalCost > 0);
-  const costSummary = withCost.length ? (() => {
-    const rates = withCost.filter(({c}) => c.costRate !== null).map(({c}) => c.costRate);
+  // ── AIからのお知らせ ──
+  const suggestions = generateAiSuggestions(derivedAll);
+  const levelCls = { critical:"sug-critical", high:"sug-high", medium:"sug-medium", low:"sug-low" };
+  const levelLbl = { critical:"緊急", high:"重要", medium:"推奨", low:"参考" };
+  const aiHtml = `<div class="dash-panel">
+    <div class="dash-panel-hd">🤖 AIからのお知らせ</div>
+    ${suggestions.length === 0
+      ? `<div class="dash-panel-empty">✅ 現時点で改善提案はありません</div>`
+      : `<div class="ai-sug-list">${suggestions.map(s => `
+          <div class="ai-sug-item ${levelCls[s.level]||""}">
+            <div class="ai-sug-row">
+              <span class="ai-sug-badge ${levelCls[s.level]||""}">${levelLbl[s.level]||""}</span>
+              <span class="ai-sug-title">${s.icon} ${escapeHtml(s.title)}</span>
+            </div>
+            <div class="ai-sug-msg">${escapeHtml(s.msg)}</div>
+            <button class="ai-sug-btn" ${s.nav?`data-nav="${s.nav}"`:`data-todo-key="${s.filterKey}"`}>${escapeHtml(s.action)} →</button>
+          </div>`).join("")}</div>`}
+  </div>`;
+
+  // ── 最近編集した商品（カードグリッド） ──
+  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 6);
+  const recentHtml = recent.map(p => {
+    const rd = derivedAll.find(x => x.p.id === p.id);
+    const comp = rd ? calcCompletion(rd.p, rd.d) : { pct: 0 };
+    const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+    const thumb = p.imageDataUrl
+      ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="">`
+      : `<div class="recent-prod-thumb-ph">📦</div>`;
+    const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus||"draft")) || PRODUCT_STATUSES[0];
+    return `<button class="recent-prod-card" data-nav-product-detail="${escapeHtml(p.id)}">
+      ${thumb}
+      <div class="recent-prod-info">
+        <div class="recent-prod-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</div>
+        <div class="recent-prod-meta">
+          <span class="pipeline-chip" style="color:${ps.color};background:${ps.bg}">${ps.label}</span>
+          ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
+        </div>
+        <div class="recent-prod-bar"><div class="recent-prod-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
+        <div class="recent-prod-pct" style="color:${pctColor}">${comp.pct}%</div>
+      </div>
+    </button>`;
+  }).join("");
+
+  // ── 完成度分布 ──
+  const compDist = derivedAll.reduce((acc,{p,d}) => {
+    const pct = calcCompletion(p,d).pct;
+    if (pct===100) acc.done++; else if (pct>=60) acc.near++; else if (pct>=30) acc.low++; else acc.veryLow++;
+    return acc;
+  }, {done:0,near:0,low:0,veryLow:0});
+  const compDistHtml = total >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">📈 完成度の内訳</div>
+    <div class="comp-dist-rows">
+      <div class="comp-dist-row"><span class="comp-dist-dot" style="background:#16a34a"></span><span class="comp-dist-label">完成（100%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.done/total*100)}%;background:#16a34a"></div></div><span class="comp-dist-count">${compDist.done}件</span></div>
+      <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt100"><span class="comp-dist-dot" style="background:#2563eb"></span><span class="comp-dist-label">あと少し（60〜99%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.near/total*100)}%;background:#2563eb"></div></div><span class="comp-dist-count">${compDist.near}件</span></button>
+      <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt60"><span class="comp-dist-dot" style="background:#d97706"></span><span class="comp-dist-label">要対応（30〜59%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.low/total*100)}%;background:#d97706"></div></div><span class="comp-dist-count">${compDist.low}件</span></button>
+      ${compDist.veryLow>0?`<button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt30"><span class="comp-dist-dot" style="background:#dc2626"></span><span class="comp-dist-label">要注意（30%未満）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.veryLow/total*100)}%;background:#dc2626"></div></div><span class="comp-dist-count">${compDist.veryLow}件</span></button>`:""}
+    </div>
+  </div>` : "";
+
+  // ── カテゴリ棒グラフ ──
+  const catCounts = {};
+  products.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category]||0)+1; });
+  const catEntries = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxCat = catEntries.length ? catEntries[0][1] : 1;
+  const catHtml = catEntries.length >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">📊 カテゴリ別商品数</div>
+    <div class="cat-chart-list">
+      ${catEntries.map(([cat,count])=>`
+        <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
+          <span class="cat-chart-label">${escapeHtml(cat)}</span>
+          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
+          <span class="cat-chart-count">${count}件</span>
+        </button>`).join("")}
+    </div>
+  </div>` : "";
+
+  // ── 原価サマリー ──
+  const withCost = derivedAll.filter(({c})=>c.totalCost>0);
+  const costHtml = withCost.length ? (() => {
+    const rates = withCost.filter(({c})=>c.costRate!==null).map(({c})=>c.costRate);
     const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
     const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
-    return `<div class="dash-cost-summary">
-      <div class="dash-cost-title">原価サマリー</div>
+    const worst = [...withCost].filter(({c})=>c.costRate!==null&&c.costRate>40).sort((a,b)=>(b.c.costRate||0)-(a.c.costRate||0))[0];
+    return `<div class="dash-panel">
+      <div class="dash-panel-hd">💰 原価サマリー</div>
       <div class="dash-cost-grid">
         ${avgRate!==null?`<div class="dash-cost-item"><div class="dash-cost-val ${avgRate>40?"warn":avgRate>30?"amber":""}">${avgRate}%</div><div class="dash-cost-lbl">平均原価率</div></div>`:""}
         ${best?`<div class="dash-cost-item"><div class="dash-cost-val green">${best.c.profitRate}%</div><div class="dash-cost-lbl">最高粗利率<br><small>${escapeHtml(best.p.name||"")}</small></div></div>`:""}
+        ${worst?`<div class="dash-cost-item"><div class="dash-cost-val warn">${worst.c.costRate}%</div><div class="dash-cost-lbl">要注意原価率<br><small>${escapeHtml(worst.p.name||"")}</small></div></div>`:""}
         <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
       </div>
     </div>`;
   })() : "";
 
-  const todayIso2 = new Date().toISOString().split("T")[0];
-  const soonIso2  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
-  const expiredCount    = products.filter(p=>p.expiryDate&&p.expiryDate<todayIso2).length;
-  const expiringSoonCount = products.filter(p=>p.expiryDate&&p.expiryDate>=todayIso2&&p.expiryDate<=soonIso2).length;
-  const expiryAlert = expiredCount > 0
-    ? `<div class="expiry-alert expiry-alert--danger" role="alert">
-        🚨 <strong>${expiredCount}件</strong>の商品が賞味期限切れです。
-        <button class="expiry-alert-btn" data-todo-key="expired">確認する →</button>
-       </div>`
-    : expiringSoonCount > 0
-    ? `<div class="expiry-alert expiry-alert--warn" role="alert">
-        ⏰ <strong>${expiringSoonCount}件</strong>の商品が30日以内に賞味期限を迎えます。
-        <button class="expiry-alert-btn" data-todo-key="expiringSoon">確認する →</button>
-       </div>`
-    : "";
-
-  // 完成度分布（1パスで集計）
-  const compDist = derivedAll.reduce((acc, {p, d}) => {
-    const pct = calcCompletion(p, d).pct;
-    if (pct === 100) acc.done++;
-    else if (pct >= 60) acc.near++;
-    else if (pct >= 30) acc.low++;
-    else acc.veryLow++;
-    return acc;
-  }, { done: 0, near: 0, low: 0, veryLow: 0 });
-  const compDistHtml = total >= 2 ? `
-    <div class="comp-dist-card">
-      <div class="comp-dist-title">📈 完成度の内訳</div>
-      <div class="comp-dist-rows">
-        <div class="comp-dist-row">
-          <span class="comp-dist-dot" style="background:#16a34a"></span>
-          <span class="comp-dist-label">完成（100%）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.done/total*100)}%;background:#16a34a"></div></div>
-          <span class="comp-dist-count">${compDist.done}件</span>
-        </div>
-        <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt100">
-          <span class="comp-dist-dot" style="background:#2563eb"></span>
-          <span class="comp-dist-label">あと少し（60〜99%）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.near/total*100)}%;background:#2563eb"></div></div>
-          <span class="comp-dist-count">${compDist.near}件</span>
-        </button>
-        <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt60">
-          <span class="comp-dist-dot" style="background:#d97706"></span>
-          <span class="comp-dist-label">要対応（30〜59%）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.low/total*100)}%;background:#d97706"></div></div>
-          <span class="comp-dist-count">${compDist.low}件</span>
-        </button>
-        ${compDist.veryLow > 0 ? `
-        <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt30">
-          <span class="comp-dist-dot" style="background:#dc2626"></span>
-          <span class="comp-dist-label">要注意（30%未満）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.veryLow/total*100)}%;background:#dc2626"></div></div>
-          <span class="comp-dist-count">${compDist.veryLow}件</span>
-        </button>` : ""}
-      </div>
-    </div>` : "";
-
-  const catCounts = {};
-  products.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category] || 0) + 1; });
-  const catEntries = Object.entries(catCounts).sort((a,b) => b[1]-a[1]).slice(0, 8);
-  const maxCatCount = catEntries.length ? catEntries[0][1] : 1;
-  const catChartHtml = catEntries.length >= 2 ? `
-    <div class="cat-chart-card">
-      <div class="cat-chart-title">📊 カテゴリ別商品数</div>
-      <div class="cat-chart-list">
-        ${catEntries.map(([cat, count]) => `
-          <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
-            <span class="cat-chart-label">${escapeHtml(cat)}</span>
-            <div class="cat-chart-bar-wrap">
-              <div class="cat-chart-bar" style="width:${Math.round(count/maxCatCount*100)}%"></div>
-            </div>
-            <span class="cat-chart-count">${count}件</span>
-          </button>`).join("")}
-      </div>
-    </div>` : "";
-
   return saasLayout("ダッシュボード", `
     ${expiryAlert}
-    ${todoCard}
-    <div class="dash-stats">
-      <div class="stat-card clickable" data-nav="products" data-set-filter="all"><div class="stat-num">${total}</div><div class="stat-lbl">登録商品数</div></div>
-      <div class="stat-card${incomplete>0?" warn":""} clickable" data-todo-key="incomplete"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
-      <div class="stat-card clickable" data-nav="products" data-set-filter="starred"><div class="stat-num">${products.filter(p=>p.starred).length}</div><div class="stat-lbl">お気に入り</div></div>
-      <div class="stat-card blue clickable" data-nav="products" data-set-filter="active"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
-    </div>
-    ${costSummary}
-    ${compDistHtml}
-    ${catChartHtml}
-    <div class="dash-quick-actions">
-      ${registerBtnHtml()}
-      <button class="quick-action-btn" data-nav="products">商品一覧を見る</button>
-      <button class="quick-action-btn" data-nav="spec-sheet-nav">規格書を作成</button>
-      <button class="quick-action-btn" data-nav="ai-descriptions-nav">AI説明文を生成</button>
+    ${kpiHtml}
+    ${quickHtml}
+    <div class="dash-main-grid">
+      ${todoHtml}
+      ${aiHtml}
     </div>
     <div class="dash-section">
-      <h2 class="dash-section-title">最近の商品</h2>
-      <div class="dash-product-list">${recentCards}</div>
+      <h2 class="dash-section-title">🕐 最近編集した商品</h2>
+      <div class="recent-prod-grid">${recentHtml}</div>
+    </div>
+    <div class="dash-bottom-grid">
+      ${compDistHtml}
+      ${catHtml}
+      ${costHtml}
     </div>
   `);
 }
@@ -2288,6 +2370,7 @@ function productsListHtml() {
           <div class="master-card-title-row">
             <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
+            ${(() => { const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0]; return `<span class="pipeline-chip" style="color:${ps.color};background:${ps.bg}">${ps.label}</span>`; })()}
             ${statusBadge(p)}
             ${approvalBadge(p)}
             <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}" onclick="event.stopPropagation()">${p.starred?"★":"☆"}</button>
@@ -2475,7 +2558,17 @@ function productDetailHtml() {
   // ── タブコンテンツ ──
   let tabContent = "";
   if (tab === "basic") {
+    const pipelineHtml = `<div class="pipeline-selector">
+      <span class="pipeline-selector-lbl">ステータス</span>
+      <div class="pipeline-steps">
+        ${PRODUCT_STATUSES.map(s => `
+          <button class="pipeline-step${(p.productStatus||"draft")===s.id?" active":""}" data-set-pipeline-status="${s.id}" style="${(p.productStatus||"draft")===s.id?`background:${s.bg};color:${s.color};border-color:${s.color}`:""}">
+            ${s.label}
+          </button>`).join(`<span class="pipeline-arrow">›</span>`)}
+      </div>
+    </div>`;
     tabContent = `
+      ${pipelineHtml}
       <div class="detail-grid">
         <div class="detail-section">
           <h3 class="detail-section-title">基本情報</h3>
@@ -2564,6 +2657,7 @@ function productDetailHtml() {
         return `<div class="history-detail-row">
           <div class="history-detail-meta">
             <span class="history-date">${escapeHtml(h.savedAt)}</span>
+            ${h.savedBy && h.savedBy !== "—" ? `<span class="history-user-chip">👤 ${escapeHtml(h.savedBy)}</span>` : ""}
             ${diff.length
               ? `<span class="history-diff-chip">変更: <strong>${diff.map(l=>escapeHtml(l)).join("・")}</strong></span>`
               : `<span class="history-diff-chip history-diff-same">現在と同じ内容</span>`}
@@ -3255,31 +3349,65 @@ function newSettingsHtml() {
         <p class="notice">データはすべてこのブラウザ（このパソコン・スマホ）に保存されています。定期的にバックアップを保存しておくことをおすすめします。</p>
       </div>
       <div class="settings-card">
-        <h3>☁ 複数の端末で使う（上級者向け）</h3>
-        <p class="notice">別のパソコンやスマホでも同じデータを使いたい場合に設定します。<a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">Supabaseとは？（外部サイト）</a></p>
-        <div class="field" style="margin-bottom:8px">
-          <span>接続先のURL</span>
-          <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+        <h3>☁ クラウド同期・バックアップ</h3>
+        <div class="cloud-sync-status-bar">
+          <div class="cloud-sync-status-row">
+            <span class="cloud-sync-dot ${sbConnected?"dot-green":"dot-gray"}"></span>
+            <span class="cloud-sync-status-lbl">${sbConnected ? "✓ クラウド同期設定済み" : "ローカル保存のみ（このブラウザのみ）"}</span>
+            ${cloudSyncLastAt ? `<span class="cloud-sync-lastsync">最終同期: ${escapeHtml(cloudSyncLastAt)}</span>` : ""}
+          </div>
+          ${sbConnected ? `<div class="cloud-sync-actions">
+            <button class="action primary" data-action="supabase-push">⬆ クラウドに保存</button>
+            <button class="action" data-action="supabase-pull">⬇ クラウドから復元</button>
+          </div>` : ""}
         </div>
-        <div class="field" style="margin-bottom:12px">
-          <span>アクセスキー（パスワード）</span>
-          <input id="sb-key-input" type="password" placeholder="eyJ..." value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+        <div class="cloud-roadmap-note">
+          <span class="cloud-roadmap-badge">Coming Soon</span>
+          将来的に Google Drive・Dropbox・Firebase などのクラウドストレージへの自動同期を実装予定です。
         </div>
-        <div class="api-key-row">
-          <button class="action primary" data-action="save-supabase-cfg">保存</button>
-          ${sbConnected ? `<button class="action" data-action="supabase-push">↑ クラウドにアップロード</button>` : ""}
-          ${sbConnected ? `<button class="action" data-action="supabase-pull">↓ クラウドからダウンロード</button>` : ""}
-        </div>
-        ${sbConnected ? `<p class="api-key-status ok">✓ クラウド同期が設定されています</p>` : `<p class="api-key-status">未設定</p>`}
-        <details style="margin-top:12px">
-          <summary style="font-size:11px;color:#94a3b8;cursor:pointer">データベース初期設定コード（エンジニア向け）</summary>
-          <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">create table if not exists products (
+        <details style="margin-top:16px">
+          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#475569">▸ Supabase設定（上級者向け）</summary>
+          <div style="margin-top:12px">
+            <p class="notice">別端末でも同じデータを使いたい場合。<a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">Supabaseとは？</a></p>
+            <div class="field" style="margin-bottom:8px">
+              <span>接続先のURL</span>
+              <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <span>アクセスキー</span>
+              <input id="sb-key-input" type="password" placeholder="eyJ..." value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+            </div>
+            <button class="action primary" data-action="save-supabase-cfg">設定を保存</button>
+            <details style="margin-top:12px">
+              <summary style="font-size:11px;color:#94a3b8;cursor:pointer">データベース初期設定コード</summary>
+              <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">create table if not exists products (
   id text primary key,
   name text,
   updated_at text,
   data text
 );</pre>
+            </details>
+          </div>
         </details>
+      </div>
+      <div class="settings-card">
+        <h3>📜 バックアップ履歴</h3>
+        <p class="notice">JSONエクスポートを実行した記録。実際のファイルはダウンロードフォルダを確認してください。</p>
+        ${(() => {
+          try {
+            const hist = JSON.parse(safeGet("fmcc-backup-history") || "[]");
+            if (!hist.length) return `<p class="notice" style="color:#94a3b8">まだバックアップを作成していません。</p>`;
+            return `<div class="backup-hist-list">${hist.slice(0,8).map(h=>`
+              <div class="backup-hist-row">
+                <span class="backup-hist-date">${escapeHtml(h.date)}</span>
+                <span class="backup-hist-count">${h.count}件</span>
+                <span class="backup-hist-type">${h.withImages?"📦 画像あり":"📄 テキストのみ"}</span>
+              </div>`).join("")}</div>`;
+          } catch { return ""; }
+        })()}
+        <div style="margin-top:12px">
+          <button class="action primary" data-action="export-json">📤 今すぐバックアップ</button>
+        </div>
       </div>
       <div class="settings-card">
         <h3>添加物の判定キーワード</h3>

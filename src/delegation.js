@@ -307,6 +307,21 @@ function setupDelegation() {
     // [data-quick-new]
     if (t.closest("[data-quick-new]")) { if(!canCreateMore()){showModal({message:`${planInfo().label}プランは${planInfo().note}です。`});return;} draft=extendProductMaster(emptyProduct());editId="new";view="edit";sidebarOpen=false;render(); return; }
 
+    // [data-set-pipeline-status]
+    const pipelineEl = t.closest("[data-set-pipeline-status]");
+    if (pipelineEl) {
+      const p = products.find(x => x.id === productDetailId);
+      if (p) {
+        p.productStatus = pipelineEl.dataset.setPipelineStatus;
+        p.updatedAt = new Date().toLocaleDateString("ja-JP");
+        saveHistory(p);
+        saveProducts();
+        showStatus(`ステータスを「${pipelineEl.textContent.trim()}」に変更しました`);
+        render();
+      }
+      return;
+    }
+
     // [data-nav-product-detail]
     const navPdEl = t.closest("[data-nav-product-detail]");
     if (navPdEl && !t.closest(".master-card-actions")) { productDetailId=navPdEl.dataset.navProductDetail;saasView="product-detail";view="saas";safeSet("fmcc-view",saasView);render(); return; }

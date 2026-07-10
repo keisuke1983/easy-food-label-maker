@@ -804,8 +804,8 @@ function homeHtml() {
   return `<main class="home">
     <div class="home-hero">
       <div class="home-hero-logo"><img class="brand-mark app-icon" src="./assets/app-icon.svg" alt="ラベルプリンター"></div>
-      <h1 class="home-hero-title">食品表示ラベルを<br>かんたん作成</h1>
-      <p class="home-hero-sub">食品表示ラベルの作成・保存・再印刷を一元管理</p>
+      <h1 class="home-hero-title">FoodPilot</h1>
+      <p class="home-hero-sub">食品業界向け AI 搭載商品管理 SaaS</p>
     </div>
     ${planHtml()}
     <div class="home-cta-wrap">
@@ -833,8 +833,8 @@ function menuHtml() {
   return `<main class="home menu-page">
     <div class="menu-head"><button class="back" data-action="plan-page">← プラン変更</button><span class="plan-badge">${planInfo().label}プラン</span></div>
     <div class="home-hero">
-      <h1 class="home-hero-title">食品表示ラベルを<br>かんたん作成</h1>
-      <p class="home-hero-sub">食品表示ラベルの作成・保存・再印刷を一元管理</p>
+      <h1 class="home-hero-title">FoodPilot</h1>
+      <p class="home-hero-sub">食品業界向け AI 搭載商品管理 SaaS</p>
     </div>
     <div class="how-steps">
       <div class="how-step">
@@ -1736,7 +1736,7 @@ function sidebarHtml() {
     <div class="sidebar-hd">
       <div class="sidebar-brand">
         <img src="./assets/app-icon.svg" alt="" class="sidebar-logo">
-        <div><div class="sidebar-name">食品商品管理</div><div class="sidebar-sub2">クラウド</div></div>
+        <div><div class="sidebar-name">FoodPilot</div><div class="sidebar-sub2">フードパイロット</div></div>
       </div>
       <button class="sidebar-close-btn" data-action="close-sidebar">✕</button>
     </div>
@@ -2040,7 +2040,7 @@ function dashboardEmptyHtml() {
   return `<div class="onboarding-wrap">
     <div class="onboarding-hero">
       <img src="./assets/app-icon.svg" alt="" class="onboarding-icon">
-      <h1 class="onboarding-title">食品商品管理クラウドへようこそ</h1>
+      <h1 class="onboarding-title">FoodPilot へようこそ</h1>
       <p class="onboarding-sub">食品メーカー・小規模食品事業者のための<br>AI搭載・商品管理＆食品表示ラベル作成ツール</p>
       <button class="action primary onboarding-cta" data-quick-new="1">＋ 最初の商品を登録する</button>
     </div>
@@ -2249,21 +2249,26 @@ function dashboardHtml() {
   products.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category]||0)+1; });
   const catEntries = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxCat = catEntries.length ? catEntries[0][1] : 1;
-  const catHtml = catEntries.length >= 2 ? `<div class="dash-panel">
+  const catHtml = `<div class="dash-panel">
     <div class="dash-panel-hd">📊 カテゴリ別商品数</div>
-    <div class="cat-chart-list">
-      ${catEntries.map(([cat,count])=>`
-        <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
-          <span class="cat-chart-label">${escapeHtml(cat)}</span>
-          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
-          <span class="cat-chart-count">${count}件</span>
-        </button>`).join("")}
-    </div>
-  </div>` : "";
+    ${catEntries.length >= 2
+      ? `<div class="cat-chart-list">
+          ${catEntries.map(([cat,count])=>`
+            <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
+              <span class="cat-chart-label">${escapeHtml(cat)}</span>
+              <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
+              <span class="cat-chart-count">${count}件</span>
+            </button>`).join("")}
+        </div>`
+      : `<div class="dash-panel-empty">カテゴリが設定された商品が2件以上になると表示されます</div>`}
+  </div>`;
 
   // ── 原価サマリー ──
   const withCost = derivedAll.filter(({c})=>c.totalCost>0);
-  const costHtml = withCost.length ? (() => {
+  const costHtml = !withCost.length ? `<div class="dash-panel">
+    <div class="dash-panel-hd">💰 原価サマリー</div>
+    <div class="dash-panel-empty">原価を登録すると利益率サマリーが表示されます<br><button class="dash-panel-empty-btn" data-nav="products">商品に原価を登録する →</button></div>
+  </div>` : (() => {
     const rates = withCost.filter(({c})=>c.costRate!==null).map(({c})=>c.costRate);
     const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
     const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
@@ -2277,7 +2282,7 @@ function dashboardHtml() {
         <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
       </div>
     </div>`;
-  })() : "";
+  })();
 
   return saasLayout("ダッシュボード", `
     ${expiryAlert}
@@ -2320,6 +2325,7 @@ function productsListHtml() {
   if (masterFilter==="expiringSoon")  list = list.filter(p=>p.expiryDate&&p.expiryDate>=todayIso&&p.expiryDate<=soonIso);
   if (masterFilter==="noImage")       list = list.filter(p=>!p.imageDataUrl);
   if (masterFilter==="noCost")        list = list.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length);
+  if (masterPipelineFilter)           list = list.filter(p=>(p.productStatus||"draft")===masterPipelineFilter);
   if (masterCategoryFilter)           list = list.filter(p=>(p.category||"")===masterCategoryFilter);
   if (masterCompletionFilter==="lt100") list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; });
   else if (masterCompletionFilter==="lt60") list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<60; });
@@ -2434,7 +2440,10 @@ function productsListHtml() {
   const completionChip = masterCompletionFilter
     ? `<span class="filter-active-tag">📊 ${COMPLETION_LABELS[masterCompletionFilter]}<button class="filter-clear-btn" data-clear-completion-filter title="完成度フィルターを解除">✕</button></span>`
     : "";
-  const activeFilterCount = (isTodoFilter?1:0) + (masterCategoryFilter?1:0) + (masterCompletionFilter?1:0);
+  const pipelineChip = masterPipelineFilter
+    ? (() => { const ps = PRODUCT_STATUSES.find(s=>s.id===masterPipelineFilter); return ps ? `<span class="filter-active-tag" style="color:${ps.color};background:${ps.bg}">● ${ps.label}<button class="filter-clear-btn" data-clear-pipeline-filter style="color:${ps.color}" title="ステータスフィルターを解除">✕</button></span>` : ""; })()
+    : "";
+  const activeFilterCount = (isTodoFilter?1:0) + (masterCategoryFilter?1:0) + (masterCompletionFilter?1:0) + (masterPipelineFilter?1:0);
   const resetAllBtn = activeFilterCount > 1
     ? `<button class="filter-reset-all-btn" data-clear-all-filters>✕ すべてリセット</button>`
     : "";
@@ -2446,6 +2455,13 @@ function productsListHtml() {
       <option value="">📋 課題フィルター...</option>
       ${todoOpts.map(o=>`<option value="${o.key}"${masterFilter===o.key?" selected":""}>${o.label}（${o.count}件）</option>`).join("")}
     </select>` : "";
+
+  // パイプラインステータスフィルター
+  const pipelineSelect = `
+    <select class="sort-select" data-master-pipeline-filter title="ステータスで絞り込み">
+      <option value="">ステータス: すべて</option>
+      ${PRODUCT_STATUSES.map(s=>`<option value="${s.id}"${masterPipelineFilter===s.id?" selected":""}>${s.label}</option>`).join("")}
+    </select>`;
 
   // カテゴリフィルター（複合フィルター: masterFilter と AND で機能）
   const allCats = [...new Set(products.map(p=>p.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
@@ -2463,10 +2479,11 @@ function productsListHtml() {
     </select>`;
 
   // 保存済み検索プリセット
-  const isAnyActive = masterFilter !== "all" || masterSearch || masterCategoryFilter || masterCompletionFilter;
+  const isAnyActive = masterFilter !== "all" || masterSearch || masterCategoryFilter || masterCompletionFilter || masterPipelineFilter;
   const COMP_LBL = { lt100:"完成度100%未満", lt60:"完成度60%未満", lt30:"完成度30%未満" };
   const currentLabel = [
     masterFilter !== "all" ? (TODO_LABELS[masterFilter] || {all:"すべて",starred:"★",active:"公開中",draft:"下書き"}[masterFilter] || masterFilter) : "",
+    masterPipelineFilter ? (PRODUCT_STATUSES.find(s=>s.id===masterPipelineFilter)?.label || masterPipelineFilter) : "",
     masterCategoryFilter ? masterCategoryFilter : "",
     masterCompletionFilter ? COMP_LBL[masterCompletionFilter] : "",
     masterSearch ? `"${masterSearch}"` : "",
@@ -2489,11 +2506,13 @@ function productsListHtml() {
         ${isTodoFilter?`<span class="filter-active-tag">📋 ${TODO_LABELS[masterFilter]}<button class="filter-clear-btn" data-master-filter="all">✕</button></span>`:""}
         ${catChip}
         ${completionChip}
+        ${pipelineChip}
         ${resetAllBtn}
         ${saveSearchBtn}
         ${resultCount}
       </div>
       <div class="toolbar-right">
+        ${pipelineSelect}
         ${todoFilterSelect}
         ${categorySelect}
         ${completionSelect}

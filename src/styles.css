@@ -2192,8 +2192,16 @@ kbd {
 }
 .dash-panel-empty {
   text-align: center; color: var(--text-muted); font-size: 13px;
-  padding: 24px 0;
+  padding: 20px 0; line-height: 1.8;
 }
+.dash-panel-empty-btn {
+  display: inline-block; margin-top: 8px;
+  font-size: 12px; font-weight: 600; color: var(--blue);
+  background: var(--blue-light); border: 1px solid var(--blue-border);
+  border-radius: 16px; padding: 4px 12px; cursor: pointer;
+  transition: background .12s;
+}
+.dash-panel-empty-btn:hover { background: #dbeafe; }
 
 /* TODO list inside panel */
 .dash-todo-list { display: flex; flex-direction: column; gap: 6px; }

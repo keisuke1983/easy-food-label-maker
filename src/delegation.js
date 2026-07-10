@@ -351,8 +351,11 @@ function setupDelegation() {
     // [data-clear-completion-filter]
     if (t.closest("[data-clear-completion-filter]")) { masterCompletionFilter=""; render(); return; }
 
+    // [data-clear-pipeline-filter]
+    if (t.closest("[data-clear-pipeline-filter]")) { masterPipelineFilter=""; render(); return; }
+
     // [data-clear-all-filters]
-    if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; render(); return; }
+    if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; masterPipelineFilter=""; render(); return; }
 
     // [data-master-filter]
     const mfEl = t.closest("[data-master-filter]");
@@ -510,6 +513,7 @@ function setupDelegation() {
     if (t.matches("[data-todo-filter-select]")) { masterFilter=t.value||"all"; render(); return; }
     if (t.matches("[data-master-category-filter]")) { masterCategoryFilter=t.value; render(); return; }
     if (t.matches("[data-master-completion-filter]")) { masterCompletionFilter=t.value; render(); return; }
+    if (t.matches("[data-master-pipeline-filter]")) { masterPipelineFilter=t.value; render(); return; }
   });
 
   // ── グローバルキーボードショートカット ──

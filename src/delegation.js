@@ -383,7 +383,7 @@ function setupDelegation() {
       const label = saveSearchEl.dataset.saveSearch;
       if (!label) return;
       if (savedSearchPresets.some(s => s.label === label)) { showStatus("同じ条件はすでに保存されています"); return; }
-      savedSearchPresets = [...savedSearchPresets, { label, filter: masterFilter, category: masterCategoryFilter, completion: masterCompletionFilter, search: masterSearch }];
+      savedSearchPresets = [...savedSearchPresets, { label, filter: masterFilter, category: masterCategoryFilter, completion: masterCompletionFilter, pipeline: masterPipelineFilter, search: masterSearch }];
       safeSet("fmcc-saved-searches", JSON.stringify(savedSearchPresets));
       showStatus(`「${label}」を保存しました`);
       render(); return;
@@ -398,6 +398,7 @@ function setupDelegation() {
       masterFilter = s.filter || "all";
       masterCategoryFilter = s.category || "";
       masterCompletionFilter = s.completion || "";
+      masterPipelineFilter = s.pipeline || "";
       masterSearch = s.search || "";
       render(); return;
     }

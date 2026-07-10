@@ -2127,7 +2127,7 @@ function dashboardHtml() {
   const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
   // 今月追加（createdAt が "YYYY/M/D" または "YYYY-MM-DD" 形式）
   const ym = `${now.getFullYear()}/${now.getMonth()+1}`;
-  const thisMonthCount = products.filter(p => (p.createdAt||"").startsWith(ym)).length;
+  const thisMonthCount = products.filter(p => (p.createdAt || p.updatedAt || "").startsWith(ym)).length;
 
   // ── 期限アラート ──
   const expiredCount      = products.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
@@ -2369,7 +2369,8 @@ function productsListHtml() {
       : p.expiryDate && p.expiryDate <= soonIso
       ? `<span class="expiry-chip soon">⏰ ${Math.max(0,Math.ceil((new Date(p.expiryDate)-Date.now())/864e5))}日後</span>`
       : "";
-    return `<div class="master-card" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集">
+    const _psCard = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || "draft")) || PRODUCT_STATUSES[0];
+    return `<div class="master-card" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集" style="border-left: 4px solid ${_psCard.color};">
       <div class="master-card-inner">
         ${thumb}
         <div class="master-card-body">

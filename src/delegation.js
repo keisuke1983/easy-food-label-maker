@@ -23,6 +23,77 @@ function setupDelegation() {
         case "save": saveCurrent(); return;
         case "save-master": saveMaster(); return;
         case "back-to-saas": saasView = productDetailId ? "product-detail" : "products"; view = "saas"; render(); return;
+        case "retry-photo-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
+        case "retry-spec-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
+
+        // チーム・承認
+        case "request-approval": {
+          const pid = ael.dataset.pid;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          const assignSelect = document.getElementById("approval-assign-select");
+          const commentEl = document.getElementById("approval-req-comment");
+          p.approvalStatus = "review";
+          p.assignedTo = currentUserName;
+          p.assignedTo = currentUserName;
+          if (assignSelect?.value) p.assignedTo = assignSelect.value;
+          p.approvalComment = commentEl?.value?.trim() || "";
+          p.approverName = ""; p.approvalDate = "";
+          p.updatedAt = new Date().toLocaleDateString("ja-JP");
+          saveProducts(); showStatus(`「${p.name||"商品"}」の確認依頼を送りました`); render(); return;
+        }
+        case "approve-product": {
+          const pid = ael.dataset.pid;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          const commentEl = document.getElementById("approval-judge-comment");
+          p.approvalStatus = "approved";
+          p.approverName = currentUserName || "（不明）";
+          p.approvalDate = new Date().toLocaleDateString("ja-JP");
+          p.approvalComment = commentEl?.value?.trim() || "";
+          p.updatedAt = new Date().toLocaleDateString("ja-JP");
+          saveProducts(); showStatus(`「${p.name||"商品"}」を承認しました`); render(); return;
+        }
+        case "reject-product": {
+          const pid = ael.dataset.pid;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          const commentEl = document.getElementById("approval-judge-comment");
+          p.approvalStatus = "rejected";
+          p.approverName = currentUserName || "（不明）";
+          p.approvalDate = new Date().toLocaleDateString("ja-JP");
+          p.approvalComment = commentEl?.value?.trim() || "";
+          p.updatedAt = new Date().toLocaleDateString("ja-JP");
+          saveProducts(); showStatus(`「${p.name||"商品"}」を差し戻しました`); render(); return;
+        }
+        case "cancel-approval": {
+          const pid = ael.dataset.pid;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          p.approvalStatus = "none"; p.assignedTo = ""; p.approvalComment = ""; p.approverName = ""; p.approvalDate = "";
+          saveProducts(); showStatus("確認依頼を取り消しました"); render(); return;
+        }
+        case "add-team-member": {
+          const nameEl = document.getElementById("team-member-name-input");
+          const roleEl = document.getElementById("team-member-role-select");
+          const name = nameEl?.value?.trim(); const role = roleEl?.value || "editor";
+          if (!name) { showStatus("名前を入力してください"); return; }
+          if (teamMembers.some(m => m.name === name)) { showStatus("同じ名前のメンバーがいます"); return; }
+          teamMembers = [...teamMembers, { name, role }];
+          safeSet("fmcc-team-members", JSON.stringify(teamMembers));
+          if (nameEl) nameEl.value = "";
+          showStatus(`「${name}」を追加しました`); render(); return;
+        }
+        case "del-team-member": {
+          const idx = Number(ael.dataset.midx);
+          const m = teamMembers[idx]; if (!m) return;
+          teamMembers = teamMembers.filter((_, i) => i !== idx);
+          safeSet("fmcc-team-members", JSON.stringify(teamMembers));
+          if (currentUserName === m.name) { currentUserName = ""; safeSet("fmcc-current-user", ""); }
+          showStatus(`「${m.name}」を削除しました`); render(); return;
+        }
+        case "set-current-user": {
+          const name = ael.dataset.uname || "";
+          currentUserName = currentUserName === name ? "" : name;
+          safeSet("fmcc-current-user", currentUserName);
+          showStatus(currentUserName ? `「${currentUserName}」として使用中` : "ユーザー選択を解除しました"); render(); return;
+        }
         case "toggle-sidebar": sidebarOpen = !sidebarOpen; render(); return;
         case "close-sidebar": sidebarOpen = false; render(); return;
         case "confirm-print": printPreviewOpen = false; render(); setTimeout(printLabels, 50); return;
@@ -235,6 +306,21 @@ function setupDelegation() {
 
     // [data-quick-new]
     if (t.closest("[data-quick-new]")) { if(!canCreateMore()){showModal({message:`${planInfo().label}プランは${planInfo().note}です。`});return;} draft=extendProductMaster(emptyProduct());editId="new";view="edit";sidebarOpen=false;render(); return; }
+
+    // [data-set-pipeline-status]
+    const pipelineEl = t.closest("[data-set-pipeline-status]");
+    if (pipelineEl) {
+      const p = products.find(x => x.id === productDetailId);
+      if (p) {
+        p.productStatus = pipelineEl.dataset.setPipelineStatus;
+        p.updatedAt = new Date().toLocaleDateString("ja-JP");
+        saveHistory(p);
+        saveProducts();
+        showStatus(`ステータスを「${pipelineEl.textContent.trim()}」に変更しました`);
+        render();
+      }
+      return;
+    }
 
     // [data-nav-product-detail]
     const navPdEl = t.closest("[data-nav-product-detail]");

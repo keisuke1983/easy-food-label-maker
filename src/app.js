@@ -167,8 +167,12 @@ function saveHistory(p) {
   try {
     const key = `food-label-history-${p.id}`;
     const hist = JSON.parse(safeGet(key) || "[]");
-    hist.unshift({ snapshot: JSON.parse(JSON.stringify(p)), savedAt: new Date().toLocaleString("ja-JP") });
-    safeSet(key, JSON.stringify(hist.slice(0, 5)));
+    hist.unshift({
+      snapshot: JSON.parse(JSON.stringify(p)),
+      savedAt: new Date().toLocaleString("ja-JP"),
+      savedBy: currentUserName || "—",
+    });
+    safeSet(key, JSON.stringify(hist.slice(0, 10)));
   } catch {}
 }
 function loadHistory(id) {
@@ -247,18 +251,37 @@ function exportCsv() {
   showStatus("CSVをエクスポートしました（Excelで開いて編集できます）");
 }
 function exportJson() {
-  const data = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    products: products,
+  const hasImages = products.some(p => p.imageDataUrl);
+  const doExport = (withImages) => {
+    const exportProducts = withImages
+      ? products
+      : products.map(p => { const c = {...p}; delete c.imageDataUrl; return c; });
+    const data = { version: 1, exportedAt: new Date().toISOString(), products: exportProducts };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `food-labels-${new Date().toLocaleDateString("ja-JP").replace(/\//g, "-")}${withImages ? "" : "-noimages"}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    try {
+      const hist = JSON.parse(safeGet("fmcc-backup-history") || "[]");
+      hist.unshift({ date: new Date().toLocaleString("ja-JP"), count: exportProducts.length, withImages });
+      safeSet("fmcc-backup-history", JSON.stringify(hist.slice(0, 20)));
+    } catch {}
+    showStatus(withImages ? "JSONをエクスポートしました（画像含む完全バックアップ）" : "JSONをエクスポートしました（画像なし・軽量版）");
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url;
-  a.download = `food-labels-${new Date().toLocaleDateString("ja-JP").replace(/\//g, "-")}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showStatus("JSONをエクスポートしました（原材料・アレルゲン情報含む）");
+  if (hasImages) {
+    showModal({
+      message: "バックアップファイルの形式を選んでください。\n\n📦 画像を含む：完全バックアップ。ファイルサイズが大きくなります。\n📄 画像を除く：テキスト情報のみ。ファイルが小さく開きやすいです。",
+      confirmLabel: "📦 画像を含む",
+      dangerLabel: "📄 画像を除く",
+      cancelLabel: "キャンセル",
+      onConfirm: () => doExport(true),
+      onDanger: () => doExport(false),
+    });
+  } else {
+    doExport(false);
+  }
 }
 function importJsonFile(file, mode) {
   const reader = new FileReader();
@@ -622,6 +645,7 @@ function render() {
     else if (saasView === "reg-spec") pageHtml = specRegisterHtml();
     else if (saasView === "reg-ai-chat") pageHtml = aiChatRegisterHtml();
     else if (saasView === "settings-nav") pageHtml = newSettingsHtml();
+    else if (saasView === "team-approval") pageHtml = teamApprovalHtml();
     else pageHtml = dashboardHtml();
   } else if (view === "home") {
     pageHtml = homeHtml();
@@ -1672,6 +1696,8 @@ function extendProductMaster(p) {
     packagingCost: "", laborCost: "", otherCost: "",
     specVersion: "1", specResponsible: "",
     specCreatedAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
+    approvalStatus: "none", assignedTo: "", approvalComment: "", approverName: "", approvalDate: "",
+    productStatus: "draft",
     packaging: "", caseCount: "", productSize: "",
     ...p,
   };
@@ -1699,6 +1725,13 @@ function sidebarHtml() {
   const navLink = (it) => `<button class="nav-item${active===it.id?" active":""}" data-nav="${it.id}">
     <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>
   </button>`;
+  const reviewCount = products.filter(p => p.approvalStatus === "review").length;
+  const reviewBadge = reviewCount > 0 ? `<span class="nav-review-badge">${reviewCount}</span>` : "";
+  const currentRole = teamMembers.find(m => m.name === currentUserName)?.role || "";
+  const roleLabel = { admin: "管理者", editor: "編集者", reviewer: "確認者" }[currentRole] || "";
+  const userChip = currentUserName
+    ? `<div class="sidebar-user-chip">👤 <span>${escapeHtml(currentUserName)}</span>${roleLabel ? `<span class="sidebar-user-role">${roleLabel}</span>` : ""}</div>`
+    : `<div class="sidebar-user-chip muted" data-nav="settings-nav">👤 ユーザーを設定する</div>`;
   return `<nav class="sidebar${sidebarOpen?" open":""}">
     <div class="sidebar-hd">
       <div class="sidebar-brand">
@@ -1707,8 +1740,13 @@ function sidebarHtml() {
       </div>
       <button class="sidebar-close-btn" data-action="close-sidebar">✕</button>
     </div>
-    <div class="nav-links">${items.map(navLink).join("")}</div>
-    <div class="nav-footer">${navLink(settingItem)}</div>
+    <div class="nav-links">
+      ${items.map(navLink).join("")}
+      <button class="nav-item${active==="team-approval"?" active":""}" data-nav="team-approval">
+        <span class="nav-ico">👥</span><span class="nav-lbl">チーム・承認</span>${reviewBadge}
+      </button>
+    </div>
+    <div class="nav-footer">${userChip}${navLink(settingItem)}</div>
   </nav>
   <div class="sidebar-backdrop${sidebarOpen?" visible":""}" data-action="close-sidebar"></div>`;
 }
@@ -1745,6 +1783,7 @@ function calcTodo(derivedAll) {
     { key:"noJan",         label:"JANコード未登録",           count: products.filter(p=>!p.janCode?.trim()).length },
     { key:"noImage",       label:"商品画像未登録",            count: products.filter(p=>!p.imageDataUrl).length },
     { key:"noCost",        label:"原価未設定",                count: products.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
+    { key:"review",        label:"👥 承認待ちの商品",          count: products.filter(p=>p.approvalStatus==="review").length },
   ].filter(t=>t.count>0);
 }
 
@@ -2029,6 +2068,50 @@ function dashboardEmptyHtml() {
   </div>`;
 }
 
+// ── AIが能動的に提案するルールベースエンジン ─────────────────────────────
+function generateAiSuggestions(derivedAll) {
+  const sugs = [];
+  const todayIso  = new Date().toISOString().split("T")[0];
+  const soonIso   = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const staleDate = new Date(Date.now() - 30*24*60*60*1000).toLocaleDateString("ja-JP");
+
+  // Critical
+  const expired = products.filter(p => p.expiryDate && p.expiryDate < todayIso);
+  if (expired.length) sugs.push({ level:"critical", icon:"🚨", title:"賞味期限切れの商品があります", msg:`${expired.length}件の商品が賞味期限切れです。ラベルを早急に更新してください。`, action:"確認する", filterKey:"expired" });
+
+  const noIng = products.filter(p => !(p.ingredients||[]).some(i => i.name?.trim()));
+  if (noIng.length) sugs.push({ level:"critical", icon:"⚠️", title:"原材料が未入力の商品があります", msg:`${noIng.length}件で原材料名が未入力です。食品表示法の必須項目です。`, action:"確認する", filterKey:"noIngredients" });
+
+  // High
+  const reviewProd = products.filter(p => p.approvalStatus === "review");
+  if (reviewProd.length) sugs.push({ level:"high", icon:"👥", title:"承認待ちの商品があります", msg:`${reviewProd.length}件の商品が確認待ちです。速やかに確認してください。`, action:"承認画面へ", nav:"team-approval" });
+
+  const highCost = derivedAll.filter(({c}) => c.costRate !== null && c.costRate > 60);
+  if (highCost.length) sugs.push({ level:"high", icon:"📉", title:"原価率が高い商品があります", msg:`${highCost.length}件の商品で原価率が60%超です。価格設定を見直してください。`, action:"確認する", filterKey:"noCost" });
+
+  const noMfr = products.filter(p => !p.manufacturerName?.trim());
+  if (noMfr.length) sugs.push({ level:"high", icon:"🏭", title:"製造者情報が未入力です", msg:`${noMfr.length}件の商品で製造者情報が未入力です。食品表示法の必須項目です。`, action:"確認する", filterKey:"noMfr" });
+
+  // Medium
+  const noImg = products.filter(p => !p.imageDataUrl);
+  if (noImg.length) sugs.push({ level:"medium", icon:"📷", title:"商品画像が未登録の商品があります", msg:`${noImg.length}件に画像が登録されていません。ECサイト掲載に必要です。`, action:"確認する", filterKey:"noImage" });
+
+  const noCost = products.filter(p => (p.costMode||"direct")==="direct" ? !parseFloat(p.directCost) : !(p.costItems||[]).length);
+  if (noCost.length) sugs.push({ level:"medium", icon:"💰", title:"原価が未設定の商品があります", msg:`${noCost.length}件で原価が未設定です。利益率の把握に必要です。`, action:"確認する", filterKey:"noCost" });
+
+  const noNutr = derivedAll.filter(({d}) => !d.nutrition.kcal);
+  if (noNutr.length) sugs.push({ level:"medium", icon:"🔬", title:"栄養成分が計算されていない商品があります", msg:`${noNutr.length}件で栄養成分が未計算です。原材料の重量を入力してください。`, action:"確認する", filterKey:"incomplete" });
+
+  // Low
+  const noJan = products.filter(p => !p.janCode?.trim());
+  if (noJan.length) sugs.push({ level:"low", icon:"📊", title:"JANコードが未登録の商品があります", msg:`${noJan.length}件でJANコードが未登録です。在庫管理・EC連携に必要です。`, action:"確認する", filterKey:"noJan" });
+
+  const stale = products.filter(p => p.updatedAt && p.updatedAt < staleDate);
+  if (stale.length) sugs.push({ level:"low", icon:"🕐", title:"長期間更新されていない商品があります", msg:`${stale.length}件が30日以上更新されていません。内容が最新か確認してください。`, action:"確認する", filterKey:"all" });
+
+  return sugs.slice(0, 7);
+}
+
 function dashboardHtml() {
   if (products.length === 0) {
     return saasLayout("ダッシュボード", dashboardEmptyHtml());
@@ -2037,153 +2120,181 @@ function dashboardHtml() {
   const total = products.length;
   const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
   const incomplete = derivedAll.filter(({ p, d }) => calcCompletion(p, d).pct < 100).length;
-  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 5);
+  const completedCount = total - incomplete;
 
-  const recentCards = recent.map(p => {
-    const rd = derivedAll.find(x=>x.p.id===p.id);
-    const comp = rd ? calcCompletion(rd.p, rd.d) : { pct: 0 };
-    const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
-    return `
-    <div class="dash-product-row">
-      <div class="dash-product-info">
-        <span class="dash-product-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
-        ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
-        ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
-        <span class="dash-comp-pct" style="color:${pctColor};font-size:11px;font-weight:600;">${comp.pct}%</span>
-      </div>
-      <div class="dash-product-actions">
-        <button class="btn-sm" data-nav-product-detail="${escapeHtml(p.id)}">詳細</button>
-        <button class="btn-sm" data-label-from="${escapeHtml(p.id)}">ラベル</button>
-      </div>
-    </div>`;
-  }).join("");
+  const now = new Date();
+  const todayIso = now.toISOString().split("T")[0];
+  const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  // 今月追加（createdAt が "YYYY/M/D" または "YYYY-MM-DD" 形式）
+  const ym = `${now.getFullYear()}/${now.getMonth()+1}`;
+  const thisMonthCount = products.filter(p => (p.createdAt||"").startsWith(ym)).length;
 
+  // ── 期限アラート ──
+  const expiredCount      = products.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
+  const expiringSoonCount = products.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso).length;
+  const expiryAlert = expiredCount > 0
+    ? `<div class="expiry-alert expiry-alert--danger" role="alert">🚨 <strong>${expiredCount}件</strong>の商品が賞味期限切れです。<button class="expiry-alert-btn" data-todo-key="expired">確認する →</button></div>`
+    : expiringSoonCount > 0
+    ? `<div class="expiry-alert expiry-alert--warn" role="alert">⏰ <strong>${expiringSoonCount}件</strong>の商品が30日以内に期限を迎えます。<button class="expiry-alert-btn" data-todo-key="expiringSoon">確認する →</button></div>`
+    : "";
+
+  // ── KPI行 ──
+  const reviewCount = products.filter(p => p.approvalStatus === "review").length;
+  const kpiHtml = `<div class="dash-kpi-row">
+    <button class="dash-kpi-card" data-nav="products" data-set-filter="all">
+      <div class="dash-kpi-num">${total}</div><div class="dash-kpi-lbl">商品数</div>
+    </button>
+    <button class="dash-kpi-card kpi-green" data-todo-key="incomplete">
+      <div class="dash-kpi-num">${completedCount}</div><div class="dash-kpi-lbl">完成済み</div>
+    </button>
+    <button class="dash-kpi-card kpi-blue" data-nav="products" data-set-filter="active">
+      <div class="dash-kpi-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="dash-kpi-lbl">公開中</div>
+    </button>
+    <button class="dash-kpi-card kpi-amber" data-nav="products">
+      <div class="dash-kpi-num">${thisMonthCount}</div><div class="dash-kpi-lbl">今月追加</div>
+    </button>
+    <button class="dash-kpi-card" data-nav="products" data-set-filter="starred">
+      <div class="dash-kpi-num">${products.filter(p=>p.starred).length}</div><div class="dash-kpi-lbl">お気に入り</div>
+    </button>
+    <button class="dash-kpi-card kpi-purple" data-nav="team-approval">
+      <div class="dash-kpi-num">${reviewCount}</div><div class="dash-kpi-lbl">承認待ち</div>
+    </button>
+  </div>`;
+
+  // ── クイックアクションバー ──
+  const quickHtml = `<div class="dash-quick-bar">
+    ${registerBtnHtml()}
+    <button class="dash-qbtn" data-nav="products">📦 商品一覧</button>
+    <button class="dash-qbtn" data-nav="spec-sheet-nav">📋 規格書作成</button>
+    <button class="dash-qbtn" data-nav="ai-descriptions-nav">✨ AI説明文</button>
+    <button class="dash-qbtn" data-nav="ai-label-check-nav">🔬 表示チェック</button>
+    <button class="dash-qbtn" data-nav="team-approval">👥 チーム・承認</button>
+  </div>`;
+
+  // ── 今日やること ──
   const todos = calcTodo(derivedAll);
-  const todoCard = `<div class="todo-card">
-    <div class="todo-card-title">📋 今日やること</div>
+  const todoHtml = `<div class="dash-panel">
+    <div class="dash-panel-hd">📋 今日やること</div>
     ${todos.length === 0
-      ? `<div class="todo-all-done">✅ すべて完了しています！</div>`
-      : `<div class="todo-items">${todos.map(t=>`
+      ? `<div class="dash-panel-empty">✅ すべて完了しています！</div>`
+      : `<div class="todo-items">${todos.map(t => `
           <button class="todo-item" data-todo-key="${t.key}">
             <span class="todo-count">${t.count}</span>
             <span class="todo-label">${escapeHtml(t.label)}</span>
-            <span class="todo-arrow">→ 一覧へ</span>
-          </button>`).join("")}
-        </div>`}
+            <span class="todo-arrow">→</span>
+          </button>`).join("")}</div>`}
   </div>`;
 
-  const withCost = derivedAll.filter(({c}) => c.totalCost > 0);
-  const costSummary = withCost.length ? (() => {
-    const rates = withCost.filter(({c}) => c.costRate !== null).map(({c}) => c.costRate);
+  // ── AIからのお知らせ ──
+  const suggestions = generateAiSuggestions(derivedAll);
+  const levelCls = { critical:"sug-critical", high:"sug-high", medium:"sug-medium", low:"sug-low" };
+  const levelLbl = { critical:"緊急", high:"重要", medium:"推奨", low:"参考" };
+  const aiHtml = `<div class="dash-panel">
+    <div class="dash-panel-hd">🤖 AIからのお知らせ</div>
+    ${suggestions.length === 0
+      ? `<div class="dash-panel-empty">✅ 現時点で改善提案はありません</div>`
+      : `<div class="ai-sug-list">${suggestions.map(s => `
+          <div class="ai-sug-item ${levelCls[s.level]||""}">
+            <div class="ai-sug-row">
+              <span class="ai-sug-badge ${levelCls[s.level]||""}">${levelLbl[s.level]||""}</span>
+              <span class="ai-sug-title">${s.icon} ${escapeHtml(s.title)}</span>
+            </div>
+            <div class="ai-sug-msg">${escapeHtml(s.msg)}</div>
+            <button class="ai-sug-btn" ${s.nav?`data-nav="${s.nav}"`:`data-todo-key="${s.filterKey}"`}>${escapeHtml(s.action)} →</button>
+          </div>`).join("")}</div>`}
+  </div>`;
+
+  // ── 最近編集した商品（カードグリッド） ──
+  const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 6);
+  const recentHtml = recent.map(p => {
+    const rd = derivedAll.find(x => x.p.id === p.id);
+    const comp = rd ? calcCompletion(rd.p, rd.d) : { pct: 0 };
+    const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+    const thumb = p.imageDataUrl
+      ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="">`
+      : `<div class="recent-prod-thumb-ph">📦</div>`;
+    const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus||"draft")) || PRODUCT_STATUSES[0];
+    return `<button class="recent-prod-card" data-nav-product-detail="${escapeHtml(p.id)}">
+      ${thumb}
+      <div class="recent-prod-info">
+        <div class="recent-prod-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</div>
+        <div class="recent-prod-meta">
+          <span class="pipeline-chip" style="color:${ps.color};background:${ps.bg}">${ps.label}</span>
+          ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
+        </div>
+        <div class="recent-prod-bar"><div class="recent-prod-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
+        <div class="recent-prod-pct" style="color:${pctColor}">${comp.pct}%</div>
+      </div>
+    </button>`;
+  }).join("");
+
+  // ── 完成度分布 ──
+  const compDist = derivedAll.reduce((acc,{p,d}) => {
+    const pct = calcCompletion(p,d).pct;
+    if (pct===100) acc.done++; else if (pct>=60) acc.near++; else if (pct>=30) acc.low++; else acc.veryLow++;
+    return acc;
+  }, {done:0,near:0,low:0,veryLow:0});
+  const compDistHtml = total >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">📈 完成度の内訳</div>
+    <div class="comp-dist-rows">
+      <div class="comp-dist-row"><span class="comp-dist-dot" style="background:#16a34a"></span><span class="comp-dist-label">完成（100%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.done/total*100)}%;background:#16a34a"></div></div><span class="comp-dist-count">${compDist.done}件</span></div>
+      <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt100"><span class="comp-dist-dot" style="background:#2563eb"></span><span class="comp-dist-label">あと少し（60〜99%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.near/total*100)}%;background:#2563eb"></div></div><span class="comp-dist-count">${compDist.near}件</span></button>
+      <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt60"><span class="comp-dist-dot" style="background:#d97706"></span><span class="comp-dist-label">要対応（30〜59%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.low/total*100)}%;background:#d97706"></div></div><span class="comp-dist-count">${compDist.low}件</span></button>
+      ${compDist.veryLow>0?`<button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt30"><span class="comp-dist-dot" style="background:#dc2626"></span><span class="comp-dist-label">要注意（30%未満）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.veryLow/total*100)}%;background:#dc2626"></div></div><span class="comp-dist-count">${compDist.veryLow}件</span></button>`:""}
+    </div>
+  </div>` : "";
+
+  // ── カテゴリ棒グラフ ──
+  const catCounts = {};
+  products.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category]||0)+1; });
+  const catEntries = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxCat = catEntries.length ? catEntries[0][1] : 1;
+  const catHtml = catEntries.length >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">📊 カテゴリ別商品数</div>
+    <div class="cat-chart-list">
+      ${catEntries.map(([cat,count])=>`
+        <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
+          <span class="cat-chart-label">${escapeHtml(cat)}</span>
+          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
+          <span class="cat-chart-count">${count}件</span>
+        </button>`).join("")}
+    </div>
+  </div>` : "";
+
+  // ── 原価サマリー ──
+  const withCost = derivedAll.filter(({c})=>c.totalCost>0);
+  const costHtml = withCost.length ? (() => {
+    const rates = withCost.filter(({c})=>c.costRate!==null).map(({c})=>c.costRate);
     const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
     const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
-    return `<div class="dash-cost-summary">
-      <div class="dash-cost-title">原価サマリー</div>
+    const worst = [...withCost].filter(({c})=>c.costRate!==null&&c.costRate>40).sort((a,b)=>(b.c.costRate||0)-(a.c.costRate||0))[0];
+    return `<div class="dash-panel">
+      <div class="dash-panel-hd">💰 原価サマリー</div>
       <div class="dash-cost-grid">
         ${avgRate!==null?`<div class="dash-cost-item"><div class="dash-cost-val ${avgRate>40?"warn":avgRate>30?"amber":""}">${avgRate}%</div><div class="dash-cost-lbl">平均原価率</div></div>`:""}
         ${best?`<div class="dash-cost-item"><div class="dash-cost-val green">${best.c.profitRate}%</div><div class="dash-cost-lbl">最高粗利率<br><small>${escapeHtml(best.p.name||"")}</small></div></div>`:""}
+        ${worst?`<div class="dash-cost-item"><div class="dash-cost-val warn">${worst.c.costRate}%</div><div class="dash-cost-lbl">要注意原価率<br><small>${escapeHtml(worst.p.name||"")}</small></div></div>`:""}
         <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
       </div>
     </div>`;
   })() : "";
 
-  const todayIso2 = new Date().toISOString().split("T")[0];
-  const soonIso2  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
-  const expiredCount    = products.filter(p=>p.expiryDate&&p.expiryDate<todayIso2).length;
-  const expiringSoonCount = products.filter(p=>p.expiryDate&&p.expiryDate>=todayIso2&&p.expiryDate<=soonIso2).length;
-  const expiryAlert = expiredCount > 0
-    ? `<div class="expiry-alert expiry-alert--danger" role="alert">
-        🚨 <strong>${expiredCount}件</strong>の商品が賞味期限切れです。
-        <button class="expiry-alert-btn" data-todo-key="expired">確認する →</button>
-       </div>`
-    : expiringSoonCount > 0
-    ? `<div class="expiry-alert expiry-alert--warn" role="alert">
-        ⏰ <strong>${expiringSoonCount}件</strong>の商品が30日以内に賞味期限を迎えます。
-        <button class="expiry-alert-btn" data-todo-key="expiringSoon">確認する →</button>
-       </div>`
-    : "";
-
-  // 完成度分布（1パスで集計）
-  const compDist = derivedAll.reduce((acc, {p, d}) => {
-    const pct = calcCompletion(p, d).pct;
-    if (pct === 100) acc.done++;
-    else if (pct >= 60) acc.near++;
-    else if (pct >= 30) acc.low++;
-    else acc.veryLow++;
-    return acc;
-  }, { done: 0, near: 0, low: 0, veryLow: 0 });
-  const compDistHtml = total >= 2 ? `
-    <div class="comp-dist-card">
-      <div class="comp-dist-title">📈 完成度の内訳</div>
-      <div class="comp-dist-rows">
-        <div class="comp-dist-row">
-          <span class="comp-dist-dot" style="background:#16a34a"></span>
-          <span class="comp-dist-label">完成（100%）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.done/total*100)}%;background:#16a34a"></div></div>
-          <span class="comp-dist-count">${compDist.done}件</span>
-        </div>
-        <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt100">
-          <span class="comp-dist-dot" style="background:#2563eb"></span>
-          <span class="comp-dist-label">あと少し（60〜99%）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.near/total*100)}%;background:#2563eb"></div></div>
-          <span class="comp-dist-count">${compDist.near}件</span>
-        </button>
-        <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt60">
-          <span class="comp-dist-dot" style="background:#d97706"></span>
-          <span class="comp-dist-label">要対応（30〜59%）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.low/total*100)}%;background:#d97706"></div></div>
-          <span class="comp-dist-count">${compDist.low}件</span>
-        </button>
-        ${compDist.veryLow > 0 ? `
-        <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt30">
-          <span class="comp-dist-dot" style="background:#dc2626"></span>
-          <span class="comp-dist-label">要注意（30%未満）</span>
-          <div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.veryLow/total*100)}%;background:#dc2626"></div></div>
-          <span class="comp-dist-count">${compDist.veryLow}件</span>
-        </button>` : ""}
-      </div>
-    </div>` : "";
-
-  const catCounts = {};
-  products.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category] || 0) + 1; });
-  const catEntries = Object.entries(catCounts).sort((a,b) => b[1]-a[1]).slice(0, 8);
-  const maxCatCount = catEntries.length ? catEntries[0][1] : 1;
-  const catChartHtml = catEntries.length >= 2 ? `
-    <div class="cat-chart-card">
-      <div class="cat-chart-title">📊 カテゴリ別商品数</div>
-      <div class="cat-chart-list">
-        ${catEntries.map(([cat, count]) => `
-          <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
-            <span class="cat-chart-label">${escapeHtml(cat)}</span>
-            <div class="cat-chart-bar-wrap">
-              <div class="cat-chart-bar" style="width:${Math.round(count/maxCatCount*100)}%"></div>
-            </div>
-            <span class="cat-chart-count">${count}件</span>
-          </button>`).join("")}
-      </div>
-    </div>` : "";
-
   return saasLayout("ダッシュボード", `
     ${expiryAlert}
-    ${todoCard}
-    <div class="dash-stats">
-      <div class="stat-card clickable" data-nav="products" data-set-filter="all"><div class="stat-num">${total}</div><div class="stat-lbl">登録商品数</div></div>
-      <div class="stat-card${incomplete>0?" warn":""} clickable" data-todo-key="incomplete"><div class="stat-num">${incomplete}</div><div class="stat-lbl">未完成の商品</div></div>
-      <div class="stat-card clickable" data-nav="products" data-set-filter="starred"><div class="stat-num">${products.filter(p=>p.starred).length}</div><div class="stat-lbl">お気に入り</div></div>
-      <div class="stat-card blue clickable" data-nav="products" data-set-filter="active"><div class="stat-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="stat-lbl">公開中</div></div>
-    </div>
-    ${costSummary}
-    ${compDistHtml}
-    ${catChartHtml}
-    <div class="dash-quick-actions">
-      ${registerBtnHtml()}
-      <button class="quick-action-btn" data-nav="products">商品一覧を見る</button>
-      <button class="quick-action-btn" data-nav="spec-sheet-nav">規格書を作成</button>
-      <button class="quick-action-btn" data-nav="ai-descriptions-nav">AI説明文を生成</button>
+    ${kpiHtml}
+    ${quickHtml}
+    <div class="dash-main-grid">
+      ${todoHtml}
+      ${aiHtml}
     </div>
     <div class="dash-section">
-      <h2 class="dash-section-title">最近の商品</h2>
-      <div class="dash-product-list">${recentCards}</div>
+      <h2 class="dash-section-title">🕐 最近編集した商品</h2>
+      <div class="recent-prod-grid">${recentHtml}</div>
+    </div>
+    <div class="dash-bottom-grid">
+      ${compDistHtml}
+      ${catHtml}
+      ${costHtml}
     </div>
   `);
 }
@@ -2198,6 +2309,8 @@ function productsListHtml() {
   if (masterFilter==="starred")       list = list.filter(p=>p.starred);
   if (masterFilter==="active")        list = list.filter(p=>p.publishStatus==="active");
   if (masterFilter==="draft")         list = list.filter(p=>p.publishStatus==="draft");
+  if (masterFilter==="review")        list = list.filter(p=>p.approvalStatus==="review");
+  if (masterFilter==="approved")      list = list.filter(p=>p.approvalStatus==="approved");
   if (masterFilter==="incomplete")    list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; });
   if (masterFilter==="noBestBefore")  list = list.filter(p=>!p.bestBefore?.trim());
   if (masterFilter==="noIngredients") list = list.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim()));
@@ -2227,6 +2340,13 @@ function productsListHtml() {
     const cls = p.publishStatus==="active"?"badge-active":p.publishStatus==="draft"?"badge-draft":"badge-inactive";
     return `<span class="status-badge ${cls}">${label}</span>`;
   };
+  const approvalBadge = (p) => {
+    if (!p.approvalStatus || p.approvalStatus === "none") return "";
+    if (p.approvalStatus === "review")   return `<span class="status-badge badge-review">👥 確認待ち</span>`;
+    if (p.approvalStatus === "approved") return `<span class="status-badge badge-approved">✓ 承認済</span>`;
+    if (p.approvalStatus === "rejected") return `<span class="status-badge badge-rejected">↩ 差し戻し</span>`;
+    return "";
+  };
 
   const cards = list.length ? list.map(p => {
     const d = derive(p);         // derive()は一度だけ呼ぶ
@@ -2250,7 +2370,9 @@ function productsListHtml() {
           <div class="master-card-title-row">
             <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
+            ${(() => { const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0]; return `<span class="pipeline-chip" style="color:${ps.color};background:${ps.bg}">${ps.label}</span>`; })()}
             ${statusBadge(p)}
+            ${approvalBadge(p)}
             <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}" onclick="event.stopPropagation()">${p.starred?"★":"☆"}</button>
           </div>
           <div class="master-card-meta">
@@ -2415,25 +2537,38 @@ function productDetailHtml() {
     cost:        [],
     check:       [],
     history:     [],
+    approval:    [],
   };
   const tabBadge = (id) => {
     const n = (TAB_FIELDS[id]||[]).filter(f => comp.missing.includes(f)).length;
     return n > 0 ? `<span class="tab-badge">${n}</span>` : "";
   };
   const histCount = loadHistory(p.id).length;
+  const approvalDot = p.approvalStatus && p.approvalStatus !== "none" ? ` <span class="tab-approval-dot ${p.approvalStatus}"></span>` : "";
   const tabs = [
     { id:"basic",       label:"基本情報" },
     { id:"ingredients", label:"原材料" },
     { id:"cost",        label:"原価" },
     { id:"check",       label:"表示チェック" },
     { id:"history",     label:`📋 履歴${histCount>0?` (${histCount})`:""}` },
+    { id:"approval",    label:`👥 承認${approvalDot}` },
   ];
   const tabNav = `${completionBanner}<div class="detail-tabs">${tabs.map(t=>`<button class="detail-tab${tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div>`;
 
   // ── タブコンテンツ ──
   let tabContent = "";
   if (tab === "basic") {
+    const pipelineHtml = `<div class="pipeline-selector">
+      <span class="pipeline-selector-lbl">ステータス</span>
+      <div class="pipeline-steps">
+        ${PRODUCT_STATUSES.map(s => `
+          <button class="pipeline-step${(p.productStatus||"draft")===s.id?" active":""}" data-set-pipeline-status="${s.id}" style="${(p.productStatus||"draft")===s.id?`background:${s.bg};color:${s.color};border-color:${s.color}`:""}">
+            ${s.label}
+          </button>`).join(`<span class="pipeline-arrow">›</span>`)}
+      </div>
+    </div>`;
     tabContent = `
+      ${pipelineHtml}
       <div class="detail-grid">
         <div class="detail-section">
           <h3 class="detail-section-title">基本情報</h3>
@@ -2522,6 +2657,7 @@ function productDetailHtml() {
         return `<div class="history-detail-row">
           <div class="history-detail-meta">
             <span class="history-date">${escapeHtml(h.savedAt)}</span>
+            ${h.savedBy && h.savedBy !== "—" ? `<span class="history-user-chip">👤 ${escapeHtml(h.savedBy)}</span>` : ""}
             ${diff.length
               ? `<span class="history-diff-chip">変更: <strong>${diff.map(l=>escapeHtml(l)).join("・")}</strong></span>`
               : `<span class="history-diff-chip history-diff-same">現在と同じ内容</span>`}
@@ -2555,6 +2691,8 @@ function productDetailHtml() {
         <div class="check-issues">${issueHtml || '<p class="notice" style="margin-top:12px">問題は見つかりませんでした。</p>'}</div>
         <p class="notice" style="margin-top:16px">※ このチェックは食品表示基準（令和元年改正対応）に基づく参考情報です。最終確認は専門家にご相談ください。</p>
       </div>`;
+  } else if (tab === "approval") {
+    tabContent = approvalTabHtml(p);
   }
 
   return saasLayout(`${escapeHtml(p.name||"新規商品")} – 商品詳細`, `
@@ -2575,6 +2713,63 @@ function productDetailHtml() {
     ${tabContent}
     <button class="fab-save" data-action="save-master">保存する</button>
   `);
+}
+
+// ── 承認タブ ──────────────────────────────────────────────────────────
+function approvalTabHtml(p) {
+  const st = p.approvalStatus || "none";
+  const currentRole = teamMembers.find(m => m.name === currentUserName)?.role || "";
+  const canApprove = currentRole === "admin" || currentRole === "reviewer";
+  const canRequest = !!currentUserName && st === "none";
+  const canCancel  = !!currentUserName && st === "review" && (p.assignedTo === currentUserName || currentRole === "admin");
+
+  const stateInfo = {
+    none:     { icon:"⬜", label:"未申請",   color:"#64748b", bg:"#f8fafc", border:"#e2e8f0" },
+    review:   { icon:"🔵", label:"確認待ち", color:"#1d4ed8", bg:"#eff6ff", border:"#bfdbfe" },
+    approved: { icon:"✅", label:"承認済み", color:"#15803d", bg:"#f0fdf4", border:"#bbf7d0" },
+    rejected: { icon:"↩", label:"差し戻し", color:"#dc2626", bg:"#fef2f2", border:"#fca5a5" },
+  }[st] || { icon:"⬜", label:"未申請", color:"#64748b", bg:"#f8fafc", border:"#e2e8f0" };
+
+  const memberOpts = teamMembers.length
+    ? teamMembers.filter(m => m.role==="admin"||m.role==="reviewer")
+        .map(m=>`<option value="${escapeHtml(m.name)}"${p.assignedTo===m.name?" selected":""}>${escapeHtml(m.name)}（${m.role==="admin"?"管理者":"確認者"}）</option>`).join("")
+    : "";
+
+  const requestSection = (st === "none" || st === "rejected") ? `
+    <div class="approval-action-card">
+      <h4>確認依頼を送る</h4>
+      ${!currentUserName ? `<p class="notice">⚠ 先にサイドバーでユーザーを設定してください。</p>` : ""}
+      ${memberOpts ? `<label class="field" style="margin-bottom:10px"><span>確認者を指定</span><select id="approval-assign-select"><option value="">指定なし</option>${memberOpts}</select></label>` : ""}
+      <label class="field" style="margin-bottom:10px"><span>依頼メモ（任意）</span><textarea id="approval-req-comment" rows="2" placeholder="確認してほしいポイントなど..." style="width:100%;resize:vertical">${escapeHtml(p.approvalComment||"")}</textarea></label>
+      <button class="action primary" data-action="request-approval" data-pid="${escapeHtml(p.id)}"${!currentUserName?" disabled":""}>📨 確認依頼を送る</button>
+    </div>` : "";
+
+  const approveSection = (st === "review" && canApprove) ? `
+    <div class="approval-action-card">
+      <h4>承認 / 差し戻し</h4>
+      <label class="field" style="margin-bottom:10px"><span>コメント（任意）</span><textarea id="approval-judge-comment" rows="2" placeholder="承認理由・差し戻し理由など..." style="width:100%;resize:vertical"></textarea></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="action primary" data-action="approve-product" data-pid="${escapeHtml(p.id)}">✅ 承認する</button>
+        <button class="action danger-outline" data-action="reject-product" data-pid="${escapeHtml(p.id)}">↩ 差し戻す</button>
+      </div>
+    </div>` : "";
+
+  const cancelSection = canCancel ? `<button class="action" style="margin-top:8px" data-action="cancel-approval" data-pid="${escapeHtml(p.id)}">確認依頼を取り消す</button>` : "";
+
+  return `<div class="detail-section">
+    <h3 class="detail-section-title">承認ステータス</h3>
+    <div class="approval-status-banner" style="background:${stateInfo.bg};border:1px solid ${stateInfo.border};border-radius:10px;padding:16px 20px;margin-bottom:16px">
+      <div style="font-size:22px;margin-bottom:4px">${stateInfo.icon} <strong style="color:${stateInfo.color}">${stateInfo.label}</strong></div>
+      ${p.assignedTo ? `<div style="font-size:12px;color:#64748b">依頼者：${escapeHtml(p.assignedTo)}</div>` : ""}
+      ${p.approverName ? `<div style="font-size:12px;color:#64748b">承認者：${escapeHtml(p.approverName)}　${escapeHtml(p.approvalDate||"")}</div>` : ""}
+      ${p.approvalComment ? `<div style="font-size:13px;margin-top:8px;white-space:pre-wrap">${escapeHtml(p.approvalComment)}</div>` : ""}
+    </div>
+    ${cancelSection}
+    ${requestSection}
+    ${approveSection}
+    ${teamMembers.length === 0 ? `<p class="notice" style="margin-top:12px">⚠ チームメンバーが登録されていません。<button class="action" style="margin-left:8px" data-nav="settings-nav">設定画面で登録する</button></p>` : ""}
+    <p class="notice" style="margin-top:16px">現在のユーザー：<strong>${currentUserName ? escapeHtml(currentUserName) : "（未設定）"}</strong>　役割：<strong>${({admin:"管理者",editor:"編集者",reviewer:"確認者"}[currentRole]||"未設定")}</strong></p>
+  </div>`;
 }
 
 // ── ⑦ 食品表示法チェック ─────────────────────────────────────────────
@@ -3040,6 +3235,62 @@ function aiDescriptionsHtml() {
   `);
 }
 
+// ── チーム・承認ページ ────────────────────────────────────────────────
+function teamApprovalHtml() {
+  const ROLES = [{ v:"admin", l:"管理者（承認・編集すべて可）" }, { v:"editor", l:"編集者（商品編集・確認依頼可）" }, { v:"reviewer", l:"確認者（承認・差し戻し可）" }];
+  const memberList = teamMembers.length
+    ? teamMembers.map((m, i) => `
+      <div class="team-member-row">
+        <span class="team-member-name">👤 ${escapeHtml(m.name)}</span>
+        <span class="team-member-role">${{admin:"管理者",editor:"編集者",reviewer:"確認者"}[m.role]||m.role}</span>
+        <button class="team-member-self${currentUserName===m.name?" active":""}" data-action="set-current-user" data-uname="${escapeHtml(m.name)}">${currentUserName===m.name?"✓ 自分":"自分として使う"}</button>
+        <button class="icon-btn" data-action="del-team-member" data-midx="${i}" title="削除">×</button>
+      </div>`).join("")
+    : `<p class="notice">まだメンバーが登録されていません。</p>`;
+
+  const reviewList = products.filter(p => p.approvalStatus === "review");
+  const approvedList = products.filter(p => p.approvalStatus === "approved");
+  const rejectedList = products.filter(p => p.approvalStatus === "rejected");
+
+  const productRow = (p) => `
+    <div class="approval-product-row" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
+      <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+      ${p.assignedTo ? `<span class="approval-product-meta">依頼：${escapeHtml(p.assignedTo)}</span>` : ""}
+      ${p.approverName ? `<span class="approval-product-meta">承認：${escapeHtml(p.approverName)}</span>` : ""}
+      <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+    </div>`;
+
+  return saasLayout("チーム・承認", `
+    <div class="settings-sections">
+      <div class="settings-card">
+        <h3>👥 チームメンバー</h3>
+        <p class="notice">同じ端末・ブラウザを複数人で共有している場合に、誰が操作しているかを記録できます。</p>
+        <div class="team-member-list">${memberList}</div>
+        <div class="team-add-row">
+          <input id="team-member-name-input" placeholder="名前を入力（例：田中 花子）" style="flex:1">
+          <select id="team-member-role-select">
+            ${ROLES.map(r=>`<option value="${r.v}">${r.l}</option>`).join("")}
+          </select>
+          <button class="action primary" data-action="add-team-member">追加</button>
+        </div>
+        ${currentUserName ? `<p style="margin-top:12px;font-size:13px">現在のユーザー：<strong>${escapeHtml(currentUserName)}</strong></p>` : `<p class="notice" style="margin-top:12px">「自分として使う」をクリックするとユーザーを切り替えられます。</p>`}
+      </div>
+      <div class="settings-card">
+        <h3>🔵 確認待ち（${reviewList.length}件）</h3>
+        ${reviewList.length ? reviewList.map(productRow).join("") : `<p class="notice">確認待ちの商品はありません。</p>`}
+      </div>
+      <div class="settings-card">
+        <h3>✅ 承認済み（${approvedList.length}件）</h3>
+        ${approvedList.length ? approvedList.map(productRow).join("") : `<p class="notice">承認済みの商品はありません。</p>`}
+      </div>
+      <div class="settings-card">
+        <h3>↩ 差し戻し（${rejectedList.length}件）</h3>
+        ${rejectedList.length ? rejectedList.map(productRow).join("") : `<p class="notice">差し戻しの商品はありません。</p>`}
+      </div>
+    </div>
+  `);
+}
+
 // ── 設定（新版） ──────────────────────────────────────────────────────
 function newSettingsHtml() {
   const userKwList = userAdditiveKw.map((kw, i) =>
@@ -3098,31 +3349,65 @@ function newSettingsHtml() {
         <p class="notice">データはすべてこのブラウザ（このパソコン・スマホ）に保存されています。定期的にバックアップを保存しておくことをおすすめします。</p>
       </div>
       <div class="settings-card">
-        <h3>☁ 複数の端末で使う（上級者向け）</h3>
-        <p class="notice">別のパソコンやスマホでも同じデータを使いたい場合に設定します。<a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">Supabaseとは？（外部サイト）</a></p>
-        <div class="field" style="margin-bottom:8px">
-          <span>接続先のURL</span>
-          <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+        <h3>☁ クラウド同期・バックアップ</h3>
+        <div class="cloud-sync-status-bar">
+          <div class="cloud-sync-status-row">
+            <span class="cloud-sync-dot ${sbConnected?"dot-green":"dot-gray"}"></span>
+            <span class="cloud-sync-status-lbl">${sbConnected ? "✓ クラウド同期設定済み" : "ローカル保存のみ（このブラウザのみ）"}</span>
+            ${cloudSyncLastAt ? `<span class="cloud-sync-lastsync">最終同期: ${escapeHtml(cloudSyncLastAt)}</span>` : ""}
+          </div>
+          ${sbConnected ? `<div class="cloud-sync-actions">
+            <button class="action primary" data-action="supabase-push">⬆ クラウドに保存</button>
+            <button class="action" data-action="supabase-pull">⬇ クラウドから復元</button>
+          </div>` : ""}
         </div>
-        <div class="field" style="margin-bottom:12px">
-          <span>アクセスキー（パスワード）</span>
-          <input id="sb-key-input" type="password" placeholder="eyJ..." value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+        <div class="cloud-roadmap-note">
+          <span class="cloud-roadmap-badge">Coming Soon</span>
+          将来的に Google Drive・Dropbox・Firebase などのクラウドストレージへの自動同期を実装予定です。
         </div>
-        <div class="api-key-row">
-          <button class="action primary" data-action="save-supabase-cfg">保存</button>
-          ${sbConnected ? `<button class="action" data-action="supabase-push">↑ クラウドにアップロード</button>` : ""}
-          ${sbConnected ? `<button class="action" data-action="supabase-pull">↓ クラウドからダウンロード</button>` : ""}
-        </div>
-        ${sbConnected ? `<p class="api-key-status ok">✓ クラウド同期が設定されています</p>` : `<p class="api-key-status">未設定</p>`}
-        <details style="margin-top:12px">
-          <summary style="font-size:11px;color:#94a3b8;cursor:pointer">データベース初期設定コード（エンジニア向け）</summary>
-          <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">create table if not exists products (
+        <details style="margin-top:16px">
+          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#475569">▸ Supabase設定（上級者向け）</summary>
+          <div style="margin-top:12px">
+            <p class="notice">別端末でも同じデータを使いたい場合。<a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">Supabaseとは？</a></p>
+            <div class="field" style="margin-bottom:8px">
+              <span>接続先のURL</span>
+              <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+            </div>
+            <div class="field" style="margin-bottom:12px">
+              <span>アクセスキー</span>
+              <input id="sb-key-input" type="password" placeholder="eyJ..." value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+            </div>
+            <button class="action primary" data-action="save-supabase-cfg">設定を保存</button>
+            <details style="margin-top:12px">
+              <summary style="font-size:11px;color:#94a3b8;cursor:pointer">データベース初期設定コード</summary>
+              <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">create table if not exists products (
   id text primary key,
   name text,
   updated_at text,
   data text
 );</pre>
+            </details>
+          </div>
         </details>
+      </div>
+      <div class="settings-card">
+        <h3>📜 バックアップ履歴</h3>
+        <p class="notice">JSONエクスポートを実行した記録。実際のファイルはダウンロードフォルダを確認してください。</p>
+        ${(() => {
+          try {
+            const hist = JSON.parse(safeGet("fmcc-backup-history") || "[]");
+            if (!hist.length) return `<p class="notice" style="color:#94a3b8">まだバックアップを作成していません。</p>`;
+            return `<div class="backup-hist-list">${hist.slice(0,8).map(h=>`
+              <div class="backup-hist-row">
+                <span class="backup-hist-date">${escapeHtml(h.date)}</span>
+                <span class="backup-hist-count">${h.count}件</span>
+                <span class="backup-hist-type">${h.withImages?"📦 画像あり":"📄 テキストのみ"}</span>
+              </div>`).join("")}</div>`;
+          } catch { return ""; }
+        })()}
+        <div style="margin-top:12px">
+          <button class="action primary" data-action="export-json">📤 今すぐバックアップ</button>
+        </div>
       </div>
       <div class="settings-card">
         <h3>添加物の判定キーワード</h3>
@@ -3455,6 +3740,20 @@ const AI_ANALYSIS_STEPS = [
 ];
 
 function photoRegisterHtml() {
+  if (aiRegError) {
+    return saasLayout("写真から登録", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title" style="color:#dc2626">❌ 解析できませんでした</div>
+          <p style="color:#64748b;margin:8px 0 20px;white-space:pre-wrap">${escapeHtml(aiRegError)}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="action primary" data-action="retry-photo-reg">もう一度試す</button>
+            <button class="action" data-nav="products">商品管理へ戻る</button>
+            <button class="action secondary" data-reg-mode="manual">手動で登録する</button>
+          </div>
+        </div>
+      </div>`);
+  }
   if (aiRegAnalysisStep >= 0 && aiRegAnalysisStep < AI_ANALYSIS_STEPS.length) {
     const pct = Math.round((aiRegAnalysisStep / AI_ANALYSIS_STEPS.length) * 100);
     const stepsHtml = AI_ANALYSIS_STEPS.map((s, i) => `
@@ -3506,6 +3805,20 @@ function photoRegisterHtml() {
 }
 
 function specRegisterHtml() {
+  if (aiRegError) {
+    return saasLayout("規格書から登録", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title" style="color:#dc2626">❌ 読み込みできませんでした</div>
+          <p style="color:#64748b;margin:8px 0 20px;white-space:pre-wrap">${escapeHtml(aiRegError)}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="action primary" data-action="retry-spec-reg">もう一度試す</button>
+            <button class="action" data-nav="products">商品管理へ戻る</button>
+            <button class="action secondary" data-reg-mode="manual">手動で登録する</button>
+          </div>
+        </div>
+      </div>`);
+  }
   if (aiRegAnalysisStep >= 0 && aiRegAnalysisStep < AI_ANALYSIS_STEPS.length) {
     const pct = Math.round((aiRegAnalysisStep / AI_ANALYSIS_STEPS.length) * 100);
     const stepsHtml = AI_ANALYSIS_STEPS.map((s, i) => `
@@ -3820,13 +4133,88 @@ function startAiAnalysis(type) {
 
 async function processRegFile(type, file) {
   aiRegChatDraft = {};
+  aiRegError = "";
+  if (type === "photo") {
+    const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
+    if (!apiKey) {
+      aiRegError = "OpenAI APIキーが登録されていません。\n設定画面でAPIキーを登録してから、写真からの登録をお試しください。";
+      aiRegAnalysisStep = -1;
+      saasView = "reg-photo";
+      render();
+      return;
+    }
+    // 画像をbase64に変換
+    let base64;
+    try {
+      base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    } catch(e) {
+      aiRegError = "画像の読み込みに失敗しました。ファイルが壊れていないか確認してください。";
+      aiRegAnalysisStep = -1;
+      saasView = "reg-photo";
+      render();
+      return;
+    }
+    startAiAnalysis(type);
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          max_tokens: 1200,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: "この画像は日本の食品パッケージ・食品表示ラベルです。以下の項目を読み取ってJSON形式のみで回答してください（説明文不要）。読み取れない項目は空文字にしてください。\n{\"name\":\"商品名\",\"volume\":\"内容量\",\"bestBefore\":\"賞味期限\",\"storage\":\"保存方法\",\"manufacturerName\":\"製造者名\",\"manufacturerAddress\":\"製造者住所\",\"ingredients\":[{\"name\":\"原材料名\",\"weight\":\"\"}],\"category\":\"カテゴリ（菓子/パン/惣菜/飲料/調味料/乾物/冷凍食品/その他）\"}" },
+              { type: "image_url", image_url: { url: base64, detail: "high" } }
+            ]
+          }]
+        })
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const msg = errJson.error?.message || `APIエラー（HTTP ${res.status}）`;
+        throw new Error(msg);
+      }
+      const json = await res.json();
+      const content = json.choices?.[0]?.message?.content || "";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("AIが有効なデータを返しませんでした。食品表示ラベルや原材料表が写っている写真を使用してください。");
+      const parsed = JSON.parse(jsonMatch[0]);
+      aiRegChatDraft = parsed;
+      // 解析ステップをすべて完了に進める
+      aiRegAnalysisStep = AI_ANALYSIS_STEPS.length;
+      render();
+    } catch(e) {
+      console.warn("写真解析エラー:", e);
+      aiRegError = e.message || "画像の解析に失敗しました。別の写真を試すか、手動登録をお使いください。";
+      aiRegAnalysisStep = -1;
+      render();
+    }
+    return;
+  }
+  // 規格書（spec）
   startAiAnalysis(type);
   if (type === "spec") {
     try {
       const text = await extractTextFromFile(file);
       if (text) aiRegChatDraft = parseSpecSheetText(text);
+      else {
+        aiRegError = "ファイルからテキストを読み取れませんでした。\nPDF・テキスト形式の規格書をお使いください。";
+        aiRegAnalysisStep = -1;
+        render();
+        return;
+      }
     } catch(e) {
       console.warn("規格書解析エラー:", e);
+      aiRegError = "規格書の読み込みに失敗しました。ファイルが正しい形式か確認してください。";
+      aiRegAnalysisStep = -1;
+      render();
     }
   }
 }

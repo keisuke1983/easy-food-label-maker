@@ -36,3 +36,13 @@ const PLANS = {
   starter: { label: "スタンダード", price: "1,980円/月", limit: 10, note: "月10商品まで保存・PDF出力" },
   pro: { label: "プロ", price: "3,980円/月", limit: Infinity, note: "無制限" },
 };
+
+// 商品ライフサイクルステータス（下書き→販売中→終了）
+const PRODUCT_STATUSES = [
+  { id: "draft",        label: "下書き",   color: "#94a3b8", bg: "#f1f5f9" },
+  { id: "in_progress",  label: "作成中",   color: "#d97706", bg: "#fef3c7" },
+  { id: "review",       label: "確認待ち", color: "#2563eb", bg: "#dbeafe" },
+  { id: "approved",     label: "承認済み", color: "#7c3aed", bg: "#ede9fe" },
+  { id: "on_sale",      label: "販売中",   color: "#16a34a", bg: "#dcfce7" },
+  { id: "discontinued", label: "終了",     color: "#6b7280", bg: "#f3f4f6" },
+];

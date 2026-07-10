@@ -23,6 +23,8 @@ function setupDelegation() {
         case "save": saveCurrent(); return;
         case "save-master": saveMaster(); return;
         case "back-to-saas": saasView = productDetailId ? "product-detail" : "products"; view = "saas"; render(); return;
+        case "retry-photo-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
+        case "retry-spec-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
         case "toggle-sidebar": sidebarOpen = !sidebarOpen; render(); return;
         case "close-sidebar": sidebarOpen = false; render(); return;
         case "confirm-print": printPreviewOpen = false; render(); setTimeout(printLabels, 50); return;

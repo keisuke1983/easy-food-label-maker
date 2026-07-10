@@ -3455,6 +3455,20 @@ const AI_ANALYSIS_STEPS = [
 ];
 
 function photoRegisterHtml() {
+  if (aiRegError) {
+    return saasLayout("写真から登録", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title" style="color:#dc2626">❌ 解析できませんでした</div>
+          <p style="color:#64748b;margin:8px 0 20px;white-space:pre-wrap">${escapeHtml(aiRegError)}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="action primary" data-action="retry-photo-reg">もう一度試す</button>
+            <button class="action" data-nav="products">商品管理へ戻る</button>
+            <button class="action secondary" data-reg-mode="manual">手動で登録する</button>
+          </div>
+        </div>
+      </div>`);
+  }
   if (aiRegAnalysisStep >= 0 && aiRegAnalysisStep < AI_ANALYSIS_STEPS.length) {
     const pct = Math.round((aiRegAnalysisStep / AI_ANALYSIS_STEPS.length) * 100);
     const stepsHtml = AI_ANALYSIS_STEPS.map((s, i) => `
@@ -3506,6 +3520,20 @@ function photoRegisterHtml() {
 }
 
 function specRegisterHtml() {
+  if (aiRegError) {
+    return saasLayout("規格書から登録", `
+      <div class="ai-analysis-wrap">
+        <div class="ai-analysis-card">
+          <div class="ai-analysis-title" style="color:#dc2626">❌ 読み込みできませんでした</div>
+          <p style="color:#64748b;margin:8px 0 20px;white-space:pre-wrap">${escapeHtml(aiRegError)}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="action primary" data-action="retry-spec-reg">もう一度試す</button>
+            <button class="action" data-nav="products">商品管理へ戻る</button>
+            <button class="action secondary" data-reg-mode="manual">手動で登録する</button>
+          </div>
+        </div>
+      </div>`);
+  }
   if (aiRegAnalysisStep >= 0 && aiRegAnalysisStep < AI_ANALYSIS_STEPS.length) {
     const pct = Math.round((aiRegAnalysisStep / AI_ANALYSIS_STEPS.length) * 100);
     const stepsHtml = AI_ANALYSIS_STEPS.map((s, i) => `
@@ -3820,13 +3848,88 @@ function startAiAnalysis(type) {
 
 async function processRegFile(type, file) {
   aiRegChatDraft = {};
+  aiRegError = "";
+  if (type === "photo") {
+    const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
+    if (!apiKey) {
+      aiRegError = "OpenAI APIキーが登録されていません。\n設定画面でAPIキーを登録してから、写真からの登録をお試しください。";
+      aiRegAnalysisStep = -1;
+      saasView = "reg-photo";
+      render();
+      return;
+    }
+    // 画像をbase64に変換
+    let base64;
+    try {
+      base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    } catch(e) {
+      aiRegError = "画像の読み込みに失敗しました。ファイルが壊れていないか確認してください。";
+      aiRegAnalysisStep = -1;
+      saasView = "reg-photo";
+      render();
+      return;
+    }
+    startAiAnalysis(type);
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          max_tokens: 1200,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: "この画像は日本の食品パッケージ・食品表示ラベルです。以下の項目を読み取ってJSON形式のみで回答してください（説明文不要）。読み取れない項目は空文字にしてください。\n{\"name\":\"商品名\",\"volume\":\"内容量\",\"bestBefore\":\"賞味期限\",\"storage\":\"保存方法\",\"manufacturerName\":\"製造者名\",\"manufacturerAddress\":\"製造者住所\",\"ingredients\":[{\"name\":\"原材料名\",\"weight\":\"\"}],\"category\":\"カテゴリ（菓子/パン/惣菜/飲料/調味料/乾物/冷凍食品/その他）\"}" },
+              { type: "image_url", image_url: { url: base64, detail: "high" } }
+            ]
+          }]
+        })
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const msg = errJson.error?.message || `APIエラー（HTTP ${res.status}）`;
+        throw new Error(msg);
+      }
+      const json = await res.json();
+      const content = json.choices?.[0]?.message?.content || "";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("AIが有効なデータを返しませんでした。食品表示ラベルや原材料表が写っている写真を使用してください。");
+      const parsed = JSON.parse(jsonMatch[0]);
+      aiRegChatDraft = parsed;
+      // 解析ステップをすべて完了に進める
+      aiRegAnalysisStep = AI_ANALYSIS_STEPS.length;
+      render();
+    } catch(e) {
+      console.warn("写真解析エラー:", e);
+      aiRegError = e.message || "画像の解析に失敗しました。別の写真を試すか、手動登録をお使いください。";
+      aiRegAnalysisStep = -1;
+      render();
+    }
+    return;
+  }
+  // 規格書（spec）
   startAiAnalysis(type);
   if (type === "spec") {
     try {
       const text = await extractTextFromFile(file);
       if (text) aiRegChatDraft = parseSpecSheetText(text);
+      else {
+        aiRegError = "ファイルからテキストを読み取れませんでした。\nPDF・テキスト形式の規格書をお使いください。";
+        aiRegAnalysisStep = -1;
+        render();
+        return;
+      }
     } catch(e) {
       console.warn("規格書解析エラー:", e);
+      aiRegError = "規格書の読み込みに失敗しました。ファイルが正しい形式か確認してください。";
+      aiRegAnalysisStep = -1;
+      render();
     }
   }
 }

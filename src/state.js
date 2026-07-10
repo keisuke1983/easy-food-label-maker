@@ -50,6 +50,7 @@ let aiRegChatInput = "";
 let aiRegChatStep = 0;
 let aiRegChatDraft = {};
 let aiRegAnalysisStep = -1;
+let aiRegError = ""; // "" = エラーなし。写真/規格書解析失敗時にメッセージをセット
 let sidebarOpen = false;
 let masterSearch = "";
 let masterFilter = "all";

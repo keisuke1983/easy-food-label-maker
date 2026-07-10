@@ -3712,6 +3712,18 @@ const AI_ANALYSIS_STEPS = [
 ];
 
 function photoRegisterHtml() {
+  return saasLayout("写真から登録", `
+    <div class="ai-analysis-wrap">
+      <div class="ai-analysis-card" style="text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">🚧</div>
+        <div class="ai-analysis-title" style="color:#64748b">写真解析機能は準備中です</div>
+        <p style="color:#94a3b8;margin:12px 0 24px;line-height:1.6">この機能は現在開発中です。<br>近日中に提供予定です。</p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="action" data-nav="products">商品管理へ戻る</button>
+          <button class="action secondary" data-reg-mode="manual">手動で登録する</button>
+        </div>
+      </div>
+    </div>`);
   if (aiRegError) {
     return saasLayout("写真から登録", `
       <div class="ai-analysis-wrap">

@@ -64,3 +64,7 @@ let masterSort = "updatedAt"; // "updatedAt" | "name" | "completion"
 let masterCategoryFilter = ""; // "" = すべて、それ以外はカテゴリ名で AND フィルタリング
 let masterCompletionFilter = ""; // "" | "lt100" | "lt60" | "lt30"
 let savedSearchPresets = (() => { try { return JSON.parse(safeGet("fmcc-saved-searches") || "[]"); } catch { return []; } })();
+
+// ── チーム・承認機能 ────────────────────────────────────────────────────
+let teamMembers = (() => { try { return JSON.parse(safeGet("fmcc-team-members") || "[]"); } catch { return []; } })();
+let currentUserName = safeGet("fmcc-current-user") || "";

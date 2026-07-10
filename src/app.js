@@ -636,6 +636,7 @@ function render() {
     else if (saasView === "reg-spec") pageHtml = specRegisterHtml();
     else if (saasView === "reg-ai-chat") pageHtml = aiChatRegisterHtml();
     else if (saasView === "settings-nav") pageHtml = newSettingsHtml();
+    else if (saasView === "team-approval") pageHtml = teamApprovalHtml();
     else pageHtml = dashboardHtml();
   } else if (view === "home") {
     pageHtml = homeHtml();
@@ -1686,6 +1687,7 @@ function extendProductMaster(p) {
     packagingCost: "", laborCost: "", otherCost: "",
     specVersion: "1", specResponsible: "",
     specCreatedAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
+    approvalStatus: "none", assignedTo: "", approvalComment: "", approverName: "", approvalDate: "",
     packaging: "", caseCount: "", productSize: "",
     ...p,
   };
@@ -1713,6 +1715,13 @@ function sidebarHtml() {
   const navLink = (it) => `<button class="nav-item${active===it.id?" active":""}" data-nav="${it.id}">
     <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>
   </button>`;
+  const reviewCount = products.filter(p => p.approvalStatus === "review").length;
+  const reviewBadge = reviewCount > 0 ? `<span class="nav-review-badge">${reviewCount}</span>` : "";
+  const currentRole = teamMembers.find(m => m.name === currentUserName)?.role || "";
+  const roleLabel = { admin: "管理者", editor: "編集者", reviewer: "確認者" }[currentRole] || "";
+  const userChip = currentUserName
+    ? `<div class="sidebar-user-chip">👤 <span>${escapeHtml(currentUserName)}</span>${roleLabel ? `<span class="sidebar-user-role">${roleLabel}</span>` : ""}</div>`
+    : `<div class="sidebar-user-chip muted" data-nav="settings-nav">👤 ユーザーを設定する</div>`;
   return `<nav class="sidebar${sidebarOpen?" open":""}">
     <div class="sidebar-hd">
       <div class="sidebar-brand">
@@ -1721,8 +1730,13 @@ function sidebarHtml() {
       </div>
       <button class="sidebar-close-btn" data-action="close-sidebar">✕</button>
     </div>
-    <div class="nav-links">${items.map(navLink).join("")}</div>
-    <div class="nav-footer">${navLink(settingItem)}</div>
+    <div class="nav-links">
+      ${items.map(navLink).join("")}
+      <button class="nav-item${active==="team-approval"?" active":""}" data-nav="team-approval">
+        <span class="nav-ico">👥</span><span class="nav-lbl">チーム・承認</span>${reviewBadge}
+      </button>
+    </div>
+    <div class="nav-footer">${userChip}${navLink(settingItem)}</div>
   </nav>
   <div class="sidebar-backdrop${sidebarOpen?" visible":""}" data-action="close-sidebar"></div>`;
 }
@@ -1759,6 +1773,7 @@ function calcTodo(derivedAll) {
     { key:"noJan",         label:"JANコード未登録",           count: products.filter(p=>!p.janCode?.trim()).length },
     { key:"noImage",       label:"商品画像未登録",            count: products.filter(p=>!p.imageDataUrl).length },
     { key:"noCost",        label:"原価未設定",                count: products.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
+    { key:"review",        label:"👥 承認待ちの商品",          count: products.filter(p=>p.approvalStatus==="review").length },
   ].filter(t=>t.count>0);
 }
 
@@ -2212,6 +2227,8 @@ function productsListHtml() {
   if (masterFilter==="starred")       list = list.filter(p=>p.starred);
   if (masterFilter==="active")        list = list.filter(p=>p.publishStatus==="active");
   if (masterFilter==="draft")         list = list.filter(p=>p.publishStatus==="draft");
+  if (masterFilter==="review")        list = list.filter(p=>p.approvalStatus==="review");
+  if (masterFilter==="approved")      list = list.filter(p=>p.approvalStatus==="approved");
   if (masterFilter==="incomplete")    list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; });
   if (masterFilter==="noBestBefore")  list = list.filter(p=>!p.bestBefore?.trim());
   if (masterFilter==="noIngredients") list = list.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim()));
@@ -2241,6 +2258,13 @@ function productsListHtml() {
     const cls = p.publishStatus==="active"?"badge-active":p.publishStatus==="draft"?"badge-draft":"badge-inactive";
     return `<span class="status-badge ${cls}">${label}</span>`;
   };
+  const approvalBadge = (p) => {
+    if (!p.approvalStatus || p.approvalStatus === "none") return "";
+    if (p.approvalStatus === "review")   return `<span class="status-badge badge-review">👥 確認待ち</span>`;
+    if (p.approvalStatus === "approved") return `<span class="status-badge badge-approved">✓ 承認済</span>`;
+    if (p.approvalStatus === "rejected") return `<span class="status-badge badge-rejected">↩ 差し戻し</span>`;
+    return "";
+  };
 
   const cards = list.length ? list.map(p => {
     const d = derive(p);         // derive()は一度だけ呼ぶ
@@ -2265,6 +2289,7 @@ function productsListHtml() {
             <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
             ${statusBadge(p)}
+            ${approvalBadge(p)}
             <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}" onclick="event.stopPropagation()">${p.starred?"★":"☆"}</button>
           </div>
           <div class="master-card-meta">
@@ -2429,18 +2454,21 @@ function productDetailHtml() {
     cost:        [],
     check:       [],
     history:     [],
+    approval:    [],
   };
   const tabBadge = (id) => {
     const n = (TAB_FIELDS[id]||[]).filter(f => comp.missing.includes(f)).length;
     return n > 0 ? `<span class="tab-badge">${n}</span>` : "";
   };
   const histCount = loadHistory(p.id).length;
+  const approvalDot = p.approvalStatus && p.approvalStatus !== "none" ? ` <span class="tab-approval-dot ${p.approvalStatus}"></span>` : "";
   const tabs = [
     { id:"basic",       label:"基本情報" },
     { id:"ingredients", label:"原材料" },
     { id:"cost",        label:"原価" },
     { id:"check",       label:"表示チェック" },
     { id:"history",     label:`📋 履歴${histCount>0?` (${histCount})`:""}` },
+    { id:"approval",    label:`👥 承認${approvalDot}` },
   ];
   const tabNav = `${completionBanner}<div class="detail-tabs">${tabs.map(t=>`<button class="detail-tab${tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div>`;
 
@@ -2569,6 +2597,8 @@ function productDetailHtml() {
         <div class="check-issues">${issueHtml || '<p class="notice" style="margin-top:12px">問題は見つかりませんでした。</p>'}</div>
         <p class="notice" style="margin-top:16px">※ このチェックは食品表示基準（令和元年改正対応）に基づく参考情報です。最終確認は専門家にご相談ください。</p>
       </div>`;
+  } else if (tab === "approval") {
+    tabContent = approvalTabHtml(p);
   }
 
   return saasLayout(`${escapeHtml(p.name||"新規商品")} – 商品詳細`, `
@@ -2589,6 +2619,63 @@ function productDetailHtml() {
     ${tabContent}
     <button class="fab-save" data-action="save-master">保存する</button>
   `);
+}
+
+// ── 承認タブ ──────────────────────────────────────────────────────────
+function approvalTabHtml(p) {
+  const st = p.approvalStatus || "none";
+  const currentRole = teamMembers.find(m => m.name === currentUserName)?.role || "";
+  const canApprove = currentRole === "admin" || currentRole === "reviewer";
+  const canRequest = !!currentUserName && st === "none";
+  const canCancel  = !!currentUserName && st === "review" && (p.assignedTo === currentUserName || currentRole === "admin");
+
+  const stateInfo = {
+    none:     { icon:"⬜", label:"未申請",   color:"#64748b", bg:"#f8fafc", border:"#e2e8f0" },
+    review:   { icon:"🔵", label:"確認待ち", color:"#1d4ed8", bg:"#eff6ff", border:"#bfdbfe" },
+    approved: { icon:"✅", label:"承認済み", color:"#15803d", bg:"#f0fdf4", border:"#bbf7d0" },
+    rejected: { icon:"↩", label:"差し戻し", color:"#dc2626", bg:"#fef2f2", border:"#fca5a5" },
+  }[st] || { icon:"⬜", label:"未申請", color:"#64748b", bg:"#f8fafc", border:"#e2e8f0" };
+
+  const memberOpts = teamMembers.length
+    ? teamMembers.filter(m => m.role==="admin"||m.role==="reviewer")
+        .map(m=>`<option value="${escapeHtml(m.name)}"${p.assignedTo===m.name?" selected":""}>${escapeHtml(m.name)}（${m.role==="admin"?"管理者":"確認者"}）</option>`).join("")
+    : "";
+
+  const requestSection = (st === "none" || st === "rejected") ? `
+    <div class="approval-action-card">
+      <h4>確認依頼を送る</h4>
+      ${!currentUserName ? `<p class="notice">⚠ 先にサイドバーでユーザーを設定してください。</p>` : ""}
+      ${memberOpts ? `<label class="field" style="margin-bottom:10px"><span>確認者を指定</span><select id="approval-assign-select"><option value="">指定なし</option>${memberOpts}</select></label>` : ""}
+      <label class="field" style="margin-bottom:10px"><span>依頼メモ（任意）</span><textarea id="approval-req-comment" rows="2" placeholder="確認してほしいポイントなど..." style="width:100%;resize:vertical">${escapeHtml(p.approvalComment||"")}</textarea></label>
+      <button class="action primary" data-action="request-approval" data-pid="${escapeHtml(p.id)}"${!currentUserName?" disabled":""}>📨 確認依頼を送る</button>
+    </div>` : "";
+
+  const approveSection = (st === "review" && canApprove) ? `
+    <div class="approval-action-card">
+      <h4>承認 / 差し戻し</h4>
+      <label class="field" style="margin-bottom:10px"><span>コメント（任意）</span><textarea id="approval-judge-comment" rows="2" placeholder="承認理由・差し戻し理由など..." style="width:100%;resize:vertical"></textarea></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="action primary" data-action="approve-product" data-pid="${escapeHtml(p.id)}">✅ 承認する</button>
+        <button class="action danger-outline" data-action="reject-product" data-pid="${escapeHtml(p.id)}">↩ 差し戻す</button>
+      </div>
+    </div>` : "";
+
+  const cancelSection = canCancel ? `<button class="action" style="margin-top:8px" data-action="cancel-approval" data-pid="${escapeHtml(p.id)}">確認依頼を取り消す</button>` : "";
+
+  return `<div class="detail-section">
+    <h3 class="detail-section-title">承認ステータス</h3>
+    <div class="approval-status-banner" style="background:${stateInfo.bg};border:1px solid ${stateInfo.border};border-radius:10px;padding:16px 20px;margin-bottom:16px">
+      <div style="font-size:22px;margin-bottom:4px">${stateInfo.icon} <strong style="color:${stateInfo.color}">${stateInfo.label}</strong></div>
+      ${p.assignedTo ? `<div style="font-size:12px;color:#64748b">依頼者：${escapeHtml(p.assignedTo)}</div>` : ""}
+      ${p.approverName ? `<div style="font-size:12px;color:#64748b">承認者：${escapeHtml(p.approverName)}　${escapeHtml(p.approvalDate||"")}</div>` : ""}
+      ${p.approvalComment ? `<div style="font-size:13px;margin-top:8px;white-space:pre-wrap">${escapeHtml(p.approvalComment)}</div>` : ""}
+    </div>
+    ${cancelSection}
+    ${requestSection}
+    ${approveSection}
+    ${teamMembers.length === 0 ? `<p class="notice" style="margin-top:12px">⚠ チームメンバーが登録されていません。<button class="action" style="margin-left:8px" data-nav="settings-nav">設定画面で登録する</button></p>` : ""}
+    <p class="notice" style="margin-top:16px">現在のユーザー：<strong>${currentUserName ? escapeHtml(currentUserName) : "（未設定）"}</strong>　役割：<strong>${({admin:"管理者",editor:"編集者",reviewer:"確認者"}[currentRole]||"未設定")}</strong></p>
+  </div>`;
 }
 
 // ── ⑦ 食品表示法チェック ─────────────────────────────────────────────
@@ -3049,6 +3136,62 @@ function aiDescriptionsHtml() {
           <textarea class="ai-prompt-textarea" id="ai-desc-prompt" readonly>${escapeHtml(buildAiDescPrompt(p, aiDescChannel))}</textarea>
           <button class="action" data-action="copy-ai-desc">プロンプトをコピー</button>
         </div>
+      </div>
+    </div>
+  `);
+}
+
+// ── チーム・承認ページ ────────────────────────────────────────────────
+function teamApprovalHtml() {
+  const ROLES = [{ v:"admin", l:"管理者（承認・編集すべて可）" }, { v:"editor", l:"編集者（商品編集・確認依頼可）" }, { v:"reviewer", l:"確認者（承認・差し戻し可）" }];
+  const memberList = teamMembers.length
+    ? teamMembers.map((m, i) => `
+      <div class="team-member-row">
+        <span class="team-member-name">👤 ${escapeHtml(m.name)}</span>
+        <span class="team-member-role">${{admin:"管理者",editor:"編集者",reviewer:"確認者"}[m.role]||m.role}</span>
+        <button class="team-member-self${currentUserName===m.name?" active":""}" data-action="set-current-user" data-uname="${escapeHtml(m.name)}">${currentUserName===m.name?"✓ 自分":"自分として使う"}</button>
+        <button class="icon-btn" data-action="del-team-member" data-midx="${i}" title="削除">×</button>
+      </div>`).join("")
+    : `<p class="notice">まだメンバーが登録されていません。</p>`;
+
+  const reviewList = products.filter(p => p.approvalStatus === "review");
+  const approvedList = products.filter(p => p.approvalStatus === "approved");
+  const rejectedList = products.filter(p => p.approvalStatus === "rejected");
+
+  const productRow = (p) => `
+    <div class="approval-product-row" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
+      <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+      ${p.assignedTo ? `<span class="approval-product-meta">依頼：${escapeHtml(p.assignedTo)}</span>` : ""}
+      ${p.approverName ? `<span class="approval-product-meta">承認：${escapeHtml(p.approverName)}</span>` : ""}
+      <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+    </div>`;
+
+  return saasLayout("チーム・承認", `
+    <div class="settings-sections">
+      <div class="settings-card">
+        <h3>👥 チームメンバー</h3>
+        <p class="notice">同じ端末・ブラウザを複数人で共有している場合に、誰が操作しているかを記録できます。</p>
+        <div class="team-member-list">${memberList}</div>
+        <div class="team-add-row">
+          <input id="team-member-name-input" placeholder="名前を入力（例：田中 花子）" style="flex:1">
+          <select id="team-member-role-select">
+            ${ROLES.map(r=>`<option value="${r.v}">${r.l}</option>`).join("")}
+          </select>
+          <button class="action primary" data-action="add-team-member">追加</button>
+        </div>
+        ${currentUserName ? `<p style="margin-top:12px;font-size:13px">現在のユーザー：<strong>${escapeHtml(currentUserName)}</strong></p>` : `<p class="notice" style="margin-top:12px">「自分として使う」をクリックするとユーザーを切り替えられます。</p>`}
+      </div>
+      <div class="settings-card">
+        <h3>🔵 確認待ち（${reviewList.length}件）</h3>
+        ${reviewList.length ? reviewList.map(productRow).join("") : `<p class="notice">確認待ちの商品はありません。</p>`}
+      </div>
+      <div class="settings-card">
+        <h3>✅ 承認済み（${approvedList.length}件）</h3>
+        ${approvedList.length ? approvedList.map(productRow).join("") : `<p class="notice">承認済みの商品はありません。</p>`}
+      </div>
+      <div class="settings-card">
+        <h3>↩ 差し戻し（${rejectedList.length}件）</h3>
+        ${rejectedList.length ? rejectedList.map(productRow).join("") : `<p class="notice">差し戻しの商品はありません。</p>`}
       </div>
     </div>
   `);

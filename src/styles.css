@@ -1228,7 +1228,39 @@ button:disabled {
 .status-badge { font-size: 11px; padding: 2px 8px; border-radius: 100px; font-weight: 600; }
 .badge-active { background: #dcfce7; color: #15803d; }
 .badge-draft { background: #fef9c3; color: #92400e; }
-.badge-inactive { background: #f1f5f9; color: #64748b; }
+.badge-inactive  { background: #f1f5f9; color: #64748b; }
+.badge-review    { background: #dbeafe; color: #1d4ed8; }
+.badge-approved  { background: #dcfce7; color: #15803d; }
+.badge-rejected  { background: #fee2e2; color: #dc2626; }
+/* 承認タブ dot */
+.tab-approval-dot { display:inline-block; width:8px; height:8px; border-radius:50%; vertical-align:middle; margin-left:4px; }
+.tab-approval-dot.review   { background:#2563eb; }
+.tab-approval-dot.approved { background:#16a34a; }
+.tab-approval-dot.rejected { background:#dc2626; }
+/* サイドバー ユーザーチップ */
+.sidebar-user-chip { display:flex; align-items:center; gap:6px; padding:8px 12px; font-size:12px; color:var(--text-sub); border-top:1px solid var(--border); cursor:default; }
+.sidebar-user-chip.muted { color:#94a3b8; cursor:pointer; }
+.sidebar-user-chip.muted:hover { color:var(--blue); }
+.sidebar-user-role { font-size:10px; background:#e0e7ff; color:#3730a3; border-radius:4px; padding:1px 5px; margin-left:4px; }
+.nav-review-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; background:#dc2626; color:#fff; border-radius:9px; font-size:10px; font-weight:700; padding:0 4px; margin-left:auto; }
+/* チームページ */
+.team-member-list { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
+.team-member-row { display:flex; align-items:center; gap:8px; padding:8px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e5e7eb; }
+.team-member-name { font-weight:600; flex:1; }
+.team-member-role { font-size:11px; color:#64748b; background:#f1f5f9; padding:2px 8px; border-radius:100px; }
+.team-member-self { font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid #d1d5db; background:#fff; cursor:pointer; white-space:nowrap; }
+.team-member-self.active { background:#dcfce7; border-color:#86efac; color:#15803d; font-weight:600; }
+.team-add-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.team-add-row input { flex:1; min-width:140px; padding:7px 10px; border:1px solid #d1d5db; border-radius:7px; font-size:13px; }
+.team-add-row select { padding:7px 8px; border:1px solid #d1d5db; border-radius:7px; font-size:12px; }
+/* 承認タブ */
+.approval-action-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:16px; margin-top:14px; }
+.approval-action-card h4 { font-size:13px; font-weight:700; margin-bottom:10px; }
+.approval-product-row { display:flex; align-items:center; gap:8px; padding:10px 12px; background:#f8fafc; border-radius:8px; border:1px solid #e5e7eb; margin-bottom:6px; cursor:pointer; transition:background 0.15s; }
+.approval-product-row:hover { background:#eff6ff; }
+.approval-product-name { font-weight:600; flex:1; }
+.approval-product-meta { font-size:11px; color:#64748b; }
+.approval-product-date { font-size:11px; color:#94a3b8; }
 .filter-btns { display: flex; gap: 4px; }
 .filter-btn { padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; font-size: 12px; cursor: pointer; color: #64748b; }
 .filter-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }

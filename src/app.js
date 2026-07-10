@@ -4107,14 +4107,6 @@ async function processRegFile(type, file) {
   aiRegChatDraft = {};
   aiRegError = "";
   if (type === "photo") {
-    const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
-    if (!apiKey) {
-      aiRegError = "写真解析AIは現在準備中です。\n手動登録またはAIチャット登録をご利用ください。";
-      aiRegAnalysisStep = -1;
-      saasView = "reg-photo";
-      render();
-      return;
-    }
     // 画像をbase64に変換
     let base64;
     try {
@@ -4133,33 +4125,18 @@ async function processRegFile(type, file) {
     }
     startAiAnalysis(type);
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      // FoodPilot AIバックエンド経由でOpenAI Vision APIを呼び出す
+      const res = await fetch("/api/ai-photo", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          max_tokens: 1200,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: "この画像は日本の食品パッケージ・食品表示ラベルです。以下の項目を読み取ってJSON形式のみで回答してください（説明文不要）。読み取れない項目は空文字にしてください。\n{\"name\":\"商品名\",\"volume\":\"内容量\",\"bestBefore\":\"賞味期限\",\"storage\":\"保存方法\",\"manufacturerName\":\"製造者名\",\"manufacturerAddress\":\"製造者住所\",\"ingredients\":[{\"name\":\"原材料名\",\"weight\":\"\"}],\"category\":\"カテゴリ（菓子/パン/惣菜/飲料/調味料/乾物/冷凍食品/その他）\"}" },
-              { type: "image_url", image_url: { url: base64, detail: "high" } }
-            ]
-          }]
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64 })
       });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        const msg = errJson.error?.message || `APIエラー（HTTP ${res.status}）`;
-        throw new Error(msg);
+        throw new Error(errJson.error || `サーバーエラー（HTTP ${res.status}）`);
       }
-      const json = await res.json();
-      const content = json.choices?.[0]?.message?.content || "";
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("AIが有効なデータを返しませんでした。食品表示ラベルや原材料表が写っている写真を使用してください。");
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = await res.json();
       aiRegChatDraft = parsed;
-      // 解析ステップをすべて完了に進める
       aiRegAnalysisStep = AI_ANALYSIS_STEPS.length;
       render();
     } catch(e) {

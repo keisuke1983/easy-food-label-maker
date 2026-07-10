@@ -2427,3 +2427,22 @@ kbd {
 .cost-summary-value.good { color: #16a34a; }
 .cost-summary-value.warn { color: #d97706; }
 .cost-summary-value.danger { color: #dc2626; }
+
+/* ── v20260710l: FoodPilot AI ステータス / ロゴ ── */
+.ai-builtin-status {
+  display: flex; align-items: center; gap: 8px;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: 8px; padding: 10px 14px; margin-top: 4px;
+}
+.ai-builtin-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,.2);
+  flex-shrink: 0;
+  animation: ai-dot-pulse 2s infinite;
+}
+@keyframes ai-dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(22,163,74,.2); }
+  50%       { box-shadow: 0 0 0 6px rgba(22,163,74,.08); }
+}
+.ai-builtin-label { font-weight: 600; color: #15803d; font-size: 14px; }

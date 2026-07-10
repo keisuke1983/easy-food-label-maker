@@ -1148,11 +1148,10 @@ function contaminationEditorHtml(p) {
 function labelAssistHtml(p, d) {
   const checks = labelChecklist(p, d);
   const okCount = checks.filter((c) => c.ok).length;
-  const hasKey = !!(sessionStorage.getItem("fmcc-openai-key") || "");
   const aiCheckHtml = (() => {
     if (aiLabelCheckLoading) return `<div class="ai-check-loading">🤖 AIが食品表示法を照合中...</div>`;
     if (aiLabelCheckResult) return `<div class="ai-check-result">${renderMarkdown(aiLabelCheckResult)}<button class="action-sub" data-action="run-ai-label-check" style="margin-top:8px">再チェック</button></div>`;
-    return `<button class="action ai-check-btn" data-action="run-ai-label-check">🔍 AI食品表示法チェック${hasKey ? "" : "（テンプレート）"}</button>`;
+    return `<button class="action ai-check-btn" data-action="run-ai-label-check">🔍 AI食品表示法チェック</button>`;
   })();
   return section("表示チェックリスト", `
     <div class="assist-actions">
@@ -3316,31 +3315,22 @@ function newSettingsHtml() {
   const userKwList = userAdditiveKw.map((kw, i) =>
     `<div class="additive-kw-row"><span>${escapeHtml(kw)}</span><button class="icon-btn" data-del-additive-kw="${i}">×</button></div>`
   ).join("");
-  const savedKey = sessionStorage.getItem("fmcc-openai-key") || "";
-  const keyMasked = savedKey ? "sk-..." + savedKey.slice(-4) : "";
   const sbUrl = safeGet("fmcc-supabase-url") || "";
   const sbKey = safeGet("fmcc-supabase-key") || "";
   const sbConnected = !!(sbUrl && sbKey);
   return saasLayout("設定", `
     <div class="settings-sections">
       <div class="settings-card">
-        <h3>🤖 AIアシスタント連携</h3>
-        <p class="notice">設定すると、AIが商品説明の作成・食品表示のチェック・商品に関する質問に答えてくれます。<br>設定しなくてもかんたんな定型回答で利用できます。</p>
-        <div class="api-key-row">
-          <input id="openai-key-input" type="password" placeholder="sk-..." value="${escapeHtml(savedKey)}" autocomplete="off" style="flex:1;font-family:monospace">
-          <button class="action primary" data-action="save-openai-key">保存</button>
-          ${savedKey ? `<button class="action" data-action="test-openai-key">動作確認</button>` : ""}
-          ${savedKey ? `<button class="action danger-outline" data-action="clear-openai-key">削除</button>` : ""}
+        <h3>🤖 FoodPilot AI</h3>
+        <div class="ai-builtin-status">
+          <span class="ai-builtin-dot"></span>
+          <span class="ai-builtin-label">FoodPilot AI は利用可能です</span>
         </div>
-        <div id="openai-key-status-wrap">
-          ${savedKey
-            ? `<p class="api-key-status ok">✓ AI連携キー登録済み（${escapeHtml(keyMasked)}）</p>`
-            : `<p class="api-key-status warn">⚠ 未設定 — AI機能はかんたん定型回答になります</p>`}
+        <p class="notice" style="margin-top:10px">FoodPilot のAIアシスタントはプランに含まれています。別途APIキーの設定は不要です。<br>AI説明文・食品表示チェック・AI相談がすぐにご利用いただけます。</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="action" data-nav="ai-descriptions-nav">✨ AI説明文を使う</button>
+          <button class="action" data-nav="ai-consult-nav">💬 AI相談を使う</button>
         </div>
-        <p class="notice" style="margin-top:8px">
-          🔒 <b>安全性について：</b>入力したキーはこのブラウザのタブを閉じると自動的に消えます。他のサーバーには送信しません。<br>
-          <a class="field-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">AIキーを取得する（OpenAI公式サイト）→</a>
-        </p>
       </div>
       <div class="settings-card">
         <h3>プラン</h3>
@@ -3661,22 +3651,7 @@ function generateConsultResponse(p, questionKey) {
   }
 }
 
-// OpenAI API接続ポイント（APIキー設定で差し替え可能な設計）
 async function callConsultAI(p, userMessage, questionKey) {
-  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
-  if (apiKey) {
-    try {
-      const d = derive(p);
-      const systemPrompt = "あなたは食品表示法の専門家AIアシスタントです。日本の食品表示法・JAS法・栄養表示基準に精通しています。\n商品情報：名称「" + (p.name || "未設定") + "」、社内名称「" + (p.internalName || "") + "」、原材料：" + ((p.ingredients || []).filter(i => i.name).map(i => i.name).join("、") || "未入力") + "\nアレルゲン：" + ((d.allergens || []).join("、") || "なし") + "\n正確で実用的なアドバイスをMarkdown形式で回答してください。";
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }], max_tokens: 1000 }),
-      });
-      const json = await res.json();
-      if (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) return json.choices[0].message.content;
-    } catch (e) { console.warn("OpenAI API error:", e); }
-  }
   return generateConsultResponse(p, questionKey);
 }
 
@@ -3686,39 +3661,16 @@ async function runAiLabelCheck() {
   if (!p) return;
   aiLabelCheckLoading = true; aiLabelCheckResult = null; render();
   const d = derive(p);
-  const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
-  const prompt = `以下の食品ラベル情報を日本の食品表示基準（食品表示法・JAS法）に照らして確認し、問題点や改善点をMarkdownで箇条書きにしてください。問題がなければ「問題なし」と記載してください。
-
-【名称】${p.name || "未入力"}
-【原材料名】${d.ingLabel || "未入力"}
-【内容量】${p.volume || "未入力"}
-【賞味期限】${p.bestBefore || "未入力"}
-【保存方法】${d.storage || "未入力"}
-【アレルゲン】${d.allergens.join("、") || "なし"}
-【製造者】${p.manufacturerName || "未入力"} ${p.manufacturerAddress || ""}`;
-
-  if (apiKey) {
-    try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: "あなたは日本の食品表示法の専門家です。指摘は具体的かつ簡潔に、Markdown箇条書きで回答してください。" }, { role: "user", content: prompt }], max_tokens: 800 }),
-      });
-      const json = await res.json();
-      aiLabelCheckResult = json.choices?.[0]?.message?.content || "チェック結果を取得できませんでした。";
-    } catch { aiLabelCheckResult = "通信エラーが発生しました。APIキーを確認してください。"; }
-  } else {
-    const issues = [];
-    if (!p.name?.trim()) issues.push("❌ **名称が未入力**：食品表示法第4条で義務表示");
-    if (!d.ingLabel) issues.push("❌ **原材料名が未入力**：加工食品は原材料名の表示が義務");
-    if (!p.volume?.trim()) issues.push("❌ **内容量が未入力**：計量法による表示義務あり");
-    if (!p.bestBefore?.trim()) issues.push("❌ **賞味/消費期限が未入力**：食品表示基準で義務");
-    if (!d.storage?.trim()) issues.push("⚠️ **保存方法が未入力**：要冷蔵品等は表示義務あり");
-    if (!p.manufacturerName?.trim()) issues.push("❌ **製造者名が未入力**：食品表示基準で義務");
-    if (!p.manufacturerAddress?.trim()) issues.push("❌ **製造者住所が未入力**：食品表示基準で義務");
-    if (d.allergens.length === 0 && p.ingredients.some(i => i.name?.trim())) issues.push("ℹ️ アレルゲン未検出：原材料名を正確に入力することで自動検出精度が上がります");
-    aiLabelCheckResult = issues.length ? issues.join("\n") : "✅ **基本項目はすべて入力されています**\n\n※ このチェックはルールベースです。AIキーを設定すると詳細なGPTチェックが利用できます。";
-  }
+  const issues = [];
+  if (!p.name?.trim()) issues.push("❌ **名称が未入力**：食品表示法第4条で義務表示");
+  if (!d.ingLabel) issues.push("❌ **原材料名が未入力**：加工食品は原材料名の表示が義務");
+  if (!p.volume?.trim()) issues.push("❌ **内容量が未入力**：計量法による表示義務あり");
+  if (!p.bestBefore?.trim()) issues.push("❌ **賞味/消費期限が未入力**：食品表示基準で義務");
+  if (!d.storage?.trim()) issues.push("⚠️ **保存方法が未入力**：要冷蔵品等は表示義務あり");
+  if (!p.manufacturerName?.trim()) issues.push("❌ **製造者名が未入力**：食品表示基準で義務");
+  if (!p.manufacturerAddress?.trim()) issues.push("❌ **製造者住所が未入力**：食品表示基準で義務");
+  if (d.allergens.length === 0 && p.ingredients.some(i => i.name?.trim())) issues.push("ℹ️ アレルゲン未検出：原材料名を正確に入力することで自動検出精度が上がります");
+  aiLabelCheckResult = issues.length ? issues.join("\n") : "✅ **基本項目はすべて入力されています**\n\nアレルゲン表示・原材料配合順・栄養成分表示の最終確認もお忘れなく。";
   aiLabelCheckLoading = false; render();
 }
 
@@ -4157,7 +4109,7 @@ async function processRegFile(type, file) {
   if (type === "photo") {
     const apiKey = sessionStorage.getItem("fmcc-openai-key") || "";
     if (!apiKey) {
-      aiRegError = "OpenAI APIキーが登録されていません。\n設定画面でAPIキーを登録してから、写真からの登録をお試しください。";
+      aiRegError = "写真解析AIは現在準備中です。\n手動登録またはAIチャット登録をご利用ください。";
       aiRegAnalysisStep = -1;
       saasView = "reg-photo";
       render();

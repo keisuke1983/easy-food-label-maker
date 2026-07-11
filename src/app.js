@@ -1732,7 +1732,7 @@ function sidebarHtml() {
   const roleLabel = { admin: "管理者", editor: "編集者", reviewer: "確認者" }[currentRole] || "";
   const userChip = currentUserName
     ? `<div class="sidebar-user-chip">👤 <span>${escapeHtml(currentUserName)}</span>${roleLabel ? `<span class="sidebar-user-role">${roleLabel}</span>` : ""}</div>`
-    : `<div class="sidebar-user-chip muted" data-nav="team-approval">👤 ユーザーを設定する</div>`;
+    : `<div class="sidebar-user-chip muted" data-nav="settings-nav">👤 ユーザーを設定する</div>`;
   return `<nav class="sidebar${sidebarOpen?" open":""}">
     <div class="sidebar-hd">
       <div class="sidebar-brand">
@@ -3334,8 +3334,22 @@ function newSettingsHtml() {
   const sbUrl = safeGet("fmcc-supabase-url") || "";
   const sbKey = safeGet("fmcc-supabase-key") || "";
   const sbConnected = !!(sbUrl && sbKey);
+  const ROLES = { admin:"管理者", editor:"編集者", reviewer:"確認者" };
+  const currentRole = teamMembers.find(m => m.name === currentUserName)?.role || "";
+  const memberButtons = teamMembers.length
+    ? teamMembers.map(m => `<button class="action${currentUserName===m.name?" primary":""}" data-action="set-current-user" data-uname="${escapeHtml(m.name)}">${currentUserName===m.name?"✓ ":""} ${escapeHtml(m.name)}${m.role?` (${ROLES[m.role]||m.role})`:""}  ${currentUserName===m.name?"（使用中）":""}</button>`).join("")
+    : `<p class="notice">メンバーがまだ登録されていません。<button class="action" style="margin-left:8px" data-nav="team-approval">チーム・承認で登録する</button></p>`;
   return saasLayout("設定", `
     <div class="settings-sections">
+      <div class="settings-card">
+        <h3>👤 現在のユーザー</h3>
+        ${currentUserName
+          ? `<p style="margin-bottom:10px">現在 <strong>${escapeHtml(currentUserName)}</strong>${currentRole?` （${ROLES[currentRole]||currentRole}）`:""}  として操作中です。</p>`
+          : `<p class="notice" style="margin-bottom:10px">ユーザーが選択されていません。下から自分の名前を選んでください。</p>`
+        }
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${memberButtons}</div>
+        <p style="margin-top:10px;font-size:12px;color:#64748b">メンバーの追加・削除は <button class="action" style="padding:2px 8px;font-size:12px" data-nav="team-approval">チーム・承認</button> から行えます。</p>
+      </div>
       <div class="settings-card">
         <h3>🤖 FoodPilot AI</h3>
         <div class="ai-builtin-status">

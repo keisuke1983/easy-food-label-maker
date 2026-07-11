@@ -2446,3 +2446,59 @@ kbd {
   50%       { box-shadow: 0 0 0 6px rgba(22,163,74,.08); }
 }
 .ai-builtin-label { font-weight: 600; color: #15803d; font-size: 14px; }
+
+/* ── AI棚スキャン ──────────────────────────────────────────────────── */
+.nav-beta { font-size: 10px; font-weight: 700; color: #7c3aed; background: #ede9fe; border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
+.shelf-scan-wrap { max-width: 800px; margin: 0 auto; padding: 24px 16px; }
+.shelf-scan-header { margin-bottom: 24px; }
+.shelf-scan-title { font-size: 20px; font-weight: 700; color: #1e293b; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+.shelf-beta-badge { font-size: 11px; font-weight: 700; color: #7c3aed; background: #ede9fe; border-radius: 6px; padding: 2px 7px; }
+.shelf-scan-desc { color: #64748b; font-size: 14px; line-height: 1.6; margin: 0; }
+.shelf-upload-zone { border: 2px dashed #cbd5e1; border-radius: 16px; padding: 48px 24px; text-align: center; background: #f8fafc; cursor: pointer; transition: border-color .2s, background .2s; }
+.shelf-upload-zone:hover, .shelf-upload-zone.drag-over { border-color: #6366f1; background: #eef2ff; }
+.shelf-upload-icon { font-size: 48px; margin-bottom: 12px; }
+.shelf-upload-main { font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.shelf-upload-sub { color: #9ca3af; font-size: 13px; margin: 8px 0; }
+.shelf-upload-note { font-size: 12px; color: #94a3b8; margin-top: 12px; }
+.shelf-scan-tips { margin-top: 20px; display: flex; flex-direction: column; gap: 6px; }
+.shelf-tip { font-size: 13px; color: #64748b; background: #f1f5f9; border-radius: 8px; padding: 8px 12px; }
+
+/* 解析中 */
+.shelf-analyzing-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 40px 32px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+.shelf-analyzing-spinner { width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; margin: 0 auto 20px; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.shelf-analyzing-title { font-size: 18px; font-weight: 700; color: #1e293b; margin-bottom: 20px; }
+.shelf-analyzing-steps { display: flex; flex-direction: column; gap: 8px; text-align: left; max-width: 320px; margin: 0 auto 20px; }
+.shelf-step { font-size: 13px; color: #94a3b8; }
+.shelf-step.done { color: #16a34a; }
+.shelf-step.active { color: #6366f1; font-weight: 600; animation: shelf-pulse 1.4s ease-in-out infinite; }
+@keyframes shelf-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.shelf-analyzing-note { font-size: 12px; color: #94a3b8; }
+
+/* 結果 */
+.shelf-results-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.shelf-results-summary { font-size: 14px; color: #64748b; margin: 4px 0 0; }
+.shelf-items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.shelf-item-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+.shelf-item-unmatched { border-color: #fde68a; background: #fffbeb; }
+.shelf-item-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.shelf-item-name { font-size: 16px; font-weight: 700; color: #1e293b; }
+.shelf-match-badge { font-size: 11px; font-weight: 600; border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+.shelf-match-badge.matched { background: #dcfce7; color: #15803d; }
+.shelf-match-badge.new { background: #fef3c7; color: #92400e; }
+.shelf-item-confidence { margin-bottom: 14px; }
+.shelf-confidence-bar { height: 4px; background: #f1f5f9; border-radius: 2px; margin-top: 4px; }
+.shelf-confidence-fill { height: 4px; border-radius: 2px; transition: width .3s; }
+.shelf-item-qty-row { display: flex; align-items: center; gap: 8px; }
+.shelf-qty-label { font-size: 13px; color: #64748b; min-width: 30px; }
+.shelf-qty-btn { width: 32px; height: 32px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s; }
+.shelf-qty-btn:hover { background: #e2e8f0; }
+.shelf-qty-input { width: 64px; height: 32px; border: 1px solid #e2e8f0; border-radius: 8px; text-align: center; font-size: 15px; font-weight: 600; color: #1e293b; }
+.shelf-qty-unit { font-size: 13px; color: #64748b; }
+.shelf-item-new-hint { font-size: 12px; color: #92400e; margin-top: 10px; background: #fef3c7; border-radius: 6px; padding: 6px 10px; }
+.shelf-results-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
+
+/* 保存完了 */
+.shelf-saved-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 48px 32px; box-shadow: 0 2px 12px rgba(0,0,0,.06); display: inline-block; min-width: 280px; }
+.shelf-saved-title { font-size: 20px; font-weight: 700; color: #15803d; margin-bottom: 8px; }
+.shelf-saved-desc { color: #64748b; font-size: 14px; }

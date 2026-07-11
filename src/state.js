@@ -71,6 +71,11 @@ let currentUserName = safeGet("fmcc-current-user") || "";
 
 let masterPipelineFilter = ""; // "" | PRODUCT_STATUSES の id
 
+// ── AI棚スキャン ────────────────────────────────────────────────────────
+let shelfScanPhase = "upload"; // "upload" | "analyzing" | "results" | "saved"
+let shelfScanItems = []; // { detectedName, quantity, unit, confidence, matchedProductId }
+let shelfScanError = "";
+
 // ── クラウド同期状態 ────────────────────────────────────────────────────
 let cloudSyncStatus = "idle"; // "idle" | "syncing" | "success" | "error"
 let cloudSyncLastAt = safeGet("fmcc-last-sync") || "";

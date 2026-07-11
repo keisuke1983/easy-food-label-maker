@@ -26,6 +26,26 @@ function setupDelegation() {
         case "retry-photo-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
         case "retry-spec-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
 
+        // AI棚スキャン
+        case "shelf-scan-retry": shelfScanPhase = "upload"; shelfScanItems = []; shelfScanError = ""; render(); return;
+        case "shelf-scan-save": {
+          // 数量入力欄の最新値を取得
+          document.querySelectorAll("[data-shelf-qty]").forEach(el => {
+            const idx = Number(el.dataset.shelfQty);
+            if (!isNaN(idx) && shelfScanItems[idx]) shelfScanItems[idx].quantity = Math.max(0, Number(el.value) || 0);
+          });
+          saveShelfScanResults();
+          return;
+        }
+        case "shelf-scan-qty-plus": {
+          const idx = Number(ael.dataset.idx);
+          if (!isNaN(idx) && shelfScanItems[idx]) { shelfScanItems[idx].quantity++; render(); } return;
+        }
+        case "shelf-scan-qty-minus": {
+          const idx = Number(ael.dataset.idx);
+          if (!isNaN(idx) && shelfScanItems[idx]) { shelfScanItems[idx].quantity = Math.max(0, shelfScanItems[idx].quantity - 1); render(); } return;
+        }
+
         // チーム・承認
         case "request-approval": {
           const pid = ael.dataset.pid;
@@ -282,6 +302,7 @@ function setupDelegation() {
       else if(nav==="spec-sheet-nav"){saasView="spec-sheet-nav";view="saas";if(!specSheetId&&products.length>0)specSheetId=products[0].id;}
       else if(nav==="ai-descriptions-nav"){saasView="ai-descriptions-nav";view="saas";if(!aiDescId&&products.length>0)aiDescId=products[0].id;}
       else if(nav==="settings-nav"){saasView="settings-nav";view="saas";}
+      else if(nav==="shelf-scan"){saasView="shelf-scan";view="saas";shelfScanPhase="upload";shelfScanItems=[];shelfScanError="";}
       else{saasView=nav;view="saas";}
       safeSet("fmcc-view",saasView); render(); return;
     }
@@ -626,6 +647,18 @@ function bindDynamic() {
     else draft.name="AI解析済み商品（確認・修正してください）";
     editId="new"; view="edit"; sidebarOpen=false; render();
   });
+
+  // AI棚スキャン ファイルアップロード
+  const shelfSelectBtn = document.getElementById("shelf-select-btn");
+  const shelfFileInput = document.getElementById("shelf-file-input");
+  const shelfDropZone  = document.getElementById("shelf-drop-zone");
+  if (shelfSelectBtn) shelfSelectBtn.addEventListener("click", () => shelfFileInput?.click());
+  if (shelfFileInput) shelfFileInput.addEventListener("change", () => { const f = shelfFileInput.files[0]; if (f) runShelfScan(f); });
+  if (shelfDropZone) {
+    shelfDropZone.addEventListener("dragover", e => { e.preventDefault(); shelfDropZone.classList.add("drag-over"); });
+    shelfDropZone.addEventListener("dragleave", () => shelfDropZone.classList.remove("drag-over"));
+    shelfDropZone.addEventListener("drop", e => { e.preventDefault(); shelfDropZone.classList.remove("drag-over"); const f = e.dataTransfer.files[0]; if (f) runShelfScan(f); });
+  }
 
   // AIチャット登録
   document.getElementById("ai-chat-input")?.addEventListener("input", e=>{aiRegChatInput=e.target.value;});

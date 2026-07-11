@@ -646,6 +646,7 @@ function render() {
     else if (saasView === "reg-ai-chat") pageHtml = aiChatRegisterHtml();
     else if (saasView === "settings-nav") pageHtml = newSettingsHtml();
     else if (saasView === "team-approval") pageHtml = teamApprovalHtml();
+    else if (saasView === "shelf-scan") pageHtml = shelfScanHtml();
     else pageHtml = dashboardHtml();
   } else if (view === "home") {
     pageHtml = homeHtml();
@@ -1718,11 +1719,12 @@ function sidebarHtml() {
     { id:"spec-sheet-nav",      label:"商品規格書",     ico:"📋" },
     { id:"ai-descriptions-nav", label:"AI説明文",      ico:"✨" },
     { id:"ai-consult-nav",      label:"AI相談",        ico:"💬" },
+    { id:"shelf-scan",          label:"AI棚スキャン",  ico:"📷", beta:true },
   ];
   const settingItem = { id:"settings-nav", label:"設定", ico:"⚙️" };
   const active = saasView;
   const navLink = (it) => `<button class="nav-item${active===it.id?" active":""}" data-nav="${it.id}">
-    <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>
+    <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>${it.beta?'<span class="nav-beta">β</span>':""}
   </button>`;
   const reviewCount = products.filter(p => p.approvalStatus === "review").length;
   const reviewBadge = reviewCount > 0 ? `<span class="nav-review-badge">${reviewCount}</span>` : "";
@@ -3711,7 +3713,218 @@ const AI_ANALYSIS_STEPS = [
   "表示内容を作成しています...",
 ];
 
+// ════════════════════════════════════════════════════════════════════════
+// AI棚スキャン
+// Vision API 接続箇所: analyzeShelfImage() のみを差し替えれば本番AIへ切替可能
+// ════════════════════════════════════════════════════════════════════════
+
+async function analyzeShelfImage(_base64) {
+  // ── ダミー実装（本番ではこの中身をAPI呼び出しに差し替え） ──
+  // 将来の実装例:
+  //   const res = await fetch("/api/shelf-scan", {
+  //     method: "POST",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: JSON.stringify({ base64: _base64 })
+  //   });
+  //   return await res.json(); // → [{ detectedName, quantity, unit, confidence }, ...]
+  await new Promise(r => setTimeout(r, 2500));
+  return [
+    { detectedName: "ドーナツミックス", quantity: 18,  unit: "袋",  confidence: 92 },
+    { detectedName: "きな粉",           quantity:  6,  unit: "袋",  confidence: 87 },
+    { detectedName: "包装袋",           quantity: 320, unit: "枚",  confidence: 78 },
+    { detectedName: "砂糖",             quantity: 12,  unit: "袋",  confidence: 95 },
+  ];
+}
+
+function matchProductByName(name) {
+  if (!name || !products.length) return null;
+  const lower = name.toLowerCase().replace(/\s/g, "");
+  return products.find(p => {
+    const pn = (p.name || p.internalName || "").toLowerCase().replace(/\s/g, "");
+    return pn.length >= 2 && (pn.includes(lower) || lower.includes(pn));
+  }) || null;
+}
+
+function shelfScanConfidenceColor(c) {
+  if (c >= 90) return "#16a34a";
+  if (c >= 75) return "#d97706";
+  return "#dc2626";
+}
+
+function shelfScanHtml() {
+  // ── アップロード画面 ──
+  if (shelfScanPhase === "upload") {
+    return saasLayout("AI棚スキャン β", `
+      <div class="shelf-scan-wrap">
+        <div class="shelf-scan-header">
+          <h2 class="shelf-scan-title">📷 AI棚スキャン <span class="shelf-beta-badge">β</span></h2>
+          <p class="shelf-scan-desc">棚の写真をアップロードするだけで在庫を自動認識します。<br>認識結果を確認・修正してから保存できます。</p>
+        </div>
+        <div class="shelf-upload-zone" id="shelf-drop-zone">
+          <input type="file" id="shelf-file-input" accept="image/*" style="display:none">
+          <div class="shelf-upload-icon">📸</div>
+          <div class="shelf-upload-main">ここに棚の写真をドラッグ＆ドロップ</div>
+          <div class="shelf-upload-sub">または</div>
+          <button class="action secondary" id="shelf-select-btn">写真を選択</button>
+          <div class="shelf-upload-note">JPG・PNG・HEIC・WebP 対応　スマホ撮影もOK</div>
+        </div>
+        <div class="shelf-scan-tips">
+          <div class="shelf-tip">💡 棚全体が写るように撮影するとより正確に認識します</div>
+          <div class="shelf-tip">💡 商品名・数量ラベルが見える角度がおすすめです</div>
+        </div>
+        ${shelfScanError ? `<p style="color:#dc2626;margin-top:12px">⚠ ${escapeHtml(shelfScanError)}</p>` : ""}
+      </div>`);
+  }
+
+  // ── 解析中 ──
+  if (shelfScanPhase === "analyzing") {
+    return saasLayout("AI棚スキャン β", `
+      <div class="shelf-scan-wrap">
+        <div class="shelf-analyzing-card">
+          <div class="shelf-analyzing-spinner"></div>
+          <div class="shelf-analyzing-title">AIが棚を解析しています…</div>
+          <div class="shelf-analyzing-steps">
+            <div class="shelf-step done">✓ 画像を読み込みました</div>
+            <div class="shelf-step active">● 商品を認識しています</div>
+            <div class="shelf-step">○ 在庫数を推定しています</div>
+            <div class="shelf-step">○ 商品マスターと照合しています</div>
+          </div>
+          <p class="shelf-analyzing-note">通常10〜30秒かかります</p>
+        </div>
+      </div>`);
+  }
+
+  // ── 保存完了 ──
+  if (shelfScanPhase === "saved") {
+    const savedCount = shelfScanItems.filter(i => i.matchedProductId).length;
+    return saasLayout("AI棚スキャン β", `
+      <div class="shelf-scan-wrap" style="text-align:center">
+        <div class="shelf-saved-card">
+          <div style="font-size:52px;margin-bottom:12px">✅</div>
+          <div class="shelf-saved-title">在庫を更新しました</div>
+          <p class="shelf-saved-desc">${savedCount}件の商品の現在在庫を更新しました。</p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:20px">
+            <button class="action primary" data-action="shelf-scan-retry">新しい写真をスキャン</button>
+            <button class="action" data-nav="products">商品管理へ</button>
+          </div>
+        </div>
+      </div>`);
+  }
+
+  // ── 結果表示 ──
+  const cardsHtml = shelfScanItems.map((item, idx) => {
+    const matched = item.matchedProductId ? products.find(p => p.id === item.matchedProductId) : null;
+    const confidenceColor = shelfScanConfidenceColor(item.confidence);
+    const matchBadge = matched
+      ? `<span class="shelf-match-badge matched">✅ ${escapeHtml(matched.name || matched.internalName || "登録済")}</span>`
+      : `<span class="shelf-match-badge new">❓ 未登録商品</span>`;
+    return `
+      <div class="shelf-item-card${matched ? "" : " shelf-item-unmatched"}">
+        <div class="shelf-item-header">
+          <div class="shelf-item-name">${escapeHtml(item.detectedName)}</div>
+          ${matchBadge}
+        </div>
+        <div class="shelf-item-confidence">
+          <span style="color:${confidenceColor};font-weight:600">信頼度 ${item.confidence}%</span>
+          <div class="shelf-confidence-bar"><div class="shelf-confidence-fill" style="width:${item.confidence}%;background:${confidenceColor}"></div></div>
+        </div>
+        <div class="shelf-item-qty-row">
+          <span class="shelf-qty-label">数量</span>
+          <button class="shelf-qty-btn" data-action="shelf-scan-qty-minus" data-idx="${idx}">−</button>
+          <input class="shelf-qty-input" type="number" min="0" value="${item.quantity}" data-shelf-qty="${idx}">
+          <span class="shelf-qty-unit">${escapeHtml(item.unit)}</span>
+          <button class="shelf-qty-btn" data-action="shelf-scan-qty-plus" data-idx="${idx}">＋</button>
+        </div>
+        ${!matched ? `<div class="shelf-item-new-hint">この商品は登録されていません。保存後に手動で登録できます。</div>` : ""}
+      </div>`;
+  }).join("");
+
+  const matchedCount = shelfScanItems.filter(i => i.matchedProductId).length;
+  const newCount = shelfScanItems.length - matchedCount;
+
+  return saasLayout("AI棚スキャン β", `
+    <div class="shelf-scan-wrap">
+      <div class="shelf-results-header">
+        <div>
+          <h2 class="shelf-scan-title">解析完了 — ${shelfScanItems.length}件を認識</h2>
+          <p class="shelf-results-summary">登録済み <strong>${matchedCount}件</strong> ／ 新規候補 <strong>${newCount}件</strong></p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="action" data-action="shelf-scan-retry">撮り直す</button>
+          <button class="action primary" data-action="shelf-scan-save">在庫に保存</button>
+        </div>
+      </div>
+      <div class="shelf-items-grid">${cardsHtml}</div>
+      <div class="shelf-results-footer">
+        <button class="action" data-action="shelf-scan-retry">撮り直す</button>
+        <button class="action primary" data-action="shelf-scan-save">在庫に保存する</button>
+      </div>
+    </div>`);
+}
+
+async function runShelfScan(file) {
+  shelfScanPhase = "analyzing";
+  shelfScanError = "";
+  render();
+  try {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const raw = await analyzeShelfImage(base64);
+    shelfScanItems = raw.map(item => ({
+      ...item,
+      matchedProductId: matchProductByName(item.detectedName)?.id || null,
+    }));
+    shelfScanPhase = "results";
+  } catch(e) {
+    shelfScanError = e.message || "解析に失敗しました。";
+    shelfScanPhase = "upload";
+  }
+  render();
+}
+
+function saveShelfScanResults() {
+  const today = new Date().toLocaleDateString("ja-JP");
+  const history = JSON.parse(safeGet("fmcc-shelf-history") || "[]");
+  const entry = { date: today, items: [] };
+  shelfScanItems.forEach(item => {
+    if (!item.matchedProductId) return;
+    const p = products.find(x => x.id === item.matchedProductId);
+    if (!p) return;
+    const prevStock = p.currentStock ?? null;
+    p.currentStock = item.quantity;
+    p.stockUnit = item.unit;
+    p.updatedAt = today;
+    entry.items.push({
+      name: p.name || p.internalName || item.detectedName,
+      from: prevStock,
+      to: item.quantity,
+      unit: item.unit,
+    });
+  });
+  history.unshift(entry);
+  safeSet("fmcc-shelf-history", JSON.stringify(history.slice(0, 100)));
+  saveProducts();
+  shelfScanPhase = "saved";
+  render();
+}
+
 function photoRegisterHtml() {
+  return saasLayout("写真から登録", `
+    <div class="ai-analysis-wrap">
+      <div class="ai-analysis-card" style="text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">🚧</div>
+        <div class="ai-analysis-title" style="color:#64748b">写真解析機能は準備中です</div>
+        <p style="color:#94a3b8;margin:12px 0 24px;line-height:1.6">この機能は現在開発中です。<br>近日中に提供予定です。</p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="action" data-nav="products">商品管理へ戻る</button>
+          <button class="action secondary" data-reg-mode="manual">手動で登録する</button>
+        </div>
+      </div>
+    </div>`);
   if (aiRegError) {
     return saasLayout("写真から登録", `
       <div class="ai-analysis-wrap">

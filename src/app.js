@@ -2388,6 +2388,7 @@ function productsListHtml() {
             ${p.category?`<span class="meta-item">${escapeHtml(p.category)}</span>`:""}
             ${p.price?`<span class="meta-item">¥${escapeHtml(p.price)}</span>`:""}
             <span class="meta-item">更新：${escapeHtml(p.updatedAt||"")}</span>
+            ${(p.currentStock!=null&&p.currentStock!=="") ? `<span class="meta-item meta-stock">📦 在庫：${escapeHtml(String(p.currentStock))}${escapeHtml(p.stockUnit||"")}</span>` : ""}
             ${expiryChip}
           </div>
           <div class="comp-section">
@@ -2642,6 +2643,19 @@ function productDetailHtml() {
             <label class="field"><span>荷姿</span><input data-master-field="packaging" value="${escapeHtml(p.packaging||"")}" placeholder="例：段ボール箱"></label>
             <label class="field"><span>ケース入数</span><input data-master-field="caseCount" value="${escapeHtml(p.caseCount||"")}" placeholder="例：12個"></label>
             <label class="field full"><span>製品サイズ</span><input data-master-field="productSize" value="${escapeHtml(p.productSize||"")}" placeholder="例：W120×D80×H40mm / 150g"></label>
+          </div>
+        </div>
+        <div class="detail-section">
+          <h3 class="detail-section-title">在庫情報 <span class="field-opt">任意</span></h3>
+          <p class="field-hint" style="margin-bottom:12px">AI棚スキャンで自動更新できます。手動での上書きも可能です。</p>
+          <div class="field-grid">
+            <label class="field"><span>現在の在庫数</span><input type="number" min="0" step="1" data-master-field="currentStock" value="${escapeHtml(String(p.currentStock??''))}" placeholder="例：100"></label>
+            <label class="field"><span>単位</span>
+              <select data-master-field="stockUnit">
+                ${["袋","箱","枚","kg","g","本","個","缶","瓶","パック"].map(u=>`<option value="${u}"${(p.stockUnit||"袋")===u?" selected":""}>${u}</option>`).join("")}
+                <option value="その他"${(p.stockUnit||"袋")==="その他"?" selected":""}>その他</option>
+              </select>
+            </label>
           </div>
         </div>
       </div>

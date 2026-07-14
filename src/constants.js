@@ -37,6 +37,25 @@ const PLANS = {
   pro: { label: "プロ", price: "3,980円/月", limit: Infinity, note: "無制限" },
 };
 
+// Stripe Payment Links（Stripeダッシュボードで作成後にURLを差し替えてください）
+const STRIPE_LINKS = {
+  starter: "https://buy.stripe.com/PLACEHOLDER_STARTER",
+  pro:     "https://buy.stripe.com/PLACEHOLDER_PRO",
+};
+
+// 商品テンプレート（カテゴリ別初期設定プリセット）
+const PRODUCT_TEMPLATES = [
+  { id:"confectionery", icon:"🍪", label:"お菓子・スイーツ",    desc:"クッキー・ケーキ・チョコレートなど", defaults:{ category:"お菓子",       storage:"直射日光・高温多湿を避けて保存", manufacturerType:"製造者", manufacturerTypes:["製造者"] } },
+  { id:"bread",         icon:"🍞", label:"パン・ベーカリー",    desc:"食パン・菓子パン・ロールパンなど",   defaults:{ category:"パン",         storage:"直射日光・高温多湿を避けて保存", manufacturerType:"製造者", manufacturerTypes:["製造者"] } },
+  { id:"sauce",         icon:"🫙", label:"調味料・たれ・ソース", desc:"醤油・ドレッシング・たれ類など",     defaults:{ category:"調味料",       storage:"高温多湿を避けて保存",          manufacturerType:"製造者", manufacturerTypes:["製造者"] } },
+  { id:"frozen",        icon:"🧊", label:"冷凍食品",           desc:"冷凍弁当・餃子・唐揚げなど",         defaults:{ category:"冷凍食品",     storage:"冷凍保存（-18℃以下）",          manufacturerType:"製造者", manufacturerTypes:["製造者"] } },
+  { id:"beverage",      icon:"🥤", label:"飲料・ジュース",     desc:"ジュース・お茶・健康飲料など",        defaults:{ category:"飲料",         storage:"高温多湿を避けて保存",          manufacturerType:"製造者", manufacturerTypes:["製造者"] } },
+  { id:"retort",        icon:"🥘", label:"レトルト・惣菜",     desc:"カレー・スープ・惣菜パックなど",      defaults:{ category:"レトルト食品", storage:"直射日光・高温多湿を避けて保存", manufacturerType:"製造者", manufacturerTypes:["製造者"] } },
+  { id:"supplement",    icon:"💊", label:"健康食品・サプリ",   desc:"機能性食品・栄養補助食品など",        defaults:{ category:"健康食品",     storage:"直射日光・高温多湿を避けて保存", manufacturerType:"販売者", manufacturerTypes:["販売者"] } },
+  { id:"noodle",        icon:"🍜", label:"麺類・乾物",         desc:"パスタ・うどん・乾燥麺など",          defaults:{ category:"麺類",         storage:"直射日光・高温多湿を避けて保存", manufacturerType:"製造者", manufacturerTypes:["製造者"] } },
+  { id:"blank",         icon:"📄", label:"空白（テンプレートなし）", desc:"すべて空白の状態から始める",    defaults:{} },
+];
+
 // 商品ライフサイクルステータス（下書き→販売中→終了）
 const PRODUCT_STATUSES = [
   { id: "draft",        label: "下書き",   color: "#94a3b8", bg: "#f1f5f9" },

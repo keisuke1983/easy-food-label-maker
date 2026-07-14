@@ -120,6 +120,48 @@ function setupDelegation() {
         case "open-print-preview": printPreviewOpen = true; render(); return;
         case "close-print-preview": printPreviewOpen = false; render(); return;
         case "add-ing": { const p = currentProduct(); p.ingredients.push({ id: uid(), name: "", weight: "" }); render(); return; }
+        case "add-master-ing": {
+          const p = products.find(x=>x.id===productDetailId); if(!p)return;
+          if (!Array.isArray(p.ingredients)) p.ingredients = [];
+          p.ingredients.push({ id: uid(), name: "", weight: "" });
+          render();
+          requestAnimationFrame(() => {
+            const inputs = document.querySelectorAll("[data-master-ing-name]");
+            if (inputs.length) inputs[inputs.length-1].focus();
+          });
+          return;
+        }
+        case "sort-master-ing": {
+          const p = products.find(x=>x.id===productDetailId); if(!p)return;
+          const withW = p.ingredients.filter(i=>parseFloat(i.weight)>0).sort((a,b)=>parseFloat(b.weight)-parseFloat(a.weight));
+          const noW   = p.ingredients.filter(i=>!(parseFloat(i.weight)>0));
+          p.ingredients = [...withW, ...noW];
+          saveProducts(); render(); return;
+        }
+        case "master-auto-fix": {
+          const p = products.find(x=>x.id===productDetailId); if(!p)return;
+          const { next, changes } = normalizeLabelText(p);
+          if (!changes.length) { showStatus("整形できる項目がありませんでした"); return; }
+          Object.assign(p, next);
+          saveProducts();
+          render();
+          showStatus(`✨ ${changes.length}件を自動整形しました：${changes.slice(0,3).join("・")}${changes.length>3?"…":""}`);
+          return;
+        }
+        case "suggest-storage": {
+          const p = products.find(x=>x.id===productDetailId); if(!p)return;
+          const suggestion = suggestStorage(p.ingredients);
+          const el = document.querySelector("[data-master-field='storage']");
+          if (el && suggestion) {
+            el.value = suggestion;
+            p.storage = suggestion;
+            scheduleAutoSaveMaster();
+            el.classList.add("field-highlight");
+            setTimeout(() => el.classList.remove("field-highlight"), 2000);
+            showStatus(`✦ 保存方法を提案しました`);
+          }
+          return;
+        }
         case "toggle-bulk-paste": { ingBulkPasteOpen = !ingBulkPasteOpen; render(); return; }
         case "confirm-bulk-paste": {
           const ta = document.getElementById("bulk-paste-textarea");
@@ -156,9 +198,76 @@ function setupDelegation() {
         case "copy-ai-desc": { const ta=document.getElementById("ai-desc-prompt"); if(ta) copyPlainText(ta.value); return; }
         case "copy-ai-result": { const ta=document.getElementById("ai-result-text"); if(ta){ta.select();copyPlainText(ta.value);showStatus("コピーしました");} return; }
         case "save-ai-result": { const ta=document.getElementById("ai-result-text"); if(!ta)return; const pid=aiDescId||(products.find(x=>x.name?.trim())?.id); if(!pid)return; aiEditText=ta.value; saveAiText(pid,aiDescChannel,ta.value); showStatus("保存しました"); render(); return; }
+        case "activate-license": { activateLicense(); return; }
+        case "bulk-apply-status": {
+          const sel = document.getElementById("bulk-status-select");
+          const newStatus = sel?.value;
+          if (!newStatus) { showStatus("ステータスを選択してください"); return; }
+          const ps = PRODUCT_STATUSES.find(s => s.id === newStatus);
+          const today = new Date().toLocaleDateString("ja-JP");
+          let count = 0;
+          products = products.map(p => {
+            if (!masterSelected.has(p.id)) return p;
+            count++;
+            return { ...p, productStatus: newStatus, updatedAt: today };
+          });
+          saveProducts();
+          masterSelected.clear();
+          showStatus(`${count}件のステータスを「${ps?.label || newStatus}」に変更しました`);
+          render(); return;
+        }
+        case "clear-bulk-select": {
+          masterSelected.clear(); render(); return;
+        }
+        case "save-as-template": {
+          const pid = ael.dataset.pid;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          const label = `${p.category||""}${p.category?"・":""}${p.internalName||p.name||"テンプレート"}`.slice(0, 40);
+          const userTpls = JSON.parse(safeGet("fmcc-user-templates") || "[]");
+          if (userTpls.length >= 10) { showStatus("テンプレートは最大10件まで保存できます。不要なものを削除してください。"); return; }
+          const newTpl = {
+            id: uid(), label, savedAt: new Date().toLocaleDateString("ja-JP"),
+            defaults: {
+              category: p.category||"", storage: p.storage||"直射日光・高温多湿を避けて保存", storageCustom: p.storageCustom||"",
+              manufacturerType: p.manufacturerType||"製造者", manufacturerTypes: p.manufacturerTypes||["製造者"],
+              manufacturerName: p.manufacturerName||"", manufacturerPostal: p.manufacturerPostal||"",
+              manufacturerAddress: p.manufacturerAddress||"", manufacturerPhone: p.manufacturerPhone||"",
+            }
+          };
+          safeSet("fmcc-user-templates", JSON.stringify([newTpl, ...userTpls]));
+          showStatus(`「${label}」をテンプレートとして保存しました`); return;
+        }
         case "remove-product-image": { const p=products.find(x=>x.id===productDetailId); if(!p)return; p.imageDataUrl=""; saveProducts(); render(); return; }
         case "add-cost-item": { const p=products.find(x=>x.id===productDetailId); if(!p)return; saveCostItems(); p.costItems=[...(p.costItems||[]),{id:uid(),name:"",amount:"",unit:"g",unitPrice:""}]; saveProducts(); render(); return; }
         case "add-additive-kw": { const inp=document.getElementById("additive-kw-input"); if(!inp)return; const kws=inp.value.split(/[、,，\s]+/).map(s=>s.trim()).filter(Boolean); if(!kws.length)return; userAdditiveKw=[...new Set([...userAdditiveKw,...kws])]; safeSet("food-label-additive-kw",JSON.stringify(userAdditiveKw)); render(); return; }
+        case "save-company-info": {
+          const info = {
+            companyName:       document.getElementById("ci-company-name")?.value?.trim() || "",
+            manufacturerName:  document.getElementById("ci-mfr-name")?.value?.trim() || "",
+            manufacturerAddress: document.getElementById("ci-mfr-address")?.value?.trim() || "",
+            manufacturerPhone: document.getElementById("ci-mfr-phone")?.value?.trim() || "",
+          };
+          safeSet("fmcc-company-info", JSON.stringify(info));
+          showStatus("会社情報を保存しました。次回の新規商品作成から自動入力されます。");
+          render(); return;
+        }
+        case "apply-company-info-all": {
+          const ci = (() => { try { return JSON.parse(safeGet("fmcc-company-info") || "{}"); } catch { return {}; } })();
+          if (!ci.manufacturerName && !ci.manufacturerAddress) { showStatus("先に会社情報を保存してください"); return; }
+          showModal({ message: `全${products.length}件の商品の製造者情報（空欄のみ）を更新しますか？`, confirmLabel: "適用する", cancelLabel: "キャンセル",
+            onConfirm: () => {
+              let updated = 0;
+              products.forEach(p => {
+                let changed = false;
+                if (ci.manufacturerName  && !p.manufacturerName?.trim())  { p.manufacturerName  = ci.manufacturerName;  changed = true; }
+                if (ci.manufacturerAddress && !p.manufacturerAddress?.trim()) { p.manufacturerAddress = ci.manufacturerAddress; changed = true; }
+                if (ci.manufacturerPhone && !p.manufacturerPhone?.trim()) { p.manufacturerPhone = ci.manufacturerPhone; changed = true; }
+                if (changed) updated++;
+              });
+              saveProducts(); showStatus(`${updated}件の商品に製造者情報を適用しました`); render();
+            }
+          }); return;
+        }
         case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("URLとAPIキーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("URLはhttps://で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("Supabase設定を保存しました"); render(); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
@@ -202,6 +311,7 @@ function setupDelegation() {
       const snapshot = structuredClone(p);
       const histKey = `food-label-history-${p.id}`;
       const histSnap = localStorage.getItem(histKey);
+      trackCloudDelete(p.id);
       products = products.filter(x=>x.id!==p.id);
       safeDel(histKey);
       saveProducts(); render();
@@ -325,6 +435,33 @@ function setupDelegation() {
       return;
     }
 
+    // [data-open-and-jump] — カードビューの未入力バッジ → 商品詳細の対象フィールドへ
+    const openJumpEl = t.closest("[data-open-and-jump]");
+    if (openJumpEl) {
+      const raw = openJumpEl.dataset.openAndJump;
+      const colonIdx = raw.indexOf(":");
+      if (colonIdx < 0) return;
+      const pid = raw.slice(0, colonIdx);
+      const label = raw.slice(colonIdx + 1);
+      const entry = DETAIL_JUMP_MAP[label];
+      productDetailId = pid;
+      saasView = "product-detail";
+      view = "saas";
+      safeSet("fmcc-view", saasView);
+      if (entry) { productDetailTab = entry.tab; }
+      render();
+      if (entry) requestAnimationFrame(() => {
+        const el = document.querySelector(entry.field);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+          el.classList.add("field-highlight");
+          setTimeout(() => el.classList.remove("field-highlight"), 2000);
+        }
+      });
+      return;
+    }
+
     // [data-nav-product-detail]
     const navPdEl = t.closest("[data-nav-product-detail]");
     if (navPdEl && !t.closest(".master-card-actions")) { productDetailId=navPdEl.dataset.navProductDetail;saasView="product-detail";view="saas";safeSet("fmcc-view",saasView);render(); return; }
@@ -380,6 +517,93 @@ function setupDelegation() {
     const setCompEl = t.closest("[data-set-completion-filter]");
     if (setCompEl) { masterCompletionFilter=setCompEl.dataset.setCompletionFilter; masterFilter="all"; masterCategoryFilter=""; saasView="products"; view="saas"; safeSet("fmcc-view",saasView); render(); return; }
 
+    // [data-jump-to-field] — 詳細ページの未入力バッジ → 対応フィールドへスクロール
+    const jumpFieldEl = t.closest("[data-jump-to-field]");
+    if (jumpFieldEl) {
+      const label = jumpFieldEl.dataset.jumpToField;
+      const entry = DETAIL_JUMP_MAP[label];
+      if (!entry) return;
+      if (productDetailTab !== entry.tab) { productDetailTab = entry.tab; render(); }
+      requestAnimationFrame(() => {
+        const el = document.querySelector(entry.field);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+          el.classList.add("field-highlight");
+          setTimeout(() => el.classList.remove("field-highlight"), 2000);
+        }
+      });
+      return;
+    }
+
+    // [data-master-view] — カード/テーブル表示切替
+    const masterViewEl = t.closest("[data-master-view]");
+    if (masterViewEl) { masterView=masterViewEl.dataset.masterView; safeSet("fmcc-master-view",masterView); render(); return; }
+
+    // [data-use-template] — ビルトインテンプレートで新規作成
+    const useTplEl = t.closest("[data-use-template]");
+    if (useTplEl) {
+      if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。プランを変更してください。` }); return; }
+      const tpl = PRODUCT_TEMPLATES.find(x => x.id === useTplEl.dataset.useTemplate);
+      const newProduct = extendProductMaster({ ...emptyProduct(), ...(tpl?.defaults || {}) });
+      products = [newProduct, ...products];
+      saveProducts();
+      productDetailId = newProduct.id; productDetailTab = "basic"; saasView = "product-detail"; view = "saas";
+      safeSet("fmcc-view", saasView);
+      showStatus(tpl && tpl.id !== "blank" ? `「${tpl.label}」テンプレートを適用しました` : "新規商品を作成しました");
+      render(); return;
+    }
+
+    // [data-use-user-template] — ユーザー定義テンプレートで新規作成
+    const useUserTplEl = t.closest("[data-use-user-template]");
+    if (useUserTplEl) {
+      if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
+      const userTpls = JSON.parse(safeGet("fmcc-user-templates") || "[]");
+      const tpl = userTpls[Number(useUserTplEl.dataset.useUserTemplate)];
+      if (!tpl) return;
+      const newProduct = extendProductMaster({ ...emptyProduct(), ...(tpl.defaults || {}) });
+      products = [newProduct, ...products];
+      saveProducts();
+      productDetailId = newProduct.id; productDetailTab = "basic"; saasView = "product-detail"; view = "saas";
+      safeSet("fmcc-view", saasView);
+      showStatus(`「${tpl.label}」テンプレートを適用しました`);
+      render(); return;
+    }
+
+    // [data-copy-from] — 既存商品コピーで新規作成
+    const copyFromEl = t.closest("[data-copy-from]");
+    if (copyFromEl) {
+      if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
+      const src = products.find(x => x.id === copyFromEl.dataset.copyFrom); if (!src) return;
+      const newProduct = {
+        ...structuredClone(src), id: uid(),
+        name: src.name ? `${src.name}（コピー）` : "",
+        internalName: src.internalName ? `${src.internalName}（コピー）` : "",
+        updatedAt: new Date().toLocaleDateString("ja-JP"),
+        createdAt: new Date().toLocaleDateString("ja-JP"),
+        ingredients: (src.ingredients||[]).map(i => ({ ...i, id: uid() })),
+        productStatus: "draft", approvalStatus: "none", assignedTo: "", approverName: "", approvalDate: "",
+      };
+      products = [newProduct, ...products];
+      saveProducts();
+      productDetailId = newProduct.id; productDetailTab = "basic"; saasView = "product-detail"; view = "saas";
+      safeSet("fmcc-view", saasView);
+      showStatus("商品をコピーしました。商品名を更新してください。");
+      render(); return;
+    }
+
+    // [data-del-user-tpl] — ユーザーテンプレート削除
+    const delUserTplEl = t.closest("[data-del-user-tpl]");
+    if (delUserTplEl) {
+      const idx = Number(delUserTplEl.dataset.delUserTpl);
+      const userTpls = JSON.parse(safeGet("fmcc-user-templates") || "[]");
+      const removed = userTpls[idx];
+      const updated = userTpls.filter((_,i) => i !== idx);
+      safeSet("fmcc-user-templates", JSON.stringify(updated));
+      showStatus(removed ? `「${removed.label}」を削除しました` : "テンプレートを削除しました");
+      render(); return;
+    }
+
     // [data-save-search] — 保存済み検索プリセット保存
     const saveSearchEl = t.closest("[data-save-search]");
     if (saveSearchEl) {
@@ -427,6 +651,52 @@ function setupDelegation() {
     const removeCostEl = t.closest("[data-remove-cost]");
     if (removeCostEl) { const p=products.find(x=>x.id===productDetailId); if(!p)return; saveCostItems(); const i=parseInt(removeCostEl.dataset.removeCost); p.costItems.splice(i,1);saveProducts();render(); return; }
 
+    // [data-quick-best-before] — 賞味期限クイック入力
+    const quickBBEl = t.closest("[data-quick-best-before]");
+    if (quickBBEl) {
+      const val = quickBBEl.dataset.quickBestBefore;
+      const el = document.querySelector("[data-master-field='bestBefore']");
+      if (el) {
+        el.value = val;
+        const p = products.find(x=>x.id===productDetailId); if(!p)return;
+        p.bestBefore = val;
+        scheduleAutoSaveMaster();
+        el.classList.add("field-highlight");
+        setTimeout(() => el.classList.remove("field-highlight"), 2000);
+      }
+      return;
+    }
+
+    // [data-remove-master-ing] — 原材料タブのインライン削除
+    const removeMasterIngEl = t.closest("[data-remove-master-ing]");
+    if (removeMasterIngEl) {
+      const p = products.find(x=>x.id===productDetailId); if(!p)return;
+      const idx = parseInt(removeMasterIngEl.dataset.removeMasterIng);
+      p.ingredients.splice(idx, 1);
+      if (!p.ingredients.length) p.ingredients = [{ id: uid(), name: "", weight: "" }];
+      saveProducts(); render(); return;
+    }
+
+    // [data-check-fix] — チェックタブの「修正する →」ジャンプ
+    const checkFixEl = t.closest("[data-check-fix]");
+    if (checkFixEl) {
+      const field = checkFixEl.dataset.checkFix;
+      const entry = CHECK_FIX_MAP[field];
+      if (!entry) return;
+      productDetailTab = entry.tab;
+      render();
+      if (entry.selector) requestAnimationFrame(() => {
+        const el = document.querySelector(entry.selector);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+          el.classList.add("field-highlight");
+          setTimeout(() => el.classList.remove("field-highlight"), 2000);
+        }
+      });
+      return;
+    }
+
     // [data-del-additive-kw]
     const delKwEl = t.closest("[data-del-additive-kw]");
     if (delKwEl) { const i=parseInt(delKwEl.dataset.delAdditiveKw); userAdditiveKw=userAdditiveKw.filter((_,idx)=>idx!==i); safeSet("food-label-additive-kw",JSON.stringify(userAdditiveKw));render(); return; }
@@ -434,6 +704,26 @@ function setupDelegation() {
     // [data-remove-ing]
     const remIngEl = t.closest("[data-remove-ing]");
     if (remIngEl) { const p=currentProduct(); p.ingredients.splice(Number(remIngEl.dataset.removeIng),1); if(!p.ingredients.length) p.ingredients.push({id:uid(),name:"",weight:""}); render(); return; }
+  });
+
+  // ── keydown: グローバルナビゲーションショートカット (d/p/n/Esc) ──
+  document.addEventListener("keydown", e => {
+    if (e.target.matches("input,textarea,select,[contenteditable]")) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (view !== "saas") return;
+    if (e.key === "d") { e.preventDefault(); saasView="dashboard"; masterSelected=new Set(); render(); return; }
+    if (e.key === "p") { e.preventDefault(); saasView="products"; masterSelected=new Set(); render(); return; }
+    if (e.key === "n") { e.preventDefault(); saasView="products"; masterSelected=new Set(); registerMenuOpen=true; render(); return; }
+    if (e.key === "?") { e.preventDefault(); showShortcutsPanel(); return; }
+    if (saasView === "product-detail" && productDetailId) {
+      const DETAIL_TABS = ["basic","ingredients","cost","check","history","approval"];
+      const tidx = parseInt(e.key) - 1;
+      if (tidx >= 0 && tidx < DETAIL_TABS.length) { e.preventDefault(); productDetailTab = DETAIL_TABS[tidx]; render(); return; }
+    }
+    if (e.key === "Escape") {
+      if (sidebarOpen) { e.preventDefault(); sidebarOpen=false; render(); return; }
+      if (productDetailId && saasView==="product-detail") { e.preventDefault(); productDetailId=null; saasView="products"; render(); return; }
+    }
   });
 
   // ── keydown: role="button" 要素のEnter/Spaceキー活性化 ──
@@ -450,6 +740,24 @@ function setupDelegation() {
   document.addEventListener("keydown", e => {
     if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
     const t = e.target;
+    if (t.matches("[data-master-ing-name]")) {
+      e.preventDefault();
+      const idx = Number(t.dataset.masterIngName);
+      const weightEl = document.querySelector(`[data-master-ing-weight="${idx}"]`);
+      if (weightEl) { weightEl.focus(); weightEl.select(); }
+      return;
+    }
+    if (t.matches("[data-master-ing-weight]")) {
+      e.preventDefault();
+      const idx = Number(t.dataset.masterIngWeight);
+      const nextNameEl = document.querySelector(`[data-master-ing-name="${idx + 1}"]`);
+      if (nextNameEl) { nextNameEl.focus(); return; }
+      const p = products.find(x=>x.id===productDetailId); if(!p)return;
+      p.ingredients.push({ id: uid(), name: "", weight: "" });
+      render();
+      setTimeout(() => document.querySelector(`[data-master-ing-name="${idx + 1}"]`)?.focus(), 30);
+      return;
+    }
     if (t.matches("[data-ing-name]")) {
       e.preventDefault();
       const idx = Number(t.dataset.ingName);
@@ -487,6 +795,19 @@ function setupDelegation() {
     if (t.matches("[data-master-search]"))   { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{masterSearch=t.value;render();},200); return; }
     if (t.matches("[data-saved-search]"))    { clearTimeout(savedSearchTimer); savedSearchTimer=setTimeout(()=>{savedSearch=t.value;render();},200); return; }
     if (t.matches("[data-master-field]"))    { const f=t.dataset.masterField; if(["directCost","price","directPackaging","directShipping","directOther"].includes(f)) refreshCostKpis(); scheduleAutoSaveMaster(); return; }
+    // 原材料タブ インライン編集（master-ing-*）
+    if (t.matches("[data-master-ing-name]")) {
+      const p = products.find(x=>x.id===productDetailId); if(!p)return;
+      const ing = p.ingredients[Number(t.dataset.masterIngName)]; if(!ing)return;
+      ing.name = t.value.replace(/[\/／]/g, "");
+      scheduleAutoSaveMaster(); return;
+    }
+    if (t.matches("[data-master-ing-weight]")) {
+      const p = products.find(x=>x.id===productDetailId); if(!p)return;
+      const ing = p.ingredients[Number(t.dataset.masterIngWeight)]; if(!ing)return;
+      ing.weight = t.value;
+      scheduleAutoSaveMaster(); return;
+    }
   });
 
   // ── change ──
@@ -518,6 +839,45 @@ function setupDelegation() {
     if (t.matches("[data-master-category-filter]")) { masterCategoryFilter=t.value; render(); return; }
     if (t.matches("[data-master-completion-filter]")) { masterCompletionFilter=t.value; render(); return; }
     if (t.matches("[data-master-pipeline-filter]")) { masterPipelineFilter=t.value; render(); return; }
+    if (t.matches("[data-select-product]")) {
+      const pid = t.dataset.selectProduct;
+      const wasEmpty = masterSelected.size === 0;
+      if (t.checked) masterSelected.add(pid); else masterSelected.delete(pid);
+      const isNowEmpty = masterSelected.size === 0;
+      if (wasEmpty !== isNowEmpty) {
+        render();
+      } else {
+        const countEl = document.querySelector(".bulk-count");
+        if (countEl) countEl.textContent = `${masterSelected.size}件選択中`;
+        const allChk = document.querySelector("[data-select-all]");
+        if (allChk) {
+          const table = document.querySelector(".master-table[data-visible-ids]");
+          const ids = (table?.dataset.visibleIds || "").split(",").filter(Boolean);
+          allChk.checked = ids.length > 0 && ids.every(id => masterSelected.has(id));
+        }
+      }
+      return;
+    }
+    if (t.matches("[data-select-all]")) {
+      const table = document.querySelector(".master-table[data-visible-ids]");
+      const ids = (table?.dataset.visibleIds || "").split(",").filter(Boolean);
+      if (t.checked) ids.forEach(id => masterSelected.add(id));
+      else ids.forEach(id => masterSelected.delete(id));
+      render(); return;
+    }
+    if (t.matches("[data-quick-status-select]")) {
+      const pid = t.dataset.quickStatusSelect;
+      const p = products.find(x => x.id === pid);
+      if (p) {
+        p.productStatus = t.value;
+        p.updatedAt = new Date().toLocaleDateString("ja-JP");
+        saveProducts();
+        const ps = PRODUCT_STATUSES.find(s => s.id === t.value);
+        if (ps) { t.style.color = ps.color; t.style.background = ps.bg; t.style.borderColor = ps.color; }
+        showStatus(`ステータスを「${ps?.label || t.value}」に変更しました`);
+      }
+      return;
+    }
   });
 
   // ── グローバルキーボードショートカット ──
@@ -615,6 +975,7 @@ function bindDynamic() {
       e.stopPropagation();
       const mode=btn.dataset.regMode; registerMenuOpen=false; aiRegAnalysisStep=-1;
       if (mode==="manual") { draft=extendProductMaster(emptyProduct()); editId="new"; view="edit"; sidebarOpen=false; render(); return; }
+      if (mode==="template") { saasView="template-select"; safeSet("fmcc-view",saasView); render(); return; }
       if (mode==="ai-chat") { aiRegChatMessages=[{role:"ai",content:AI_CHAT_FLOW[0].q}]; aiRegChatInput=""; aiRegChatStep=0; aiRegChatDraft={}; saasView="reg-ai-chat"; }
       else { saasView=mode==="photo"?"reg-photo":"reg-spec"; }
       safeSet("fmcc-view",saasView); render();

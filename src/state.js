@@ -70,6 +70,8 @@ let teamMembers = (() => { try { return JSON.parse(safeGet("fmcc-team-members") 
 let currentUserName = safeGet("fmcc-current-user") || "";
 
 let masterPipelineFilter = ""; // "" | PRODUCT_STATUSES の id
+let masterView = safeGet("fmcc-master-view") || "card"; // "card" | "table"
+let masterSelected = new Set(); // テーブルビュー一括操作用選択済み商品ID
 
 // ── AI棚スキャン ────────────────────────────────────────────────────────
 let shelfScanPhase = "upload"; // "upload" | "analyzing" | "results" | "saved"

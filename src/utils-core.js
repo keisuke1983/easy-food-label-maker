@@ -11,11 +11,28 @@ function safeSet(key, value) {
   try { localStorage.setItem(key, value); }
   catch (e) {
     if (e && e.name === "QuotaExceededError") {
-      alert("保存容量が不足しています。商品画像を削除するか、不要な商品を整理してください。");
+      if (typeof showStatus === "function") {
+        showStatus("保存容量が不足しています。設定 → データのバックアップ からデータを書き出してください。", { duration: 8000 });
+      }
     }
   }
 }
+function getStorageInfo() {
+  try {
+    let total = 0;
+    for (const k of Object.keys(localStorage)) {
+      total += k.length + (localStorage.getItem(k) || "").length;
+    }
+    const maxChars = 5 * 1024 * 1024;
+    const pct = Math.min(100, Math.round(total / maxChars * 100));
+    const usedMB = (total / 1024 / 1024).toFixed(1);
+    return { pct, usedMB };
+  } catch {
+    return { pct: 0, usedMB: "0.0" };
+  }
+}
 function emptyProduct() {
+  const ci = (() => { try { return JSON.parse(safeGet("fmcc-company-info") || "{}"); } catch { return {}; } })();
   return {
     id: uid(), name: "", internalName: "", volume: "", volumeCustomUnit: false, bestBefore: "", serving: "", janCode: "",
     storage: STORAGE_OPTS[0], storageCustom: "",
@@ -23,9 +40,10 @@ function emptyProduct() {
     nutritionMode: "auto", nutritionManual: { kcal: "", protein: "", fat: "", carbs: "", salt: "" },
     allergensMode: "auto", allergensManual: "",
     contaminationEnabled: false, contaminationAllergens: "", contaminationText: "",
-    manufacturerType: "製造者", manufacturerTypes: ["製造者"], manufacturerName: "", manufacturerPostal: "", manufacturerAddress: "", manufacturerPhone: "",
+    manufacturerType: "製造者", manufacturerTypes: ["製造者"],
+    manufacturerName: ci.manufacturerName || "", manufacturerPostal: "", manufacturerAddress: ci.manufacturerAddress || "", manufacturerPhone: ci.manufacturerPhone || "",
     starred: false,
-    expiryDate: "",   // ISO日付 YYYY-MM-DD（管理用・ラベルには出力されない）
+    expiryDate: "",
     updatedAt: new Date().toLocaleDateString("ja-JP"),
   };
 }
@@ -48,7 +66,10 @@ function loadProducts() {
   }
   catch { return []; }
 }
-function saveProducts() { safeSet("food-label-products-static", JSON.stringify(products)); }
+function saveProducts() {
+  safeSet("food-label-products-static", JSON.stringify(products));
+  if (typeof scheduleCloudSync === "function") scheduleCloudSync();
+}
 function estimateNutrition(name) {
   const t = name.trim();
   if (!t) return null;

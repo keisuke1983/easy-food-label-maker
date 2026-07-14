@@ -1,25 +1,89 @@
 ﻿/* ── チュートリアル ── */
 const TUTORIAL_STEPS = [
-  { num: 1, title: "商品情報を入力", desc: "名称・内容量・賞味期限を入力してください。", hint: "左の「商品情報」セクションから始めましょう。" },
-  { num: 2, title: "原材料・栄養成分を確認", desc: "原材料を追加すると栄養成分が自動計算されます。", hint: "重量(g)を入力すると計算精度が上がります。" },
-  { num: 3, title: "右側でラベルを確認", desc: "入力内容がリアルタイムで右側のラベルに反映されます。", hint: "ズームボタンで拡大表示できます。" },
-  { num: 4, title: "保存・印刷する", desc: "内容確認後、「保存する」ボタンで保存し「印刷プレビュー」から印刷できます。", hint: "Ctrl+S でも保存できます。" },
+  {
+    icon: "🎉", color: "#2563eb", bg: "#eff6ff",
+    title: "FoodPilotへようこそ",
+    desc: "食品メーカー・小規模食品事業者のための商品管理＆食品表示ラベル作成ツールです。このガイドで主な使い方を説明します（約2分）。",
+    features: ["食品表示ラベルを自動生成", "AIで法令チェック・表示文作成", "複数商品をクラウドで一元管理"],
+    tip: "すでに使い方を知っている場合は「スキップ」してください。",
+  },
+  {
+    icon: "📦", color: "#7c3aed", bg: "#f5f3ff",
+    title: "商品を登録する",
+    desc: "左メニューの「商品管理」→「＋ 新しい商品を登録」から商品情報を入力します。",
+    features: ["商品名・内容量・賞味期限を入力", "原材料と重量(g)を入力すると栄養成分・アレルゲンを自動計算", "製造者・住所など会社情報も登録可能"],
+    tip: "原材料の重量(g)を入力すると栄養成分の計算精度が上がります。",
+  },
+  {
+    icon: "🏷", color: "#059669", bg: "#ecfdf5",
+    title: "食品表示ラベルを確認・印刷",
+    desc: "「ラベル作成」画面を開くと、入力内容がリアルタイムにラベルに反映されます。",
+    features: ["食品表示基準に準拠したレイアウト", "40×50mm〜カスタムサイズまで対応", "印刷・PDFダウンロード・ラベル業者入稿"],
+    tip: "ラベル画面の「拡大」ボタンで細部まで確認できます。印刷前に必ず確認を。",
+  },
+  {
+    icon: "🤖", color: "#d97706", bg: "#fffbeb",
+    title: "AIで表示内容をチェック",
+    desc: "商品詳細の「AIチェック」ボタンで、食品表示法の必須項目を自動確認できます。",
+    features: ["名称・原材料・賞味期限などの抜けを指摘", "アレルゲン自動検出（要目視確認）", "AI説明文・商品規格書・相談チャットも利用可能"],
+    tip: "AIの指摘はあくまで補助です。最終確認は必ず担当者が行ってください。",
+  },
+  {
+    icon: "👥", color: "#0891b2", bg: "#ecfeff",
+    title: "チームで確認・承認",
+    desc: "「チーム・承認」でメンバーを登録すると、商品ごとに確認依頼・承認ができます。",
+    features: ["管理者・編集者・確認者の役割設定", "確認依頼 → 承認 → 公開のワークフロー", "差し戻し・コメント機能"],
+    tip: "ダッシュボードの「承認待ち」カードから一覧確認できます。",
+  },
+  {
+    icon: "☁", color: "#2563eb", bg: "#eff6ff",
+    title: "クラウドでデータを保存・共有",
+    desc: "「設定」→「クラウド接続の設定」を行うと、別のパソコン・スマホからも同じデータにアクセスできます。",
+    features: ["保存のたびに自動でクラウドに同期", "別端末・スタッフとのデータ共有", "無料クラウドサービスで利用可能"],
+    tip: "クラウド接続は任意です。ローカル保存だけでも全機能使えます。",
+  },
+  {
+    icon: "📊", color: "#16a34a", bg: "#f0fdf4",
+    title: "ダッシュボードで全体を管理",
+    desc: "ダッシュボードでは全商品の状況をひと目で確認できます。これで準備完了です！",
+    features: ["完成度・賞味期限切れ・承認待ちを一覧表示", "優先タスクをAIが自動提案", "在庫・原価・売上のKPI管理"],
+    tip: "困ったときは設定画面の「使い方ガイドをもう一度見る」からいつでも確認できます。",
+  },
 ];
+
 function tutorialHtml() {
   if (!showTutorial) return "";
   const s = TUTORIAL_STEPS[tutorialStep];
-  const isLast = tutorialStep === TUTORIAL_STEPS.length - 1;
-  return `<div class="tutorial-overlay">
-    <div class="tutorial-card">
-      <div class="tutorial-steps-indicator">${TUTORIAL_STEPS.map((_, i) => `<span class="tutorial-dot${i === tutorialStep ? " active" : i < tutorialStep ? " done" : ""}"></span>`).join("")}</div>
-      <div class="tutorial-step-num">STEP ${s.num} / ${TUTORIAL_STEPS.length}</div>
-      <h2 class="tutorial-title">${escapeHtml(s.title)}</h2>
+  const total = TUTORIAL_STEPS.length;
+  const isLast = tutorialStep === total - 1;
+  const pct = Math.round((tutorialStep / (total - 1)) * 100);
+  return `<div class="tutorial-overlay" data-tutorial="skip">
+    <div class="tutorial-card" onclick="event.stopPropagation()">
+      <div class="tutorial-progress-bar"><div class="tutorial-progress-fill" style="width:${pct}%"></div></div>
+      <div class="tutorial-header">
+        <div class="tutorial-icon-wrap" style="background:${s.bg}">
+          <span class="tutorial-icon">${s.icon}</span>
+        </div>
+        <span class="tutorial-counter">${tutorialStep + 1} / ${total}</span>
+      </div>
+      <h2 class="tutorial-title" style="color:${s.color}">${escapeHtml(s.title)}</h2>
       <p class="tutorial-desc">${escapeHtml(s.desc)}</p>
-      <p class="tutorial-hint">💡 ${escapeHtml(s.hint)}</p>
+      <ul class="tutorial-features">
+        ${s.features.map(f => `<li><span class="tutorial-check" style="color:${s.color}">✓</span>${escapeHtml(f)}</li>`).join("")}
+      </ul>
+      <div class="tutorial-tip">💡 ${escapeHtml(s.tip)}</div>
       <div class="tutorial-actions">
         <button class="tutorial-skip" data-tutorial="skip">スキップ</button>
-        ${tutorialStep > 0 ? `<button class="action" data-tutorial="prev">← 戻る</button>` : ""}
-        ${isLast ? `<button class="action primary" data-tutorial="done">完了 ✓</button>` : `<button class="action primary" data-tutorial="next">次へ →</button>`}
+        <div class="tutorial-nav">
+          ${tutorialStep > 0 ? `<button class="action" data-tutorial="prev">← 戻る</button>` : ""}
+          ${isLast
+            ? `<button class="action primary" data-tutorial="done" style="background:${s.color}">使い始める ✓</button>`
+            : `<button class="action primary" data-tutorial="next" style="background:${s.color}">次へ →</button>`
+          }
+        </div>
+      </div>
+      <div class="tutorial-dots">
+        ${TUTORIAL_STEPS.map((_, i) => `<span class="tutorial-dot${i === tutorialStep ? " active" : i < tutorialStep ? " done" : ""}"></span>`).join("")}
       </div>
     </div>
   </div>`;
@@ -3236,8 +3300,12 @@ ALTER TABLE products DISABLE ROW LEVEL SECURITY;</pre>
         </details>
       </div>
       <div class="settings-card">
-        <h3>使い方ガイド</h3>
-        <button class="action" data-action="show-tutorial">使い方ガイドをもう一度見る</button>
+        <h3>📖 使い方ガイド</h3>
+        <p class="notice" style="margin-bottom:12px">FoodPilotの主な機能を7ステップで説明するガイドです。</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+          ${TUTORIAL_STEPS.map((s,i)=>`<span style="font-size:12px;background:${s.bg};color:${s.color};padding:4px 10px;border-radius:20px;font-weight:600">${s.icon} ${escapeHtml(s.title)}</span>`).join("")}
+        </div>
+        <button class="action primary" data-action="show-tutorial">📖 ガイドをもう一度見る</button>
       </div>
     </div>
   `);

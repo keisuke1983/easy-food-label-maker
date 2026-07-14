@@ -1,25 +1,89 @@
 ﻿/* ── チュートリアル ── */
 const TUTORIAL_STEPS = [
-  { num: 1, title: "商品情報を入力", desc: "名称・内容量・賞味期限を入力してください。", hint: "左の「商品情報」セクションから始めましょう。" },
-  { num: 2, title: "原材料・栄養成分を確認", desc: "原材料を追加すると栄養成分が自動計算されます。", hint: "重量(g)を入力すると計算精度が上がります。" },
-  { num: 3, title: "右側でラベルを確認", desc: "入力内容がリアルタイムで右側のラベルに反映されます。", hint: "ズームボタンで拡大表示できます。" },
-  { num: 4, title: "保存・印刷する", desc: "内容確認後、「保存する」ボタンで保存し「印刷プレビュー」から印刷できます。", hint: "Ctrl+S でも保存できます。" },
+  {
+    icon: "🎉", color: "#2563eb", bg: "#eff6ff",
+    title: "FoodPilotへようこそ",
+    desc: "食品メーカー・小規模食品事業者のための商品管理＆食品表示ラベル作成ツールです。このガイドで主な使い方を説明します（約2分）。",
+    features: ["食品表示ラベルを自動生成", "AIで法令チェック・表示文作成", "複数商品をクラウドで一元管理"],
+    tip: "すでに使い方を知っている場合は「スキップ」してください。",
+  },
+  {
+    icon: "📦", color: "#7c3aed", bg: "#f5f3ff",
+    title: "商品を登録する",
+    desc: "左メニューの「商品管理」→「＋ 新しい商品を登録」から商品情報を入力します。",
+    features: ["商品名・内容量・賞味期限を入力", "原材料と重量(g)を入力すると栄養成分・アレルゲンを自動計算", "製造者・住所など会社情報も登録可能"],
+    tip: "原材料の重量(g)を入力すると栄養成分の計算精度が上がります。",
+  },
+  {
+    icon: "🏷", color: "#059669", bg: "#ecfdf5",
+    title: "食品表示ラベルを確認・印刷",
+    desc: "「ラベル作成」画面を開くと、入力内容がリアルタイムにラベルに反映されます。",
+    features: ["食品表示基準に準拠したレイアウト", "40×50mm〜カスタムサイズまで対応", "印刷・PDFダウンロード・ラベル業者入稿"],
+    tip: "ラベル画面の「拡大」ボタンで細部まで確認できます。印刷前に必ず確認を。",
+  },
+  {
+    icon: "🤖", color: "#d97706", bg: "#fffbeb",
+    title: "AIで表示内容をチェック",
+    desc: "商品詳細の「AIチェック」ボタンで、食品表示法の必須項目を自動確認できます。",
+    features: ["名称・原材料・賞味期限などの抜けを指摘", "アレルゲン自動検出（要目視確認）", "AI説明文・商品規格書・相談チャットも利用可能"],
+    tip: "AIの指摘はあくまで補助です。最終確認は必ず担当者が行ってください。",
+  },
+  {
+    icon: "👥", color: "#0891b2", bg: "#ecfeff",
+    title: "チームで確認・承認",
+    desc: "「チーム・承認」でメンバーを登録すると、商品ごとに確認依頼・承認ができます。",
+    features: ["管理者・編集者・確認者の役割設定", "確認依頼 → 承認 → 公開のワークフロー", "差し戻し・コメント機能"],
+    tip: "ダッシュボードの「承認待ち」カードから一覧確認できます。",
+  },
+  {
+    icon: "☁", color: "#2563eb", bg: "#eff6ff",
+    title: "クラウドでデータを保存・共有",
+    desc: "「設定」→「クラウド接続の設定」を行うと、別のパソコン・スマホからも同じデータにアクセスできます。",
+    features: ["保存のたびに自動でクラウドに同期", "別端末・スタッフとのデータ共有", "無料クラウドサービスで利用可能"],
+    tip: "クラウド接続は任意です。ローカル保存だけでも全機能使えます。",
+  },
+  {
+    icon: "📊", color: "#16a34a", bg: "#f0fdf4",
+    title: "ダッシュボードで全体を管理",
+    desc: "ダッシュボードでは全商品の状況をひと目で確認できます。これで準備完了です！",
+    features: ["完成度・賞味期限切れ・承認待ちを一覧表示", "優先タスクをAIが自動提案", "在庫・原価・売上のKPI管理"],
+    tip: "困ったときは設定画面の「使い方ガイドをもう一度見る」からいつでも確認できます。",
+  },
 ];
+
 function tutorialHtml() {
   if (!showTutorial) return "";
   const s = TUTORIAL_STEPS[tutorialStep];
-  const isLast = tutorialStep === TUTORIAL_STEPS.length - 1;
-  return `<div class="tutorial-overlay">
-    <div class="tutorial-card">
-      <div class="tutorial-steps-indicator">${TUTORIAL_STEPS.map((_, i) => `<span class="tutorial-dot${i === tutorialStep ? " active" : i < tutorialStep ? " done" : ""}"></span>`).join("")}</div>
-      <div class="tutorial-step-num">STEP ${s.num} / ${TUTORIAL_STEPS.length}</div>
-      <h2 class="tutorial-title">${escapeHtml(s.title)}</h2>
+  const total = TUTORIAL_STEPS.length;
+  const isLast = tutorialStep === total - 1;
+  const pct = Math.round((tutorialStep / (total - 1)) * 100);
+  return `<div class="tutorial-overlay" data-tutorial="skip">
+    <div class="tutorial-card" onclick="event.stopPropagation()">
+      <div class="tutorial-progress-bar"><div class="tutorial-progress-fill" style="width:${pct}%"></div></div>
+      <div class="tutorial-header">
+        <div class="tutorial-icon-wrap" style="background:${s.bg}">
+          <span class="tutorial-icon">${s.icon}</span>
+        </div>
+        <span class="tutorial-counter">${tutorialStep + 1} / ${total}</span>
+      </div>
+      <h2 class="tutorial-title" style="color:${s.color}">${escapeHtml(s.title)}</h2>
       <p class="tutorial-desc">${escapeHtml(s.desc)}</p>
-      <p class="tutorial-hint">💡 ${escapeHtml(s.hint)}</p>
+      <ul class="tutorial-features">
+        ${s.features.map(f => `<li><span class="tutorial-check" style="color:${s.color}">✓</span>${escapeHtml(f)}</li>`).join("")}
+      </ul>
+      <div class="tutorial-tip">💡 ${escapeHtml(s.tip)}</div>
       <div class="tutorial-actions">
         <button class="tutorial-skip" data-tutorial="skip">スキップ</button>
-        ${tutorialStep > 0 ? `<button class="action" data-tutorial="prev">← 戻る</button>` : ""}
-        ${isLast ? `<button class="action primary" data-tutorial="done">完了 ✓</button>` : `<button class="action primary" data-tutorial="next">次へ →</button>`}
+        <div class="tutorial-nav">
+          ${tutorialStep > 0 ? `<button class="action" data-tutorial="prev">← 戻る</button>` : ""}
+          ${isLast
+            ? `<button class="action primary" data-tutorial="done" style="background:${s.color}">使い始める ✓</button>`
+            : `<button class="action primary" data-tutorial="next" style="background:${s.color}">次へ →</button>`
+          }
+        </div>
+      </div>
+      <div class="tutorial-dots">
+        ${TUTORIAL_STEPS.map((_, i) => `<span class="tutorial-dot${i === tutorialStep ? " active" : i < tutorialStep ? " done" : ""}"></span>`).join("")}
       </div>
     </div>
   </div>`;
@@ -1222,7 +1286,15 @@ function nutritionEditorHtml(p, d) {
   return section("栄養成分表示", `${unitSelector}<div class="mode-row"><button class="${p.nutritionMode !== "manual" ? "selected" : ""}" data-nutr-mode="auto">自動計算</button><button class="${p.nutritionMode === "manual" ? "selected" : ""}" data-nutr-mode="manual">自分で編集</button></div><div class="nutrition-grid">${row("kcal", "エネルギー", "kcal")}${row("protein", "たんぱく質", "g")}${row("fat", "脂質", "g")}${row("carbs", "炭水化物", "g")}${row("salt", "食塩相当量", "g")}</div>${d.autoNutrition.hasEst ? `<p class="notice">一部の原材料は近い食品成分データで推定しています。</p>` : ""}`, true);
 }
 function allergenEditorHtml(p, d) {
-  return section("自動検出アレルゲン", `<div class="mode-row"><button class="${p.allergensMode !== "manual" ? "selected" : ""}" data-alg-mode="auto">自動検出</button><button class="${p.allergensMode === "manual" ? "selected" : ""}" data-alg-mode="manual">自分で編集</button></div>${p.allergensMode === "manual" ? `<input class="wide-input" data-field="allergensManual" value="${escapeHtml(p.allergensManual || "")}" placeholder="例：小麦、卵、乳">` : `<div class="chips allergen">${d.autoAllergens.length ? d.autoAllergens.map((a) => `<span>${escapeHtml(a)}</span>`).join("") : "<em>検出なし</em>"}</div>`}`);
+  const autoBody = d.autoAllergens.length
+    ? `<div class="chips allergen">${d.autoAllergens.map((a) => `<span>${escapeHtml(a)}</span>`).join("")}</div>
+       <p class="notice" style="margin-top:6px;font-size:11px;color:#92400e;background:#fffbeb;border-color:#fde68a">
+         ⚠ <strong>自動推定です。必ず目視で確認してください。</strong><br>
+         原材料名の表記が正確でない場合、検出もれや誤検出があります。確認後「自分で編集」で修正してください。
+       </p>`
+    : `<em style="color:#64748b">検出なし</em>
+       <p class="notice" style="margin-top:6px;font-size:11px">原材料名を入力するとアレルゲンを自動検出します。「自分で編集」で手動指定も可能です。</p>`;
+  return section("アレルゲン", `<div class="mode-row"><button class="${p.allergensMode !== "manual" ? "selected" : ""}" data-alg-mode="auto">自動検出</button><button class="${p.allergensMode === "manual" ? "selected" : ""}" data-alg-mode="manual">自分で編集</button></div>${p.allergensMode === "manual" ? `<input class="wide-input" data-field="allergensManual" value="${escapeHtml(p.allergensManual || "")}" placeholder="例：小麦、卵、乳"><p class="notice" style="margin-top:6px;font-size:11px">食品表示基準の特定原材料（8品目）および特定原材料に準ずるもの（20品目）を確認してください。</p>` : autoBody}`);
 }
 function contaminationEditorHtml(p) {
   return section("コンタミネーション", `<div class="mode-row"><button class="${!p.contaminationEnabled ? "selected" : ""}" data-contamination="off">表示しない</button><button class="${p.contaminationEnabled ? "selected" : ""}" data-contamination="on">表示する</button></div>${p.contaminationEnabled ? `<label class="field"><span>対象アレルゲン</span><input data-field="contaminationAllergens" value="${escapeHtml(p.contaminationAllergens || "")}" placeholder="例：小麦、卵、乳成分"></label><label class="field"><span>表示文</span><input data-field="contaminationText" value="${escapeHtml(p.contaminationText || "")}" placeholder="例：本品製造工場では、小麦・卵・乳成分を含む製品を製造しています。"></label><p class="notice">表示文が空の場合、対象アレルゲンから定型文を作ります。</p>` : `<p class="notice">同じ工場・同じラインで扱うアレルゲンがある場合に使います。</p>`}`);
@@ -3140,37 +3212,56 @@ function newSettingsHtml() {
         <div class="cloud-sync-status-bar">
           <div class="cloud-sync-status-row">
             <span class="cloud-sync-dot ${sbConnected?"dot-green":"dot-gray"}"></span>
-            <span class="cloud-sync-status-lbl">${sbConnected ? "✓ クラウド同期設定済み" : "ローカル保存のみ（このブラウザのみ）"}</span>
+            <span class="cloud-sync-status-lbl">${sbConnected ? "✓ クラウドと接続中" : "未接続（このブラウザのみに保存中）"}</span>
             ${cloudSyncLastAt ? `<span class="cloud-sync-lastsync">最終同期: ${escapeHtml(cloudSyncLastAt)}</span>` : ""}
           </div>
           ${sbConnected ? `<div class="cloud-sync-actions">
             <button class="action primary" data-action="supabase-push">⬆ クラウドに保存</button>
-            <button class="action" data-action="supabase-pull">⬇ クラウドから復元</button>
+            <button class="action" data-action="supabase-pull">⬇ クラウドから読み込む</button>
           </div>` : ""}
         </div>
-        <p class="notice" style="margin-top:8px">保存のたびに自動同期します。別の端末でも同じデータにアクセスできます。</p>
-        <details style="margin-top:16px">
-          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#475569">▸ Supabase接続設定</summary>
-          <div style="margin-top:12px">
-            <p class="notice">別端末でも同じデータを使いたい場合。<a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">Supabaseとは？</a></p>
-            <div class="field" style="margin-bottom:8px">
-              <span>接続先のURL</span>
-              <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+        <p class="notice" style="margin-top:8px">${sbConnected
+          ? "✅ 商品を保存するたびに自動でクラウドに同期されます。別のパソコン・スマホでも同じデータを使えます。"
+          : "💡 クラウドに接続すると、別のパソコン・スマホからも同じデータにアクセスできます。"
+        }</p>
+        <details style="margin-top:16px" ${!sbConnected ? "open" : ""}>
+          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#2563eb">▸ クラウド接続の設定${sbConnected ? "を変更する" : "をする（無料）"}</summary>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">① 無料アカウントを作成する</div>
+              <p style="font-size:12px;color:#374151;margin:0">
+                <a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> にアクセスして「Start for free」でアカウントを作り、新しいプロジェクトを作成してください。
+              </p>
             </div>
-            <div class="field" style="margin-bottom:12px">
-              <span>アクセスキー</span>
-              <input id="sb-key-input" type="password" placeholder="eyJ..." value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">② データ保存先を初期設定する（初回のみ）</div>
+              <p style="font-size:12px;color:#374151;margin:0 0 8px">プロジェクト内の「SQL Editor」を開いて、以下のコードを貼り付けて「Run」を押してください：</p>
+              <pre style="background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:10px;overflow-x:auto;margin:0">CREATE TABLE IF NOT EXISTS products (
+  id          TEXT PRIMARY KEY,
+  name        TEXT,
+  updated_at  TEXT,
+  data        TEXT NOT NULL
+);
+ALTER TABLE products DISABLE ROW LEVEL SECURITY;</pre>
             </div>
-            <button class="action primary" data-action="save-supabase-cfg">設定を保存</button>
-            <details style="margin-top:12px">
-              <summary style="font-size:11px;color:#94a3b8;cursor:pointer">データベース初期設定コード</summary>
-              <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">create table if not exists products (
-  id text primary key,
-  name text,
-  updated_at text,
-  data text
-);</pre>
-            </details>
+
+            <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">③ 接続情報を入力して保存する</div>
+              <p style="font-size:12px;color:#374151;margin:0 0 10px">プロジェクトの「Settings」→「API」を開き、2つの値をコピーして貼り付けてください：</p>
+              <div class="field" style="margin-bottom:8px">
+                <span style="font-size:12px">接続先アドレス <span style="color:#64748b;font-weight:400">（Settings → API → "Project URL"）</span></span>
+                <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+              </div>
+              <div class="field" style="margin-bottom:14px">
+                <span style="font-size:12px">認証キー <span style="color:#64748b;font-weight:400">（Settings → API Keys → Legacy → "anon" のeyJで始まる文字列）</span></span>
+                <input id="sb-key-input" type="password" placeholder="eyJで始まる長い文字列" value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+              </div>
+              <button class="action primary" data-action="save-supabase-cfg">🔗 接続して保存</button>
+              ${sbConnected ? `<button class="action" data-action="disconnect-cloud" style="margin-left:8px;color:#ef4444;border-color:#ef4444">接続を解除</button>` : ""}
+            </div>
+
           </div>
         </details>
       </div>
@@ -3209,8 +3300,12 @@ function newSettingsHtml() {
         </details>
       </div>
       <div class="settings-card">
-        <h3>使い方ガイド</h3>
-        <button class="action" data-action="show-tutorial">使い方ガイドをもう一度見る</button>
+        <h3>📖 使い方ガイド</h3>
+        <p class="notice" style="margin-bottom:12px">FoodPilotの主な機能を7ステップで説明するガイドです。</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+          ${TUTORIAL_STEPS.map((s,i)=>`<span style="font-size:12px;background:${s.bg};color:${s.color};padding:4px 10px;border-radius:20px;font-weight:600">${s.icon} ${escapeHtml(s.title)}</span>`).join("")}
+        </div>
+        <button class="action primary" data-action="show-tutorial">📖 ガイドをもう一度見る</button>
       </div>
     </div>
   `);

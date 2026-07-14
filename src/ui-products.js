@@ -25,6 +25,7 @@ function productsListHtml() {
   if (masterFilter==="expiringSoon")  list = list.filter(p=>p.expiryDate&&p.expiryDate>=todayIso&&p.expiryDate<=soonIso);
   if (masterFilter==="noImage")       list = list.filter(p=>!p.imageDataUrl);
   if (masterFilter==="noCost")        list = list.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length);
+  if (masterFilter==="noStock")       list = list.filter(p=>p.currentStock==null||p.currentStock===""||parseFloat(p.currentStock)===0);
   if (masterPipelineFilter)           list = list.filter(p=>(p.productStatus||"draft")===masterPipelineFilter);
   if (masterCategoryFilter)           list = list.filter(p=>(p.category||"")===masterCategoryFilter);
   if (masterCompletionFilter==="lt100") list = list.filter(p=>{ const d=derive(p); return calcCompletion(p,d).pct<100; });
@@ -165,6 +166,7 @@ function productsListHtml() {
         ${PRODUCT_STATUSES.map(s=>`<option value="${s.id}">${s.label}に変更</option>`).join("")}
       </select>
       <button class="action primary bulk-apply-btn" data-action="bulk-apply-status">一括変更</button>
+      <button class="action danger bulk-delete-btn" data-action="bulk-delete" style="background:#ef4444;color:#fff;border:none">🗑 削除</button>
       <button class="action bulk-clear-btn" data-action="clear-bulk-select">✕ 選択解除</button>
     </div>` : "";
 
@@ -172,7 +174,7 @@ function productsListHtml() {
     incomplete:"完成度100%未満", noBestBefore:"賞味期限未設定",
     noIngredients:"原材料未入力", noMfr:"製造者未設定", noJan:"JANコード未登録",
     expired:"賞味期限切れ", expiringSoon:"30日以内に期限切れ",
-    noImage:"商品画像未登録", noCost:"原価未設定",
+    noImage:"商品画像未登録", noCost:"原価未設定", noStock:"在庫なし・未設定",
   };
   const isAnyFilterActive = masterFilter !== "all" || masterCategoryFilter || masterCompletionFilter || masterPipelineFilter;
   const currentContent = masterView === "table" ? tableHtml : cards;

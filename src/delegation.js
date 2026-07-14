@@ -219,6 +219,17 @@ function setupDelegation() {
         case "clear-bulk-select": {
           masterSelected.clear(); render(); return;
         }
+        case "bulk-delete": {
+          const count = masterSelected.size;
+          if (!count) return;
+          if (!confirm(`選択した ${count} 件の商品を削除しますか？\nこの操作は元に戻せません。`)) return;
+          masterSelected.forEach(id => trackCloudDelete(id));
+          products = products.filter(p => !masterSelected.has(p.id));
+          masterSelected.clear();
+          saveProducts();
+          showStatus(`${count}件の商品を削除しました`);
+          render(); return;
+        }
         case "save-as-template": {
           const pid = ael.dataset.pid;
           const p = products.find(x => x.id === pid); if (!p) return;
@@ -268,7 +279,8 @@ function setupDelegation() {
             }
           }); return;
         }
-        case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("URLとAPIキーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("URLはhttps://で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("Supabase設定を保存しました"); render(); return; }
+        case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("接続先アドレスと認証キーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("接続先アドレスは https:// で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("☁ クラウド接続を保存しました"); render(); return; }
+        case "disconnect-cloud": { if(!confirm("クラウド接続を解除しますか？\nデータはこのブラウザにはそのまま残ります。"))return; safeDel("fmcc-supabase-url"); safeDel("fmcc-supabase-key"); showStatus("クラウド接続を解除しました"); render(); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
         case "copy-output": copyLabels(); return;
@@ -794,7 +806,21 @@ function setupDelegation() {
     if (t.matches("[data-print-cfg]"))       { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-master-search]"))   { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{masterSearch=t.value;render();},200); return; }
     if (t.matches("[data-saved-search]"))    { clearTimeout(savedSearchTimer); savedSearchTimer=setTimeout(()=>{savedSearch=t.value;render();},200); return; }
-    if (t.matches("[data-master-field]"))    { const f=t.dataset.masterField; if(["directCost","price","directPackaging","directShipping","directOther"].includes(f)) refreshCostKpis(); scheduleAutoSaveMaster(); return; }
+    if (t.matches("[data-master-field]")) {
+      const f = t.dataset.masterField;
+      if (["price","directCost","directPackaging","directShipping","directOther"].includes(f)) {
+        const v = parseFloat(t.value);
+        if (!isNaN(v) && v < 0) {
+          t.value = 0;
+          showStatus(f === "price" ? "販売価格は0以上を入力してください" : "金額は0以上を入力してください");
+        }
+        if (f === "price" && !isNaN(v) && v === 0 && t.value !== "") {
+          showStatus("⚠ 販売価格が0円です。原価計算が正しく行われません。");
+        }
+        refreshCostKpis();
+      }
+      scheduleAutoSaveMaster(); return;
+    }
     // 原材料タブ インライン編集（master-ing-*）
     if (t.matches("[data-master-ing-name]")) {
       const p = products.find(x=>x.id===productDetailId); if(!p)return;

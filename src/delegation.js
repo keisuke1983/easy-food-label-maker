@@ -279,7 +279,8 @@ function setupDelegation() {
             }
           }); return;
         }
-        case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("URLとAPIキーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("URLはhttps://で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("Supabase設定を保存しました"); render(); return; }
+        case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("接続先アドレスと認証キーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("接続先アドレスは https:// で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("☁ クラウド接続を保存しました"); render(); return; }
+        case "disconnect-cloud": { if(!confirm("クラウド接続を解除しますか？\nデータはこのブラウザにはそのまま残ります。"))return; safeDel("fmcc-supabase-url"); safeDel("fmcc-supabase-key"); showStatus("クラウド接続を解除しました"); render(); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
         case "copy-output": copyLabels(); return;

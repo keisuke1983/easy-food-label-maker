@@ -3140,44 +3140,56 @@ function newSettingsHtml() {
         <div class="cloud-sync-status-bar">
           <div class="cloud-sync-status-row">
             <span class="cloud-sync-dot ${sbConnected?"dot-green":"dot-gray"}"></span>
-            <span class="cloud-sync-status-lbl">${sbConnected ? "✓ クラウド同期設定済み" : "ローカル保存のみ（このブラウザのみ）"}</span>
+            <span class="cloud-sync-status-lbl">${sbConnected ? "✓ クラウドと接続中" : "未接続（このブラウザのみに保存中）"}</span>
             ${cloudSyncLastAt ? `<span class="cloud-sync-lastsync">最終同期: ${escapeHtml(cloudSyncLastAt)}</span>` : ""}
           </div>
           ${sbConnected ? `<div class="cloud-sync-actions">
             <button class="action primary" data-action="supabase-push">⬆ クラウドに保存</button>
-            <button class="action" data-action="supabase-pull">⬇ クラウドから復元</button>
+            <button class="action" data-action="supabase-pull">⬇ クラウドから読み込む</button>
           </div>` : ""}
         </div>
-        <p class="notice" style="margin-top:8px">保存のたびに自動同期します。別の端末でも同じデータにアクセスできます。</p>
-        <details style="margin-top:16px">
-          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#475569">▸ ▸ Supabase接続設定</summary>
-          <div style="margin-top:12px">
-            <p class="notice">📋 <strong>設定手順：</strong><br>
-              1. <a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> でプロジェクトを作成<br>
-              2. Settings → API → <strong>「Project URL」</strong>をコピーして下の①に貼り付け<br>
-              3. Settings → API Keys → Legacy → <strong>「anon」キー（eyJで始まる文字列）</strong>をコピーして②に貼り付け<br>
-              4. 「設定を保存」をクリック
-            </p>
-            <div class="field" style="margin-bottom:8px">
-              <span>① プロジェクトURL</span>
-              <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+        <p class="notice" style="margin-top:8px">${sbConnected
+          ? "✅ 商品を保存するたびに自動でクラウドに同期されます。別のパソコン・スマホでも同じデータを使えます。"
+          : "💡 クラウドに接続すると、別のパソコン・スマホからも同じデータにアクセスできます。"
+        }</p>
+        <details style="margin-top:16px" ${!sbConnected ? "open" : ""}>
+          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#2563eb">▸ クラウド接続の設定${sbConnected ? "を変更する" : "をする（無料）"}</summary>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">① 無料アカウントを作成する</div>
+              <p style="font-size:12px;color:#374151;margin:0">
+                <a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> にアクセスして「Start for free」でアカウントを作り、新しいプロジェクトを作成してください。
+              </p>
             </div>
-            <div class="field" style="margin-bottom:12px">
-              <span>② APIキー（anon / public）</span>
-              <input id="sb-key-input" type="password" placeholder="eyJ..." value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
-            </div>
-            <button class="action primary" data-action="save-supabase-cfg">設定を保存</button>
-            <details style="margin-top:12px">
-              <summary style="font-size:11px;color:#94a3b8;cursor:pointer">▸ データベース初期設定（初回のみ）</summary>
-              <p style="font-size:11px;color:#64748b;margin-top:6px">Supabase の SQL Editor に貼り付けて実行してください：</p>
-              <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">CREATE TABLE IF NOT EXISTS products (
+
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">② データ保存先を初期設定する（初回のみ）</div>
+              <p style="font-size:12px;color:#374151;margin:0 0 8px">プロジェクト内の「SQL Editor」を開いて、以下のコードを貼り付けて「Run」を押してください：</p>
+              <pre style="background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:10px;overflow-x:auto;margin:0">CREATE TABLE IF NOT EXISTS products (
   id          TEXT PRIMARY KEY,
   name        TEXT,
   updated_at  TEXT,
   data        TEXT NOT NULL
 );
 ALTER TABLE products DISABLE ROW LEVEL SECURITY;</pre>
-            </details>
+            </div>
+
+            <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">③ 接続情報を入力して保存する</div>
+              <p style="font-size:12px;color:#374151;margin:0 0 10px">プロジェクトの「Settings」→「API」を開き、2つの値をコピーして貼り付けてください：</p>
+              <div class="field" style="margin-bottom:8px">
+                <span style="font-size:12px">接続先アドレス <span style="color:#64748b;font-weight:400">（Settings → API → "Project URL"）</span></span>
+                <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
+              </div>
+              <div class="field" style="margin-bottom:14px">
+                <span style="font-size:12px">認証キー <span style="color:#64748b;font-weight:400">（Settings → API Keys → Legacy → "anon" のeyJで始まる文字列）</span></span>
+                <input id="sb-key-input" type="password" placeholder="eyJで始まる長い文字列" value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+              </div>
+              <button class="action primary" data-action="save-supabase-cfg">🔗 接続して保存</button>
+              ${sbConnected ? `<button class="action" data-action="disconnect-cloud" style="margin-left:8px;color:#ef4444;border-color:#ef4444">接続を解除</button>` : ""}
+            </div>
+
           </div>
         </details>
       </div>

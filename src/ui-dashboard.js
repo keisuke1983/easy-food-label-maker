@@ -17,6 +17,7 @@ function calcTodo(derivedAll) {
     { key:"noJan",         label:"JANコード未登録",           count: products.filter(p=>!p.janCode?.trim()).length },
     { key:"noImage",       label:"商品画像未登録",            count: products.filter(p=>!p.imageDataUrl).length },
     { key:"noCost",        label:"原価未設定",                count: products.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
+    { key:"noStock",       label:"📦 在庫なし・未設定",        count: products.filter(p=>p.currentStock==null||p.currentStock===""||parseFloat(p.currentStock)===0).length },
     { key:"review",        label:"👥 承認待ちの商品",          count: products.filter(p=>p.approvalStatus==="review").length },
   ].filter(t=>t.count>0);
 }

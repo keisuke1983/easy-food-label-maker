@@ -219,6 +219,17 @@ function setupDelegation() {
         case "clear-bulk-select": {
           masterSelected.clear(); render(); return;
         }
+        case "bulk-delete": {
+          const count = masterSelected.size;
+          if (!count) return;
+          if (!confirm(`選択した ${count} 件の商品を削除しますか？\nこの操作は元に戻せません。`)) return;
+          masterSelected.forEach(id => trackCloudDelete(id));
+          products = products.filter(p => !masterSelected.has(p.id));
+          masterSelected.clear();
+          saveProducts();
+          showStatus(`${count}件の商品を削除しました`);
+          render(); return;
+        }
         case "save-as-template": {
           const pid = ael.dataset.pid;
           const p = products.find(x => x.id === pid); if (!p) return;

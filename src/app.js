@@ -3150,26 +3150,33 @@ function newSettingsHtml() {
         </div>
         <p class="notice" style="margin-top:8px">保存のたびに自動同期します。別の端末でも同じデータにアクセスできます。</p>
         <details style="margin-top:16px">
-          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#475569">▸ Supabase接続設定</summary>
+          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#475569">▸ ▸ Supabase接続設定</summary>
           <div style="margin-top:12px">
-            <p class="notice">別端末でも同じデータを使いたい場合。<a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">Supabaseとは？</a></p>
+            <p class="notice">📋 <strong>設定手順：</strong><br>
+              1. <a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> でプロジェクトを作成<br>
+              2. Settings → API → <strong>「Project URL」</strong>をコピーして下の①に貼り付け<br>
+              3. Settings → API Keys → Legacy → <strong>「anon」キー（eyJで始まる文字列）</strong>をコピーして②に貼り付け<br>
+              4. 「設定を保存」をクリック
+            </p>
             <div class="field" style="margin-bottom:8px">
-              <span>接続先のURL</span>
+              <span>① プロジェクトURL</span>
               <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
             </div>
             <div class="field" style="margin-bottom:12px">
-              <span>アクセスキー</span>
+              <span>② APIキー（anon / public）</span>
               <input id="sb-key-input" type="password" placeholder="eyJ..." value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
             </div>
             <button class="action primary" data-action="save-supabase-cfg">設定を保存</button>
             <details style="margin-top:12px">
-              <summary style="font-size:11px;color:#94a3b8;cursor:pointer">データベース初期設定コード</summary>
-              <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">create table if not exists products (
-  id text primary key,
-  name text,
-  updated_at text,
-  data text
-);</pre>
+              <summary style="font-size:11px;color:#94a3b8;cursor:pointer">▸ データベース初期設定（初回のみ）</summary>
+              <p style="font-size:11px;color:#64748b;margin-top:6px">Supabase の SQL Editor に貼り付けて実行してください：</p>
+              <pre class="notice" style="margin-top:6px;font-size:10px;overflow-x:auto">CREATE TABLE IF NOT EXISTS products (
+  id          TEXT PRIMARY KEY,
+  name        TEXT,
+  updated_at  TEXT,
+  data        TEXT NOT NULL
+);
+ALTER TABLE products DISABLE ROW LEVEL SECURITY;</pre>
             </details>
           </div>
         </details>

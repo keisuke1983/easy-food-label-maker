@@ -1222,7 +1222,15 @@ function nutritionEditorHtml(p, d) {
   return section("栄養成分表示", `${unitSelector}<div class="mode-row"><button class="${p.nutritionMode !== "manual" ? "selected" : ""}" data-nutr-mode="auto">自動計算</button><button class="${p.nutritionMode === "manual" ? "selected" : ""}" data-nutr-mode="manual">自分で編集</button></div><div class="nutrition-grid">${row("kcal", "エネルギー", "kcal")}${row("protein", "たんぱく質", "g")}${row("fat", "脂質", "g")}${row("carbs", "炭水化物", "g")}${row("salt", "食塩相当量", "g")}</div>${d.autoNutrition.hasEst ? `<p class="notice">一部の原材料は近い食品成分データで推定しています。</p>` : ""}`, true);
 }
 function allergenEditorHtml(p, d) {
-  return section("自動検出アレルゲン", `<div class="mode-row"><button class="${p.allergensMode !== "manual" ? "selected" : ""}" data-alg-mode="auto">自動検出</button><button class="${p.allergensMode === "manual" ? "selected" : ""}" data-alg-mode="manual">自分で編集</button></div>${p.allergensMode === "manual" ? `<input class="wide-input" data-field="allergensManual" value="${escapeHtml(p.allergensManual || "")}" placeholder="例：小麦、卵、乳">` : `<div class="chips allergen">${d.autoAllergens.length ? d.autoAllergens.map((a) => `<span>${escapeHtml(a)}</span>`).join("") : "<em>検出なし</em>"}</div>`}`);
+  const autoBody = d.autoAllergens.length
+    ? `<div class="chips allergen">${d.autoAllergens.map((a) => `<span>${escapeHtml(a)}</span>`).join("")}</div>
+       <p class="notice" style="margin-top:6px;font-size:11px;color:#92400e;background:#fffbeb;border-color:#fde68a">
+         ⚠ <strong>自動推定です。必ず目視で確認してください。</strong><br>
+         原材料名の表記が正確でない場合、検出もれや誤検出があります。確認後「自分で編集」で修正してください。
+       </p>`
+    : `<em style="color:#64748b">検出なし</em>
+       <p class="notice" style="margin-top:6px;font-size:11px">原材料名を入力するとアレルゲンを自動検出します。「自分で編集」で手動指定も可能です。</p>`;
+  return section("アレルゲン", `<div class="mode-row"><button class="${p.allergensMode !== "manual" ? "selected" : ""}" data-alg-mode="auto">自動検出</button><button class="${p.allergensMode === "manual" ? "selected" : ""}" data-alg-mode="manual">自分で編集</button></div>${p.allergensMode === "manual" ? `<input class="wide-input" data-field="allergensManual" value="${escapeHtml(p.allergensManual || "")}" placeholder="例：小麦、卵、乳"><p class="notice" style="margin-top:6px;font-size:11px">食品表示基準の特定原材料（8品目）および特定原材料に準ずるもの（20品目）を確認してください。</p>` : autoBody}`);
 }
 function contaminationEditorHtml(p) {
   return section("コンタミネーション", `<div class="mode-row"><button class="${!p.contaminationEnabled ? "selected" : ""}" data-contamination="off">表示しない</button><button class="${p.contaminationEnabled ? "selected" : ""}" data-contamination="on">表示する</button></div>${p.contaminationEnabled ? `<label class="field"><span>対象アレルゲン</span><input data-field="contaminationAllergens" value="${escapeHtml(p.contaminationAllergens || "")}" placeholder="例：小麦、卵、乳成分"></label><label class="field"><span>表示文</span><input data-field="contaminationText" value="${escapeHtml(p.contaminationText || "")}" placeholder="例：本品製造工場では、小麦・卵・乳成分を含む製品を製造しています。"></label><p class="notice">表示文が空の場合、対象アレルゲンから定型文を作ります。</p>` : `<p class="notice">同じ工場・同じラインで扱うアレルゲンがある場合に使います。</p>`}`);

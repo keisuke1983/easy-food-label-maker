@@ -806,7 +806,21 @@ function setupDelegation() {
     if (t.matches("[data-print-cfg]"))       { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-master-search]"))   { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{masterSearch=t.value;render();},200); return; }
     if (t.matches("[data-saved-search]"))    { clearTimeout(savedSearchTimer); savedSearchTimer=setTimeout(()=>{savedSearch=t.value;render();},200); return; }
-    if (t.matches("[data-master-field]"))    { const f=t.dataset.masterField; if(["directCost","price","directPackaging","directShipping","directOther"].includes(f)) refreshCostKpis(); scheduleAutoSaveMaster(); return; }
+    if (t.matches("[data-master-field]")) {
+      const f = t.dataset.masterField;
+      if (["price","directCost","directPackaging","directShipping","directOther"].includes(f)) {
+        const v = parseFloat(t.value);
+        if (!isNaN(v) && v < 0) {
+          t.value = 0;
+          showStatus(f === "price" ? "販売価格は0以上を入力してください" : "金額は0以上を入力してください");
+        }
+        if (f === "price" && !isNaN(v) && v === 0 && t.value !== "") {
+          showStatus("⚠ 販売価格が0円です。原価計算が正しく行われません。");
+        }
+        refreshCostKpis();
+      }
+      scheduleAutoSaveMaster(); return;
+    }
     // 原材料タブ インライン編集（master-ing-*）
     if (t.matches("[data-master-ing-name]")) {
       const p = products.find(x=>x.id===productDetailId); if(!p)return;

@@ -57,8 +57,8 @@ function tutorialHtml() {
   const total = TUTORIAL_STEPS.length;
   const isLast = tutorialStep === total - 1;
   const pct = Math.round((tutorialStep / (total - 1)) * 100);
-  return `<div class="tutorial-overlay" data-tutorial="skip">
-    <div class="tutorial-card" onclick="event.stopPropagation()">
+  return `<div class="tutorial-overlay">
+    <div class="tutorial-card">
       <div class="tutorial-progress-bar"><div class="tutorial-progress-fill" style="width:${pct}%"></div></div>
       <div class="tutorial-header">
         <div class="tutorial-icon-wrap" style="background:${s.bg}">

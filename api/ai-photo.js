@@ -1,28 +1,34 @@
 // Vercel Serverless Function — FoodPilot AI 写真解析（Groq Vision版）
 // 環境変数 GROQ_API_KEY をVercelプロジェクト設定で登録してください
 
-const PROMPT = `この食品パッケージ・ラベルの写真から情報を抽出し、以下のJSON形式のみで回答してください。
-該当情報がない場合は空文字("")にしてください。原材料は文字列の配列で返してください。
+const PROMPT = `この日本の食品パッケージ・ラベルの写真から、日本語の食品表示法に基づく情報を抽出してください。
+
+【重要なルール】
+- 日本語テキストが存在する場合は必ず日本語を優先してください（英語表記は無視）
+- 「品名」欄の値をnameに使用してください（ブランド名ではなく品名）
+- 「原材料名」欄をそのまま読み取り、「、」で分割してください
+- 「販売者」「製造者」「加工者」いずれかの会社名と住所を抽出してください
+- 該当情報がない場合は空文字("")にしてください
+
+以下のJSON形式のみで回答してください（説明文・\`\`\`不要）:
 
 {
-  "name": "商品名",
-  "volume": "内容量（例: 100g、250ml）",
-  "bestBefore": "賞味期限または消費期限の記載方法（例: 製造日より180日）",
-  "storage": "保存方法の全文",
-  "ingredients": ["原材料1", "原材料2", "原材料3"],
-  "allergensManual": "アレルゲン表示の全文",
-  "manufacturerName": "製造者または販売者の会社名",
-  "manufacturerPostal": "郵便番号（数字のみ）",
-  "manufacturerAddress": "住所（郵便番号を除く）",
+  "name": "品名（例: りんごジュース（濃縮還元））",
+  "volume": "内容量（例: 1000ml、100g）",
+  "bestBefore": "賞味期限の記載場所・方法（例: 上部に記載、製造日より180日）",
+  "storage": "保存方法の全文（日本語）",
+  "ingredients": ["原材料1（日本語）", "原材料2", "原材料3"],
+  "allergensManual": "アレルゲン表示の全文（日本語）",
+  "manufacturerName": "製造者または販売者の会社名（日本語）",
+  "manufacturerPostal": "郵便番号（数字のみ、例: 1060032）",
+  "manufacturerAddress": "住所（日本語、郵便番号を除く）",
   "manufacturerPhone": "電話番号",
-  "kcal": "エネルギーの数値のみ（例: 302）",
+  "kcal": "エネルギーの数値のみ（例: 46）",
   "protein": "たんぱく質の数値のみ",
   "fat": "脂質の数値のみ",
   "carbs": "炭水化物の数値のみ",
   "salt": "食塩相当量の数値のみ"
-}
-
-JSONのみを返し、説明文や\`\`\`は不要です。`;
+}`;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");

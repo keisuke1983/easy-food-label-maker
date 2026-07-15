@@ -86,10 +86,13 @@ export default async function handler(req, res) {
 
   try {
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents,
@@ -103,6 +106,7 @@ export default async function handler(req, res) {
 
     if (!geminiRes.ok) {
       const err = await geminiRes.json().catch(() => ({}));
+      console.error("Gemini API error:", geminiRes.status, JSON.stringify(err));
       return res.status(502).json({ error: err.error?.message || `Gemini APIエラー (HTTP ${geminiRes.status})` });
     }
 

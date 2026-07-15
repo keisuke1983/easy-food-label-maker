@@ -2991,13 +2991,13 @@ function aiDescriptionsHtml() {
         <div class="ai-desc-channels">${channelBtns}</div>
 
         <div class="ai-generate-section">
-          <button class="action primary ai-generate-btn" data-action="generate-ai-desc">
-            ✦ AI説明文を生成
+          <button class="action primary ai-generate-btn" data-action="generate-ai-desc" ${aiDescLoading ? "disabled" : ""}>
+            ${aiDescLoading ? "⏳ 生成中..." : "✦ AI説明文を生成"}
           </button>
-          <span class="ai-generate-note">商品情報をもとに説明文を自動生成します</span>
+          <span class="ai-generate-note">${aiDescLoading ? "Groq AIが説明文を作成しています..." : "商品情報をもとに説明文を自動生成します"}</span>
         </div>
 
-        <div class="ai-result-section${currentText ? "" : " hidden"}" id="ai-result-section">
+        <div class="ai-result-section${(currentText || aiDescLoading) ? "" : " hidden"}" id="ai-result-section">
           <div class="ai-result-header">
             <span class="ai-result-label">生成結果</span>
             <div class="ai-result-actions">

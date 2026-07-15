@@ -41,6 +41,7 @@ let specShowSig = true;
 let aiDescId = null;
 let aiDescChannel = "rakuten";
 let aiEditText = "";
+let aiDescLoading = false;
 let aiConsultProductId = null;
 let aiConsultInput = "";
 let aiConsultSending = false;

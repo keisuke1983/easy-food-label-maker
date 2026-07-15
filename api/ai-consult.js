@@ -1,5 +1,5 @@
-// Vercel Serverless Function — FoodPilot AI相談（Google Gemini版）
-// 環境変数 GEMINI_API_KEY をVercelプロジェクト設定で登録してください
+// Vercel Serverless Function — FoodPilot AI相談（Groq / Llama版）
+// 環境変数 GROQ_API_KEY をVercelプロジェクト設定で登録してください
 
 const SYSTEM_PROMPT = `あなたは日本の食品表示法・食品衛生法に精通したベテランの食品表示専門アドバイザーです。
 食品メーカー・小規模食品事業者を対象に、実務に即した正確なアドバイスを提供します。
@@ -35,14 +35,13 @@ export default async function handler(req, res) {
   const { product, history, message } = req.body || {};
   if (!message) return res.status(400).json({ error: "メッセージが必要です" });
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: "サーバーにGemini APIキーが設定されていません。" });
+    return res.status(500).json({ error: "サーバーにGroq APIキーが設定されていません。" });
   }
 
   // 商品コンテキストを構築
-  const productContext = product ? `
-【相談対象の商品情報】
+  const productContext = product ? `【相談対象の商品情報】
 - 商品名: ${product.name || "未設定"}
 - 社内管理名: ${product.internalName || "未設定"}
 - カテゴリ: ${product.category || "未設定"}
@@ -52,66 +51,48 @@ export default async function handler(req, res) {
 - 原材料: ${(product.ingredients || []).filter(i => i.name).map(i => i.name + (i.weight ? `(${i.weight}g)` : "")).join("、") || "未設定"}
 - 製造者名: ${product.manufacturerName || "未設定"}
 - 製造者住所: ${product.manufacturerAddress || "未設定"}
-- 検出アレルゲン: ${(product.allergens || []).join("、") || "なし"}
-` : "";
+- 検出アレルゲン: ${(product.allergens || []).join("、") || "なし"}` : "";
 
-  // 会話履歴を構築（最新10件まで）
-  const recentHistory = (history || []).slice(-10);
-  const contents = [];
+  // OpenAI互換フォーマットでメッセージ構築
+  const messages = [{ role: "system", content: SYSTEM_PROMPT }];
 
   if (productContext) {
-    contents.push({
-      role: "user",
-      parts: [{ text: productContext + "\n\nこの商品についてアドバイスをお願いします。" }]
-    });
-    contents.push({
-      role: "model",
-      parts: [{ text: "はい、商品情報を確認しました。何でもご質問ください。" }]
-    });
+    messages.push({ role: "user", content: productContext + "\n\nこの商品についてアドバイスをお願いします。" });
+    messages.push({ role: "assistant", content: "はい、商品情報を確認しました。何でもご質問ください。" });
   }
 
+  const recentHistory = (history || []).slice(-10);
   for (const h of recentHistory) {
     if (h.role === "user" || h.role === "assistant") {
-      contents.push({
-        role: h.role === "assistant" ? "model" : "user",
-        parts: [{ text: h.content }]
-      });
+      messages.push({ role: h.role, content: h.content });
     }
   }
 
-  contents.push({
-    role: "user",
-    parts: [{ text: message }]
-  });
+  messages.push({ role: "user", content: message });
 
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents,
-          generationConfig: {
-            maxOutputTokens: 1024,
-            temperature: 0.3,
-          }
-        })
-      }
-    );
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages,
+        max_tokens: 1024,
+        temperature: 0.3,
+      }),
+    });
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.json().catch(() => ({}));
-      console.error("Gemini API error:", geminiRes.status, JSON.stringify(err));
-      return res.status(502).json({ error: err.error?.message || `Gemini APIエラー (HTTP ${geminiRes.status})` });
+    if (!groqRes.ok) {
+      const err = await groqRes.json().catch(() => ({}));
+      console.error("Groq API error:", groqRes.status, JSON.stringify(err));
+      return res.status(502).json({ error: err.error?.message || `Groq APIエラー (HTTP ${groqRes.status})` });
     }
 
-    const json = await geminiRes.json();
-    const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const json = await groqRes.json();
+    const text = json.choices?.[0]?.message?.content || "";
     if (!text) return res.status(422).json({ error: "AIが回答を生成できませんでした。" });
 
     return res.status(200).json({ answer: text });

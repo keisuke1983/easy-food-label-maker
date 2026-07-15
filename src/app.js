@@ -3671,22 +3671,18 @@ const AI_ANALYSIS_STEPS = [
 // Vision API 接続箇所: analyzeShelfImage() のみを差し替えれば本番AIへ切替可能
 // ════════════════════════════════════════════════════════════════════════
 
-async function analyzeShelfImage(_base64) {
-  // ── ダミー実装（本番ではこの中身をAPI呼び出しに差し替え） ──
-  // 将来の実装例:
-  //   const res = await fetch("/api/shelf-scan", {
-  //     method: "POST",
-  //     headers: { "Content-Type": "application/json" },
-  //     body: JSON.stringify({ base64: _base64 })
-  //   });
-  //   return await res.json(); // → [{ detectedName, quantity, unit, confidence }, ...]
-  await new Promise(r => setTimeout(r, 2500));
-  return [
-    { detectedName: "ドーナツミックス", quantity: 18,  unit: "袋",  confidence: 92 },
-    { detectedName: "きな粉",           quantity:  6,  unit: "袋",  confidence: 87 },
-    { detectedName: "包装袋",           quantity: 320, unit: "枚",  confidence: 78 },
-    { detectedName: "砂糖",             quantity: 12,  unit: "袋",  confidence: 95 },
-  ];
+async function analyzeShelfImage(base64) {
+  const productNames = products.map(p => p.name || p.internalName).filter(Boolean);
+  const res = await fetch("/api/ai-shelf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base64, productNames }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `サーバーエラー（HTTP ${res.status}）`);
+  }
+  return await res.json();
 }
 
 function matchProductByName(name) {

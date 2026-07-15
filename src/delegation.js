@@ -2,6 +2,69 @@
   return editId === "new" && draft && (draft.name?.trim() || draft.ingredients?.some(i => i.name?.trim()));
 }
 
+// ── AIダッシュボードブリーフィング取得 ────────────────────────────────
+function fetchAiBriefingNow(forceRefresh) {
+  if (aiBriefingLoading && !forceRefresh) return;
+  const todayIso = new Date().toISOString().split("T")[0];
+  const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const total     = products.length;
+  if (!total) return;
+
+  const derivedAll = products.map(p => ({ p, d: derive(p) }));
+  const incomplete = derivedAll.filter(({ p, d }) => calcCompletion(p, d).pct < 100).length;
+  const expired    = products.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
+  const expSoon    = products.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso).length;
+  const noIng      = products.filter(p => !(p.ingredients||[]).some(i => i.name?.trim())).length;
+  const noMfr      = products.filter(p => !p.manufacturerName?.trim()).length;
+  const noCost     = products.filter(p => (p.costMode||"direct")==="direct" ? !parseFloat(p.directCost) : !(p.costItems||[]).length).length;
+  const review     = products.filter(p => p.approvalStatus === "review").length;
+  const avgComp    = Math.round(derivedAll.reduce((s, {p, d}) => s + calcCompletion(p, d).pct, 0) / total);
+  const weekStart  = new Date(); weekStart.setDate(weekStart.getDate() - (weekStart.getDay()||7) + 1); weekStart.setHours(0,0,0,0);
+  const thisWeekNew = products.filter(p => { try { const d = new Date(p.createdAt?.replace(/\//g,"-")); return d >= weekStart; } catch { return false; } }).length;
+
+  const lines = [
+    `商品総数: ${total}件（完成: ${total - incomplete}件 / 未完了: ${incomplete}件 / 平均完成度: ${avgComp}%）`,
+    expired  ? `🚨 賞味期限切れ: ${expired}件` : null,
+    expSoon  ? `⏰ 30日以内期限: ${expSoon}件` : null,
+    noIng    ? `原材料未入力: ${noIng}件` : null,
+    noMfr    ? `製造者未設定: ${noMfr}件` : null,
+    noCost   ? `原価未設定: ${noCost}件` : null,
+    review   ? `承認待ち: ${review}件` : null,
+    `今週追加: ${thisWeekNew}件`,
+  ].filter(Boolean);
+
+  aiBriefingLoading = true;
+  aiBriefingText = "";
+  render();
+
+  fetch("/api/ai-briefing", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ summary: lines.join("\n") }),
+  })
+  .then(r => r.json())
+  .then(json => {
+    aiBriefingLoading = false;
+    if (json.text) {
+      aiBriefingText = json.text;
+      try {
+        sessionStorage.setItem("fp-ai-briefing", JSON.stringify({
+          text: json.text,
+          exp: Date.now() + 2 * 60 * 60 * 1000,
+        }));
+      } catch {}
+    } else {
+      aiBriefingText = "⚠️ " + (json.error || "取得できませんでした。再試行してください。");
+    }
+    render();
+  })
+  .catch(() => {
+    aiBriefingLoading = false;
+    aiBriefingText = "";
+    render();
+  });
+}
+
 // ── ⑨ イベントデリゲーション（起動時1回のみ登録） ───────────────────────
 function setupDelegation() {
   let masterSearchTimer, savedSearchTimer;
@@ -314,6 +377,13 @@ function setupDelegation() {
         case "disconnect-cloud": { if(!confirm("クラウド接続を解除しますか？\nデータはこのブラウザにはそのまま残ります。"))return; safeDel("fmcc-supabase-url"); safeDel("fmcc-supabase-key"); showStatus("クラウド接続を解除しました"); render(); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
+        case "fetch-ai-briefing": { fetchAiBriefingNow(); return; }
+        case "refresh-ai-briefing": {
+          aiBriefingText = "";
+          try { sessionStorage.removeItem("fp-ai-briefing"); } catch {}
+          fetchAiBriefingNow(true);
+          return;
+        }
         case "copy-output": copyLabels(); return;
         case "copy-image-output": copyImageLabels(); return;
       }

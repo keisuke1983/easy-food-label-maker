@@ -2601,6 +2601,57 @@ kbd {
 .btn-action-sm.danger { color: #dc2626; border-color: #fecaca; }
 .btn-action-sm.danger:hover { background: #fef2f2; }
 
+/* ── AIダッシュボードブリーフィングカード ──────────────────────────────── */
+.ai-briefing-card {
+  padding: 14px 18px; border-radius: 12px; margin-bottom: 14px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%);
+  border: 1.5px solid #c4b5fd;
+  box-shadow: 0 2px 8px rgba(139,92,246,.08);
+}
+.ai-briefing-hd {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.ai-briefing-icon {
+  font-size: 16px; color: #7c3aed; flex-shrink: 0;
+}
+.ai-briefing-label {
+  font-size: 12px; font-weight: 700; color: #7c3aed; letter-spacing: .03em; flex: 1;
+}
+.ai-briefing-refresh {
+  font-size: 11px; font-weight: 600; padding: 3px 8px;
+  background: rgba(124,58,237,.1); border: 1px solid #c4b5fd;
+  border-radius: 6px; color: #7c3aed; cursor: pointer;
+  transition: background .12s;
+}
+.ai-briefing-refresh:hover { background: rgba(124,58,237,.2); }
+.ai-briefing-text {
+  font-size: 13.5px; line-height: 1.65; color: #1e293b; margin: 0;
+  white-space: pre-line;
+}
+.ai-briefing-loading {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: #7c3aed; padding: 4px 0;
+}
+.ai-briefing-spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid #c4b5fd; border-top-color: #7c3aed;
+  border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-briefing-empty {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.ai-briefing-btn {
+  font-size: 13px; padding: 7px 16px;
+  background: #7c3aed; border: none; border-radius: 8px;
+  color: #fff; cursor: pointer; font-weight: 600;
+  transition: background .12s;
+}
+.ai-briefing-btn:hover { background: #6d28d9; }
+.ai-briefing-hint {
+  font-size: 12px; color: #6d28d9; opacity: .7;
+}
+
 /* ── 今すぐやること フォーカスカード ──────────────────────────────────── */
 .focus-action-card {
   display: flex; align-items: center; gap: 16px; padding: 16px 20px;

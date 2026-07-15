@@ -83,3 +83,7 @@ let shelfScanError = "";
 let cloudSyncStatus = "idle"; // "idle" | "syncing" | "success" | "error"
 let cloudSyncLastAt = safeGet("fmcc-last-sync") || "";
 let cloudSyncMessage = "";
+
+// ── AIダッシュボードブリーフィング ─────────────────────────────────────
+let aiBriefingText = "";
+let aiBriefingLoading = false;

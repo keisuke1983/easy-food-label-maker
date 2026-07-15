@@ -194,7 +194,38 @@ function setupDelegation() {
         case "del-mfr-tpl": { const sel=document.querySelector("[data-mfr-tpl-select]"); const idx=Number(sel?.value); if(isNaN(idx)||!mfrTemplates[idx])return; mfrTemplates.splice(idx,1); safeSet("food-label-mfr-templates",JSON.stringify(mfrTemplates)); render(); return; }
         case "print-spec": doPrintSpec(); return;
         case "copy-spec": { const area=document.getElementById("spec-print-area"); if(!area)return; const text=[...area.querySelectorAll("tr")].map(tr=>{const th=tr.querySelector("th")?.textContent?.trim()||"";const td=tr.querySelector("td")?.textContent?.trim()||"";return th&&td?`${th}：${td}`:""}).filter(Boolean).join("\n"); copyPlainText(text); return; }
-        case "generate-ai-desc": case "regen-ai-desc": { const pid=aiDescId||(products.find(x=>x.name?.trim())?.id); const p=pid?products.find(x=>x.id===pid):null; if(!p)return; aiEditText=generateAiDesc(p,aiDescChannel); render(); return; }
+        case "generate-ai-desc": case "regen-ai-desc": {
+          const pid = aiDescId || (products.find(x => x.name?.trim())?.id);
+          const p = pid ? products.find(x => x.id === pid) : null;
+          if (!p) return;
+          aiDescLoading = true; aiEditText = ""; render();
+          const d = derive(p);
+          fetch("/api/ai-description", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              product: {
+                name: p.name, category: p.category, volume: p.volume,
+                price: p.price, ingLabel: d.ingLabel, allergens: d.allergens,
+                storage: d.storage, bestBefore: p.bestBefore,
+                manufacturerName: p.manufacturerName, memo: p.memo,
+              },
+              channel: aiDescChannel,
+            }),
+          })
+          .then(r => r.json())
+          .then(json => {
+            aiDescLoading = false;
+            aiEditText = json.text || json.error || "生成に失敗しました。";
+            render();
+          })
+          .catch(e => {
+            aiDescLoading = false;
+            aiEditText = generateAiDesc(p, aiDescChannel) + "\n\n---\n*AIサーバーに接続できなかったため、標準テンプレートを表示しています。*";
+            render();
+          });
+          return;
+        }
         case "copy-ai-desc": { const ta=document.getElementById("ai-desc-prompt"); if(ta) copyPlainText(ta.value); return; }
         case "copy-ai-result": { const ta=document.getElementById("ai-result-text"); if(ta){ta.select();copyPlainText(ta.value);showStatus("コピーしました");} return; }
         case "save-ai-result": { const ta=document.getElementById("ai-result-text"); if(!ta)return; const pid=aiDescId||(products.find(x=>x.name?.trim())?.id); if(!pid)return; aiEditText=ta.value; saveAiText(pid,aiDescChannel,ta.value); showStatus("保存しました"); render(); return; }

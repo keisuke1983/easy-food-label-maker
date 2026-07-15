@@ -307,14 +307,54 @@ a { color: inherit; text-decoration: none; }
 .storage-meter-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
 .storage-meter-fill { height: 100%; border-radius: 4px; transition: width .4s; }
 
-/* ── Plan buy button ── */
+/* ── Plan buy button（buttonに変更: border/cursor追加） ── */
 .plan-buy-btn {
   display: inline-block; margin-top: 8px; padding: 6px 14px;
   background: var(--primary); color: #fff; border-radius: 8px;
   font-size: 13px; font-weight: 600; text-decoration: none;
+  border: none; cursor: pointer;
   transition: opacity .15s;
 }
-.plan-buy-btn:hover { opacity: .85; }
+.plan-buy-btn:hover:not(:disabled) { opacity: .85; }
+.plan-buy-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Stripe決済バッジ ── */
+.plan-stripe-note {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 14px;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: 8px; font-size: 12px; color: #15803d;
+}
+
+/* ── モニター・トライアルセクション ── */
+.plan-trial-section {
+  margin-top: 14px; border: 1.5px dashed #c4b5fd;
+  border-radius: 10px; overflow: hidden;
+}
+.plan-trial-toggle {
+  list-style: none; padding: 12px 16px;
+  font-size: 13px; font-weight: 600; color: #7c3aed;
+  cursor: pointer; user-select: none;
+  background: #faf5ff;
+}
+.plan-trial-toggle::-webkit-details-marker { display: none; }
+.plan-trial-toggle::marker { display: none; }
+.plan-trial-section[open] .plan-trial-toggle { border-bottom: 1px dashed #c4b5fd; }
+.plan-trial-body { padding: 14px 16px; background: #faf5ff; }
+.plan-trial-desc { font-size: 12.5px; color: #6d28d9; margin: 0 0 10px; }
+.plan-trial-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-trial-input {
+  flex: 1; min-width: 180px; padding: 7px 12px;
+  border: 1.5px solid #c4b5fd; border-radius: 8px;
+  font-size: 13px; outline: none;
+  background: #fff; color: var(--text);
+}
+.plan-trial-input:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,.15); }
+.plan-trial-active {
+  margin-top: 10px; padding: 8px 12px;
+  background: #ede9fe; border-radius: 6px;
+  font-size: 12px; font-weight: 600; color: #5b21b6;
+}
 
 /* ── License key section ── */
 .license-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }

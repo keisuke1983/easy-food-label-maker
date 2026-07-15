@@ -377,6 +377,8 @@ function setupDelegation() {
         case "disconnect-cloud": { if(!confirm("クラウド接続を解除しますか？\nデータはこのブラウザにはそのまま残ります。"))return; safeDel("fmcc-supabase-url"); safeDel("fmcc-supabase-key"); showStatus("クラウド接続を解除しました"); render(); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
+        case "stripe-checkout": { stripeCheckout(ael.dataset.plan); return; }
+        case "activate-trial":  { activateTrialCode(); return; }
         case "fetch-ai-briefing": { fetchAiBriefingNow(); return; }
         case "refresh-ai-briefing": {
           aiBriefingText = "";

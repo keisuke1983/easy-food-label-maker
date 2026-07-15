@@ -117,9 +117,11 @@ const SIZE_PRESETS = [
   { label: "自由サイズ", w: "90", h: "", margin: "3", fs: "7.5" },
 ];
 const PLANS = {
-  free: { label: "無料", price: "0円/月", limit: 1, note: "1商品まで無料" },
-  starter: { label: "スタンダード", price: "1,980円/月", limit: 10, note: "月10商品まで保存・PDF出力" },
-  pro: { label: "プロ", price: "3,980円/月", limit: Infinity, note: "無制限" },
+  free:    { label: "無料",              price: "0円/月",     limit: 1,        note: "1商品まで無料" },
+  starter: { label: "スタンダード",      price: "1,980円/月", limit: 10,       note: "10商品まで・全機能利用可" },
+  pro:     { label: "プロ",             price: "3,980円/月", limit: Infinity, note: "商品数無制限・全機能利用可" },
+  // ⚠ 本番リリース前に削除: モニター・テスター向け無制限お試しプラン
+  trial:   { label: "お試し（モニター）", price: "無料",       limit: Infinity, note: "全機能無制限（モニター期間中）" },
 };
 
 // Stripe Payment Links（Stripeダッシュボードで作成後にURLを差し替えてください）

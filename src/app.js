@@ -3514,7 +3514,37 @@ function generateConsultResponse(p, questionKey) {
 }
 
 async function callConsultAI(p, userMessage, questionKey) {
-  return generateConsultResponse(p, questionKey);
+  // テンプレートキーが指定された場合はルールベース回答（高速・確実）
+  if (questionKey && questionKey !== "general") {
+    return generateConsultResponse(p, questionKey);
+  }
+  // 自由質問はGemini APIへ
+  try {
+    const history = getConsultHistory(p.id).slice(0, -1); // 送信前の履歴
+    const d = derive(p);
+    const productPayload = {
+      name: p.name, internalName: p.internalName, category: p.category,
+      volume: p.volume, bestBefore: p.bestBefore, storage: d.storage,
+      ingredients: (p.ingredients || []).filter(i => i.name?.trim()),
+      manufacturerName: p.manufacturerName, manufacturerAddress: p.manufacturerAddress,
+      allergens: d.allergens,
+    };
+    const res = await fetch("/api/ai-consult", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product: productPayload, history, message: userMessage }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    return json.answer;
+  } catch (e) {
+    console.warn("[FoodPilot AI] Gemini fallback:", e.message);
+    // APIが失敗した場合はテンプレート回答にフォールバック
+    return generateConsultResponse(p, "general") + "\n\n---\n*AIサーバーに接続できなかったため、標準回答を表示しています。*";
+  }
 }
 
 

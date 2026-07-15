@@ -1,5 +1,28 @@
-// Vercel Serverless Function — FoodPilot AI 写真解析（Google Gemini版）
-// 環境変数 GEMINI_API_KEY をVercelプロジェクト設定で登録してください
+// Vercel Serverless Function — FoodPilot AI 写真解析（Groq Vision版）
+// 環境変数 GROQ_API_KEY をVercelプロジェクト設定で登録してください
+
+const PROMPT = `この食品パッケージ・ラベルの写真から情報を抽出し、以下のJSON形式のみで回答してください。
+該当情報がない場合は空文字("")にしてください。原材料は文字列の配列で返してください。
+
+{
+  "name": "商品名",
+  "volume": "内容量（例: 100g、250ml）",
+  "bestBefore": "賞味期限または消費期限の記載方法（例: 製造日より180日）",
+  "storage": "保存方法の全文",
+  "ingredients": ["原材料1", "原材料2", "原材料3"],
+  "allergensManual": "アレルゲン表示の全文",
+  "manufacturerName": "製造者または販売者の会社名",
+  "manufacturerPostal": "郵便番号（数字のみ）",
+  "manufacturerAddress": "住所（郵便番号を除く）",
+  "manufacturerPhone": "電話番号",
+  "kcal": "エネルギーの数値のみ（例: 302）",
+  "protein": "たんぱく質の数値のみ",
+  "fat": "脂質の数値のみ",
+  "carbs": "炭水化物の数値のみ",
+  "salt": "食塩相当量の数値のみ"
+}
+
+JSONのみを返し、説明文や\`\`\`は不要です。`;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -12,49 +35,79 @@ export default async function handler(req, res) {
   const { base64 } = req.body || {};
   if (!base64) return res.status(400).json({ error: "base64 画像データが必要です" });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: "サーバーにAPIキーが設定されていません。Vercelの環境変数 GEMINI_API_KEY を設定してください。" });
-  }
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "サーバーにGroq APIキーが設定されていません。" });
 
-  // "data:image/jpeg;base64,xxxxx" → mimeType と rawBase64 に分離
   const match = base64.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return res.status(400).json({ error: "画像フォーマットが不正です" });
-  const [, mimeType, rawBase64] = match;
-
-  const prompt = "この画像は日本の食品パッケージ・食品表示ラベルです。以下の項目を読み取ってJSON形式のみで回答してください（説明文不要）。読み取れない項目は空文字にしてください。\n{\"name\":\"商品名\",\"volume\":\"内容量\",\"bestBefore\":\"賞味期限\",\"storage\":\"保存方法\",\"manufacturerName\":\"製造者名\",\"manufacturerAddress\":\"製造者住所\",\"ingredients\":[{\"name\":\"原材料名\",\"weight\":\"\"}],\"category\":\"カテゴリ（菓子/パン/惣菜/飲料/調味料/乾物/冷凍食品/その他）\"}";
+  const [, mimeType, pureBase64] = match;
 
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimeType, data: rawBase64 } }
-            ]
-          }],
-          generationConfig: { maxOutputTokens: 1024, temperature: 0.1 }
-        })
-      }
-    );
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: PROMPT },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${pureBase64}` } },
+          ],
+        }],
+        max_tokens: 1024,
+        temperature: 0.1,
+      }),
+    });
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.json().catch(() => ({}));
-      return res.status(502).json({ error: err.error?.message || `Gemini APIエラー (HTTP ${geminiRes.status})` });
+    if (!groqRes.ok) {
+      const err = await groqRes.json().catch(() => ({}));
+      console.error("Groq Vision error:", groqRes.status, JSON.stringify(err));
+      return res.status(502).json({ error: err.error?.message || `Groq APIエラー (HTTP ${groqRes.status})` });
     }
 
-    const json = await geminiRes.json();
-    const content = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return res.status(422).json({ error: "AIが有効なデータを返しませんでした。食品表示ラベルや原材料表が写っている写真を使用してください。" });
+    const json = await groqRes.json();
+    const text = json.choices?.[0]?.message?.content || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.status(422).json({ error: "AIが有効なデータを返しませんでした。食品表示ラベルが写っている写真を使用してください。" });
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    const ingredients = (parsed.ingredients || [])
+      .filter(n => typeof n === "string" && n.trim())
+      .map(n => ({ id: Math.random().toString(36).slice(2), name: n.trim(), weight: "" }));
+    if (ingredients.length === 0) ingredients.push({ id: Math.random().toString(36).slice(2), name: "", weight: "" });
+
+    const result = {
+      name: parsed.name || "",
+      volume: parsed.volume || "",
+      bestBefore: parsed.bestBefore || "",
+      storage: parsed.storage || "",
+      storageCustom: "",
+      ingredients,
+      allergensMode: parsed.allergensManual ? "manual" : "auto",
+      allergensManual: parsed.allergensManual || "",
+      manufacturerName: parsed.manufacturerName || "",
+      manufacturerPostal: (parsed.manufacturerPostal || "").replace(/[^0-9]/g, ""),
+      manufacturerAddress: parsed.manufacturerAddress || "",
+      manufacturerPhone: parsed.manufacturerPhone || "",
+    };
+
+    if (parsed.kcal || parsed.protein || parsed.fat || parsed.carbs || parsed.salt) {
+      result.nutritionMode = "manual";
+      result.nutritionManual = {
+        kcal: parsed.kcal || "",
+        protein: parsed.protein || "",
+        fat: parsed.fat || "",
+        carbs: parsed.carbs || "",
+        salt: parsed.salt || "",
+      };
     }
 
-    return res.status(200).json(JSON.parse(jsonMatch[0]));
+    return res.status(200).json(result);
   } catch (err) {
     console.error("ai-photo error:", err);
     return res.status(500).json({ error: err.message || "サーバーエラーが発生しました" });

@@ -60,7 +60,7 @@ function productsListHtml() {
     const d = derive(p);
     const comp = calcCompletion(p, d);
     const thumb = p.imageDataUrl
-      ? `<img class="product-thumb" src="${p.imageDataUrl}" alt="商品画像">`
+      ? `<img class="product-thumb" src="${p.imageDataUrl}" alt="商品画像" onerror="this.onerror=null;this.outerHTML='<div class=\\'product-thumb-placeholder product-thumb-error\\'>⚠️</div>'">`
       : `<div class="product-thumb-placeholder">📦</div>`;
     const missingHtml = comp.missing.length
       ? `<div class="comp-missing">${comp.missing.map(m=>`<button class="comp-missing-btn" data-open-and-jump="${escapeHtml(p.id)}:${escapeHtml(m)}" title="${escapeHtml(m)}の入力欄へ移動">${escapeHtml(m)}</button>`).join("")}</div>`

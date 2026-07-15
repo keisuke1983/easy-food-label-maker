@@ -956,13 +956,14 @@ function homeHtml() {
 }
 function planHtml() {
   const POPULAR = "pro";
+  // trial は別セクションで表示するためメイングリッドから除外
+  const mainPlans = Object.entries(PLANS).filter(([id]) => id !== "trial");
   return `<section class="plan-panel">
-    <div class="plan-title"><b>プランを選択</b><span>購入後にライセンスキーを設定ページで入力してください</span></div>
-    <div class="plan-grid">${Object.entries(PLANS).map(([id, p]) => {
+    <div class="plan-title"><b>プランを選択</b><span>お支払い後に表示されるライセンスキーを設定ページで入力してください</span></div>
+    <div class="plan-grid">${mainPlans.map(([id, p]) => {
       const isActive = currentPlan === id;
-      const link = STRIPE_LINKS[id];
-      const buyBtn = !isActive && link
-        ? `<a class="plan-buy-btn" href="${escapeHtml(link)}" target="_blank" rel="noopener">購入する →</a>`
+      const buyBtn = !isActive && id !== "free"
+        ? `<button class="plan-buy-btn" data-action="stripe-checkout" data-plan="${id}">購入する →</button>`
         : "";
       return `<div class="plan-card${isActive ? " selected" : ""}${id === POPULAR ? " popular" : ""}">
         ${id === POPULAR ? `<span class="popular-badge">人気</span>` : ""}
@@ -973,6 +974,22 @@ function planHtml() {
       </div>`;
     }).join("")}
     </div>
+    <div class="plan-stripe-note">
+      <span>💳 Stripe決済（クレジットカード対応）</span>
+      <span>🔒 SSL暗号化で安全に処理されます</span>
+      ${currentPlan !== "free" && currentPlan !== "trial" ? `<span>✓ 現在：<strong>${escapeHtml(PLANS[currentPlan]?.label || currentPlan)}プラン</strong></span>` : ""}
+    </div>
+    <details class="plan-trial-section">
+      <summary class="plan-trial-toggle">🧪 モニター・テスターの方はこちら</summary>
+      <div class="plan-trial-body">
+        <p class="plan-trial-desc">招待コードをお持ちの方は入力してください。全機能を無制限でお試しいただけます。</p>
+        <div class="plan-trial-form">
+          <input id="trial-code-input" type="text" class="plan-trial-input" placeholder="モニターコードを入力" autocomplete="off" spellcheck="false">
+          <button id="trial-activate-btn" class="action primary" data-action="activate-trial">参加する</button>
+        </div>
+        ${currentPlan === "trial" ? `<p class="plan-trial-active">✓ モニタープランで参加中です（全機能無制限）</p>` : ""}
+      </div>
+    </details>
   </section>`;
 }
 function menuHtml() {
@@ -2201,8 +2218,8 @@ function costEditorHtml(p) {
 // ── 商品画像アップロード HTML ─────────────────────────────────────────
 function imageUploadSectionHtml(p) {
   const img = p.imageDataUrl
-    ? `<div class="image-preview-wrap">
-        <img class="image-preview-img" src="${p.imageDataUrl}" alt="商品画像">
+    ? `<div class="image-preview-wrap" id="image-preview-wrap">
+        <img class="image-preview-img" src="${p.imageDataUrl}" alt="商品画像" onerror="this.onerror=null;document.getElementById('image-preview-wrap').classList.add('image-preview-error');this.remove()">
         <button class="image-remove-btn" data-action="remove-product-image" title="削除">×</button>
        </div>`
     : `<div class="image-upload-area" id="image-drop-zone">
@@ -2679,7 +2696,7 @@ function specSheetHtml() {
   const row = (label, val) => val ? `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(String(val))}</td></tr>` : "";
 
   const productImg = p.imageDataUrl
-    ? `<img class="spec-v2-product-img" src="${p.imageDataUrl}" alt="商品画像">`
+    ? `<img class="spec-v2-product-img" src="${p.imageDataUrl}" alt="商品画像" onerror="this.onerror=null;this.outerHTML='<div class=\\'spec-v2-product-img-placeholder\\'>⚠️<small>読込失敗</small></div>'">`
     : `<div class="spec-v2-product-img-placeholder">📦<small>画像未登録</small></div>`;
 
   const costs = calcCosts(p);
@@ -3605,7 +3622,7 @@ function templateSelectHtml() {
       ${recentForTpl.map(p => {
         const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0];
         return `<button class="tpl-copy-item" data-copy-from="${escapeHtml(p.id)}">
-          ${p.imageDataUrl ? `<img class="tpl-copy-thumb" src="${p.imageDataUrl}" alt="">` : `<span class="tpl-copy-thumb-ph">📦</span>`}
+          ${p.imageDataUrl ? `<img class="tpl-copy-thumb" src="${p.imageDataUrl}" alt="" onerror="this.onerror=null;this.outerHTML='<span class=\\'tpl-copy-thumb-ph\\'>📦</span>'">` : `<span class="tpl-copy-thumb-ph">📦</span>`}
           <div class="tpl-copy-info">
             <span class="tpl-copy-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             <span class="tpl-copy-meta">
@@ -4471,9 +4488,87 @@ function sendAiChatMessage() {
   }, 60);
 }
 
+// ── Stripe Checkoutセッション作成 ────────────────────────────────────
+async function stripeCheckout(plan) {
+  const btn = document.querySelector(`[data-action="stripe-checkout"][data-plan="${plan}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Stripeへ接続中..."; }
+  try {
+    const res = await fetch("/api/stripe-checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan, origin: location.origin }),
+    });
+    const data = await res.json();
+    if (data.url) {
+      location.href = data.url;
+    } else {
+      showStatus(data.error || "決済ページを開けませんでした。しばらくしてから再試行してください。", { duration: 7000 });
+      if (btn) { btn.disabled = false; btn.textContent = "購入する →"; }
+    }
+  } catch {
+    showStatus("通信エラーが発生しました。インターネット接続を確認してください。", { duration: 6000 });
+    if (btn) { btn.disabled = false; btn.textContent = "購入する →"; }
+  }
+}
+
+// ── モニター参加コード認証 ────────────────────────────────────────────
+async function activateTrialCode() {
+  const inp = document.getElementById("trial-code-input");
+  const code = inp?.value?.trim();
+  if (!code) { showStatus("モニターコードを入力してください"); return; }
+  const btn = document.getElementById("trial-activate-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "確認中..."; }
+  try {
+    const res = await fetch("/api/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: code }),
+    });
+    const data = await res.json();
+    if (data.ok && data.plan) {
+      currentPlan = data.plan;
+      safeSet("food-label-plan", currentPlan);
+      safeSet("food-label-license-key", code);
+      showStatus(`✓ ${PLANS[data.plan]?.label || data.plan}プランが有効になりました！`, { duration: 5000 });
+      render();
+    } else {
+      showStatus(data.error || "コードが正しくありません。", { duration: 5000 });
+      if (btn) { btn.disabled = false; btn.textContent = "参加する"; }
+    }
+  } catch {
+    showStatus("通信エラーが発生しました。", { duration: 5000 });
+    if (btn) { btn.disabled = false; btn.textContent = "参加する"; }
+  }
+}
+
 render();
 setupDelegation(); // ⑨ デリゲーション登録（起動時1回）
 initCloudSync();   // ☁ クラウドから最新データをマージ（非同期・バックグラウンド）
+
+// ── Stripe決済完了検出 (?stripe_session=cs_xxx で着地したとき) ────────
+(function detectStripeReturn() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get("stripe_session");
+    if (!sessionId || (!sessionId.startsWith("cs_live_") && !sessionId.startsWith("cs_test_"))) return;
+    // URLからパラメータを除去（ブラウザ履歴にキーを残さない）
+    history.replaceState({}, document.title, location.pathname);
+    showModal({
+      message: `決済が完了しました！\n\n下記のライセンスキーをコピーして、設定 → ライセンス認証 で入力してください：\n\n${sessionId}`,
+      confirmLabel: "設定ページで今すぐ認証する",
+      cancelLabel: "あとで認証する",
+      onConfirm: () => {
+        saasView = "settings-nav";
+        view = "saas";
+        render();
+        setTimeout(() => {
+          const inp = document.getElementById("license-key-input");
+          if (inp) { inp.value = sessionId; inp.focus(); inp.select(); }
+        }, 200);
+      },
+    });
+  } catch {}
+})();
 
 // ショートカットキー（起動時1回のみ登録）
 document.addEventListener("keydown", (e) => {

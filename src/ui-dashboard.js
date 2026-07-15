@@ -109,9 +109,32 @@ function dashboardHtml() {
     return saasLayout("ダッシュボード", dashboardEmptyHtml());
   }
 
+  // ── calcCompletion をこの描画サイクル内でメモ化 ──
+  const _compCache = new Map();
+  const cachedCompletion = (p, d) => {
+    if (!_compCache.has(p.id)) _compCache.set(p.id, calcCompletion(p, d));
+    return _compCache.get(p.id);
+  };
+
+  // ── AIブリーフィング: sessionStorageキャッシュ確認 → なければ自動フェッチ ──
+  if (!aiBriefingText && !aiBriefingLoading) {
+    try {
+      const cached = JSON.parse(sessionStorage.getItem("fp-ai-briefing") || "null");
+      if (cached && cached.exp > Date.now()) {
+        aiBriefingText = cached.text;
+      } else {
+        aiBriefingLoading = true;
+        queueMicrotask(() => typeof fetchAiBriefingNow === "function" && fetchAiBriefingNow(true));
+      }
+    } catch {
+      aiBriefingLoading = true;
+      queueMicrotask(() => typeof fetchAiBriefingNow === "function" && fetchAiBriefingNow(true));
+    }
+  }
+
   const total = products.length;
   const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
-  const incomplete = derivedAll.filter(({ p, d }) => calcCompletion(p, d).pct < 100).length;
+  const incomplete = derivedAll.filter(({ p, d }) => cachedCompletion(p, d).pct < 100).length;
   const completedCount = total - incomplete;
 
   const now = new Date();
@@ -226,10 +249,10 @@ function dashboardHtml() {
   const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 6);
   const recentHtml = recent.map(p => {
     const rd = derivedAll.find(x => x.p.id === p.id);
-    const comp = rd ? calcCompletion(rd.p, rd.d) : { pct: 0 };
+    const comp = rd ? cachedCompletion(rd.p, rd.d) : { pct: 0 };
     const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
     const thumb = p.imageDataUrl
-      ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="">`
+      ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="" onerror="this.onerror=null;this.outerHTML='<div class=\\'recent-prod-thumb-ph recent-prod-thumb-err\\'>⚠️</div>'">`
       : `<div class="recent-prod-thumb-ph">📦</div>`;
     const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus||"draft")) || PRODUCT_STATUSES[0];
     return `<button class="recent-prod-card" data-nav-product-detail="${escapeHtml(p.id)}">
@@ -248,7 +271,7 @@ function dashboardHtml() {
 
   // ── 完成度分布 ──
   const compDist = derivedAll.reduce((acc,{p,d}) => {
-    const pct = calcCompletion(p,d).pct;
+    const pct = cachedCompletion(p,d).pct;
     if (pct===100) acc.done++; else if (pct>=60) acc.near++; else if (pct>=30) acc.low++; else acc.veryLow++;
     return acc;
   }, {done:0,near:0,low:0,veryLow:0});
@@ -290,7 +313,7 @@ function dashboardHtml() {
   const thisWeekNew  = products.filter(p=>{ const d=parseProdDate(p.createdAt); return d&&d>=weekStart; }).length;
   const lastWeekNew  = products.filter(p=>{ const d=parseProdDate(p.createdAt); return d&&d>=lastWeekStart&&d<weekStart; }).length;
   const thisWeekUpd  = products.filter(p=>{ const d=parseProdDate(p.updatedAt); return d&&d>=weekStart; }).length;
-  const avgComp = derivedAll.length ? Math.round(derivedAll.reduce((s,{p,d})=>s+calcCompletion(p,d).pct,0)/derivedAll.length) : 0;
+  const avgComp = derivedAll.length ? Math.round(derivedAll.reduce((s,{p,d})=>s+cachedCompletion(p,d).pct,0)/derivedAll.length) : 0;
   const newDiff = thisWeekNew - lastWeekNew;
   const weeklyHtml = `<div class="dash-panel dash-weekly-panel">
     <div class="dash-panel-hd">📅 今週のサマリー（${now.getMonth()+1}/${weekStart.getDate()}〜）</div>
@@ -334,9 +357,28 @@ function dashboardHtml() {
     </div>`;
   })();
 
+  // ── AIブリーフィングカード ──
+  const briefingHtml = `<div class="ai-briefing-card">
+    <div class="ai-briefing-hd">
+      <span class="ai-briefing-icon">✦</span>
+      <span class="ai-briefing-label">AI今日のブリーフィング</span>
+      ${aiBriefingText && !aiBriefingLoading ? `<button class="ai-briefing-refresh" data-action="refresh-ai-briefing" title="再生成">↺ 更新</button>` : ""}
+    </div>
+    ${aiBriefingLoading
+      ? `<div class="ai-briefing-loading"><span class="ai-briefing-spinner"></span>AIが今日の状況を分析中...</div>`
+      : aiBriefingText
+      ? `<p class="ai-briefing-text">${escapeHtml(aiBriefingText)}</p>`
+      : `<div class="ai-briefing-empty">
+          <button class="action primary ai-briefing-btn" data-action="fetch-ai-briefing">✦ 今日のブリーフィングを生成</button>
+          <span class="ai-briefing-hint">商品データをAIが分析し、今日の優先タスクを提案します</span>
+         </div>`
+    }
+  </div>`;
+
   return saasLayout("ダッシュボード", `
     ${storageAlert}
     ${expiryAlert}
+    ${briefingHtml}
     ${kpiHtml}
     ${focusHtml}
     ${quickHtml}

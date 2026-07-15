@@ -252,7 +252,7 @@ function dashboardHtml() {
     const comp = rd ? cachedCompletion(rd.p, rd.d) : { pct: 0 };
     const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
     const thumb = p.imageDataUrl
-      ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="">`
+      ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="" onerror="this.onerror=null;this.outerHTML='<div class=\\'recent-prod-thumb-ph recent-prod-thumb-err\\'>⚠️</div>'">`
       : `<div class="recent-prod-thumb-ph">📦</div>`;
     const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus||"draft")) || PRODUCT_STATUSES[0];
     return `<button class="recent-prod-card" data-nav-product-detail="${escapeHtml(p.id)}">

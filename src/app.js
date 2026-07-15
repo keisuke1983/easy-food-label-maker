@@ -2201,8 +2201,8 @@ function costEditorHtml(p) {
 // ── 商品画像アップロード HTML ─────────────────────────────────────────
 function imageUploadSectionHtml(p) {
   const img = p.imageDataUrl
-    ? `<div class="image-preview-wrap">
-        <img class="image-preview-img" src="${p.imageDataUrl}" alt="商品画像">
+    ? `<div class="image-preview-wrap" id="image-preview-wrap">
+        <img class="image-preview-img" src="${p.imageDataUrl}" alt="商品画像" onerror="this.onerror=null;document.getElementById('image-preview-wrap').classList.add('image-preview-error');this.remove()">
         <button class="image-remove-btn" data-action="remove-product-image" title="削除">×</button>
        </div>`
     : `<div class="image-upload-area" id="image-drop-zone">
@@ -2679,7 +2679,7 @@ function specSheetHtml() {
   const row = (label, val) => val ? `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(String(val))}</td></tr>` : "";
 
   const productImg = p.imageDataUrl
-    ? `<img class="spec-v2-product-img" src="${p.imageDataUrl}" alt="商品画像">`
+    ? `<img class="spec-v2-product-img" src="${p.imageDataUrl}" alt="商品画像" onerror="this.onerror=null;this.outerHTML='<div class=\\'spec-v2-product-img-placeholder\\'>⚠️<small>読込失敗</small></div>'">`
     : `<div class="spec-v2-product-img-placeholder">📦<small>画像未登録</small></div>`;
 
   const costs = calcCosts(p);
@@ -3605,7 +3605,7 @@ function templateSelectHtml() {
       ${recentForTpl.map(p => {
         const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0];
         return `<button class="tpl-copy-item" data-copy-from="${escapeHtml(p.id)}">
-          ${p.imageDataUrl ? `<img class="tpl-copy-thumb" src="${p.imageDataUrl}" alt="">` : `<span class="tpl-copy-thumb-ph">📦</span>`}
+          ${p.imageDataUrl ? `<img class="tpl-copy-thumb" src="${p.imageDataUrl}" alt="" onerror="this.onerror=null;this.outerHTML='<span class=\\'tpl-copy-thumb-ph\\'>📦</span>'">` : `<span class="tpl-copy-thumb-ph">📦</span>`}
           <div class="tpl-copy-info">
             <span class="tpl-copy-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             <span class="tpl-copy-meta">

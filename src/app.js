@@ -4818,6 +4818,7 @@ async function activateTrialCode() {
 render();
 setupDelegation(); // ⑨ デリゲーション登録（起動時1回）
 initCloudSync();   // ☁ クラウドから最新データをマージ（非同期・バックグラウンド）
+initImageStorage(); // 🖼 IndexedDB画像の移行・復元（非同期）
 
 // ── Stripe決済完了検出 (?stripe_session=cs_xxx で着地したとき) ────────
 (function detectStripeReturn() {

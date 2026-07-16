@@ -1,4 +1,4 @@
-const CACHE = 'food-label-v20260716a';
+const CACHE = 'food-label-v20260716b';
 
 self.addEventListener('install', () => self.skipWaiting());
 

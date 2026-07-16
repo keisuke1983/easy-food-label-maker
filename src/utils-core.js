@@ -67,7 +67,12 @@ function loadProducts() {
   catch { return []; }
 }
 function saveProducts() {
-  safeSet("food-label-products-static", JSON.stringify(products));
+  const toSave = products.map(p => {
+    if (!p.imageDataUrl || !p.imageDataUrl.startsWith("data:")) return p;
+    imgSet(p.id, p.imageDataUrl); // IndexedDBへ非同期保存
+    return { ...p, imageDataUrl: "1" }; // localStorageにはマーカーのみ
+  });
+  safeSet("food-label-products-static", JSON.stringify(toSave));
   if (typeof scheduleCloudSync === "function") scheduleCloudSync();
 }
 function estimateNutrition(name) {

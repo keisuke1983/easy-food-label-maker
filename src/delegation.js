@@ -321,7 +321,7 @@ function setupDelegation() {
           const count = masterSelected.size;
           if (!count) return;
           if (!confirm(`選択した ${count} 件の商品を削除しますか？\nこの操作は元に戻せません。`)) return;
-          masterSelected.forEach(id => trackCloudDelete(id));
+          masterSelected.forEach(id => { trackCloudDelete(id); imgDelete(id); });
           products = products.filter(p => !masterSelected.has(p.id));
           masterSelected.clear();
           saveProducts();
@@ -346,7 +346,7 @@ function setupDelegation() {
           safeSet("fmcc-user-templates", JSON.stringify([newTpl, ...userTpls]));
           showStatus(`「${label}」をテンプレートとして保存しました`); return;
         }
-        case "remove-product-image": { const p=products.find(x=>x.id===productDetailId); if(!p)return; p.imageDataUrl=""; saveProducts(); render(); return; }
+        case "remove-product-image": { const p=products.find(x=>x.id===productDetailId); if(!p)return; p.imageDataUrl=""; imgDelete(p.id); saveProducts(); render(); return; }
         case "add-cost-item": { const p=products.find(x=>x.id===productDetailId); if(!p)return; saveCostItems(); p.costItems=[...(p.costItems||[]),{id:uid(),name:"",amount:"",unit:"g",unitPrice:""}]; saveProducts(); render(); return; }
         case "add-additive-kw": { const inp=document.getElementById("additive-kw-input"); if(!inp)return; const kws=inp.value.split(/[、,，\s]+/).map(s=>s.trim()).filter(Boolean); if(!kws.length)return; userAdditiveKw=[...new Set([...userAdditiveKw,...kws])]; safeSet("food-label-additive-kw",JSON.stringify(userAdditiveKw)); render(); return; }
         case "save-company-info": {
@@ -430,7 +430,7 @@ function setupDelegation() {
       const snapshot = structuredClone(p);
       const histKey = `food-label-history-${p.id}`;
       const histSnap = localStorage.getItem(histKey);
-      trackCloudDelete(p.id);
+      trackCloudDelete(p.id); imgDelete(p.id);
       products = products.filter(x=>x.id!==p.id);
       safeDel(histKey);
       saveProducts(); render();

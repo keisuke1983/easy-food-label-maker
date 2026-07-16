@@ -3147,7 +3147,9 @@ div.db2-kpi-card { cursor: default; }
   display: grid;
   grid-template-columns: 1fr 268px;
   gap: 16px; margin-bottom: 20px; align-items: start;
+  overflow: visible;
 }
+.db2-top-right { overflow: visible; }
 @media (max-width: 860px) { .db2-top-grid { grid-template-columns: 1fr; } }
 
 /* ── ② AIセクション ── */

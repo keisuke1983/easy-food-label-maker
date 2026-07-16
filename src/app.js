@@ -762,7 +762,7 @@ const DEMO_STEPS = [
     heading:"商品写真を撮るだけで\nAIが原材料・製造者・栄養成分を自動で読み取ります",
     point:"パッケージ裏面を撮影するだけ。Llama Vision AIが原材料名・製造者・アレルゲン・栄養成分をゼロ入力で抽出します。" },
 
-  { step:3, title:"AI自動入力結果",                      view:"edit", openSection:"基本情報",
+  { step:3, title:"AI自動入力結果",                      view:"edit", autoScroll:true,
     heading:"写真から全項目が自動入力されました",
     point:"商品名・原材料7品目・製造者・賞味期限・保存方法が入力済みです。修正が必要な箇所だけ直して保存するだけ。手入力と比べて工数が大幅に削減されます。" },
 
@@ -829,6 +829,25 @@ const DEMO_SAMPLE = {
   approvalStatus: "approved",
 };
 
+let demoScrollTimer = null;
+function stopDemoAutoScroll() {
+  if (demoScrollTimer) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
+}
+function startDemoAutoScroll() {
+  stopDemoAutoScroll();
+  window.scrollTo(0, 0);
+  const duration = 5000;
+  const start = Date.now();
+  demoScrollTimer = setInterval(() => {
+    const elapsed = Date.now() - start;
+    const t = Math.min(elapsed / duration, 1);
+    const eased = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo(0, maxScroll * eased);
+    if (t >= 1) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
+  }, 16);
+}
+
 function startDemo() {
   products = products.filter(p => !p._isDemo);
   const dp = Object.assign({}, DEMO_SAMPLE, {
@@ -846,6 +865,7 @@ function startDemo() {
 }
 
 function endDemo() {
+  stopDemoAutoScroll();
   products = products.filter(p => !p._isDemo);
   try { localStorage.setItem("food-label-products-static", JSON.stringify(products)); } catch {}
   demoMode = false;
@@ -858,6 +878,7 @@ function endDemo() {
 
 function applyDemoStep() {
   const s = DEMO_STEPS[demoStep - 1];
+  stopDemoAutoScroll();
   sidebarOpen = false;
   registerMenuOpen = false;
   if (s.view === "dashboard")                { saasView = "dashboard"; view = "saas"; }
@@ -866,7 +887,10 @@ function applyDemoStep() {
     editId = demoProductId;
     draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct());
     view = "edit"; saasView = s.view === "label-nav" ? "label-nav" : "edit";
-    if (s.openSection) {
+    if (s.autoScroll) {
+      openSections = new Set(["基本情報", "原材料"]);
+      setTimeout(() => startDemoAutoScroll(), 150);
+    } else if (s.openSection) {
       openSections = new Set([s.openSection]);
       const sec = s.openSection;
       setTimeout(() => {

@@ -3338,3 +3338,14 @@ div.db2-kpi-card { cursor: default; }
   .db2-sys-item { padding: 4px 10px; }
   .db2-sys-settings-btn { margin-left: 0; }
 }
+
+/* ── ダッシュボード quick section の登録ボタン上書き ── */
+.db2-reg-wrap { grid-column: 1 / -1; position: relative; }
+.db2-reg-wrap .reg-btn-wrap { width: 100%; }
+.db2-reg-wrap .reg-main-btn {
+  width: 100%; padding: 16px; font-size: 15px; font-weight: 700;
+  border-radius: 8px; justify-content: center;
+}
+.db2-reg-wrap .reg-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 200;
+}

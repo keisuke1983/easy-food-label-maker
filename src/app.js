@@ -3587,8 +3587,8 @@ async function runAiLabelCheck() {
 // ══ AI商品登録メニュー ══════════════════════════════════════════════════
 
 const REGISTER_MENU = [
-  { id: "template", icon: "📋", label: "テンプレートから作成", desc: "カテゴリ別の初期設定を適用して素早く登録", badge: "かんたん" },
-  { id: "photo",    icon: "📷", label: "写真から登録",        desc: "商品写真・裏面・パッケージをAIで解析して自動登録" },
+  { id: "photo",    icon: "📷", label: "写真から登録",        desc: "商品写真・裏面・パッケージをAIで解析して自動登録", badge: "おすすめ" },
+  { id: "template", icon: "📋", label: "テンプレートから作成", desc: "カテゴリ別の初期設定を適用して素早く登録" },
   { id: "spec",     icon: "📄", label: "規格書から登録",      desc: "PDF・Excel・Word の規格書をAIが解析して登録" },
   { id: "ai-chat",  icon: "🤖", label: "AIで作成",           desc: "チャット形式で質問に答えるだけで商品を自動作成" },
   { id: "manual",   icon: "✏️", label: "手入力",             desc: "従来どおり手入力で商品登録" },

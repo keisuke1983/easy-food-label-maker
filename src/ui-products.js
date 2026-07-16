@@ -38,6 +38,13 @@ function productsListHtml() {
   } else if (masterSort==="completion") {
     const keys = new Map(list.map(p=>{ const d=derive(p); return [p.id, calcCompletion(p,d).pct]; }));
     list.sort((a,b)=>keys.get(a.id)-keys.get(b.id));
+  } else if (masterSort==="expiryDate") {
+    list.sort((a,b)=>{
+      if (!a.expiryDate && !b.expiryDate) return 0;
+      if (!a.expiryDate) return 1;
+      if (!b.expiryDate) return -1;
+      return a.expiryDate.localeCompare(b.expiryDate);
+    });
   } else {
     list.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""));
   }
@@ -116,14 +123,18 @@ function productsListHtml() {
   // テーブルビュー（masterView === "table" のときだけ使う）
   const allVisibleIds = list.map(p => p.id);
   const allChecked = allVisibleIds.length > 0 && allVisibleIds.every(id => masterSelected.has(id));
+  const todayIso = new Date().toISOString().split("T")[0];
+  const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const sortIcon = col => masterSort === col ? " ▲" : "";
   const tableHtml = masterView === "table" && list.length ? `<table class="master-table" data-visible-ids="${allVisibleIds.join(",")}">
     <thead><tr>
       <th class="mt-col-check" onclick="event.stopPropagation()"><input type="checkbox" data-select-all ${allChecked?"checked":""} title="すべて選択/解除"></th>
-      <th class="mt-col-name">商品名</th>
-      <th class="mt-col-comp">完成度</th>
+      <th class="mt-col-name mt-sortable${masterSort==="name"?" mt-sort-active":""}" data-sort-col="name">商品名${sortIcon("name")}</th>
+      <th class="mt-col-comp mt-sortable${masterSort==="completion"?" mt-sort-active":""}" data-sort-col="completion">完成度${sortIcon("completion")}</th>
       <th class="mt-col-status">ステータス</th>
       <th class="mt-col-pub">公開状態</th>
-      <th class="mt-col-date">更新日</th>
+      <th class="mt-col-expiry mt-sortable${masterSort==="expiryDate"?" mt-sort-active":""}" data-sort-col="expiryDate">賞味期限${sortIcon("expiryDate")}</th>
+      <th class="mt-col-date mt-sortable${masterSort==="updatedAt"?" mt-sort-active":""}" data-sort-col="updatedAt">更新日${sortIcon("updatedAt")}</th>
       <th class="mt-col-cat">カテゴリ</th>
       <th class="mt-col-actions">操作</th>
     </tr></thead>
@@ -132,12 +143,11 @@ function productsListHtml() {
       const comp = calcCompletion(p, d);
       const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0];
       const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
-      const todayIsoT = new Date().toISOString().split("T")[0];
-      const soonIsoT  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
-      const expiryChipT = p.expiryDate && p.expiryDate < todayIsoT
-        ? `<span class="expiry-chip expired" style="font-size:10px">🚨</span>`
-        : p.expiryDate && p.expiryDate <= soonIsoT
-        ? `<span class="expiry-chip soon" style="font-size:10px">⏰</span>` : "";
+      const expiryClass = p.expiryDate && p.expiryDate < todayIso ? "mt-expiry-expired"
+        : p.expiryDate && p.expiryDate <= soonIso ? "mt-expiry-soon" : "";
+      const expiryHtml = p.expiryDate
+        ? `<span class="mt-expiry-date ${expiryClass}">${escapeHtml(p.expiryDate)}</span>`
+        : `<span class="mt-expiry-none">—</span>`;
       const isSelected = masterSelected.has(p.id);
       return `<tr class="master-row${isSelected?" master-row--selected":""}" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
         <td class="mt-col-check" onclick="event.stopPropagation()"><input type="checkbox" class="row-check" data-select-product="${escapeHtml(p.id)}" ${isSelected?"checked":""}></td>
@@ -145,7 +155,8 @@ function productsListHtml() {
         <td class="mt-col-comp"><div class="mt-comp-wrap"><div class="mt-comp-bar"><div class="mt-comp-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div><span class="mt-comp-pct" style="color:${pctColor}">${comp.pct}%</span></div></td>
         <td class="mt-col-status" onclick="event.stopPropagation()"><select class="pipeline-chip-select" data-quick-status-select="${escapeHtml(p.id)}" style="color:${ps.color};background:${ps.bg};border-color:${ps.color}">${PRODUCT_STATUSES.map(s=>`<option value="${s.id}"${(p.productStatus||"draft")===s.id?" selected":""}>${s.label}</option>`).join("")}</select></td>
         <td>${statusBadge(p)}</td>
-        <td class="mt-col-date">${escapeHtml(p.updatedAt||"")} ${expiryChipT}</td>
+        <td class="mt-col-expiry" onclick="event.stopPropagation()">${expiryHtml}</td>
+        <td class="mt-col-date">${escapeHtml(p.updatedAt||"")}</td>
         <td class="mt-col-cat">${escapeHtml(p.category||"")}</td>
         <td class="mt-col-actions" onclick="event.stopPropagation()">
           <button class="btn-action-sm" data-label-from="${escapeHtml(p.id)}">ラベル</button>
@@ -192,7 +203,7 @@ function productsListHtml() {
     ? `<span class="result-count">${list.length}件</span>`
     : "";
 
-  const SORT_LABELS = { updatedAt:"更新日（新しい順）", name:"商品名（あいうえお順）", completion:"完成度（低い順）" };
+  const SORT_LABELS = { updatedAt:"更新日（新しい順）", name:"商品名（あいうえお順）", completion:"完成度（低い順）", expiryDate:"賞味期限（近い順）" };
   const COMPLETION_LABELS = { lt100:"完成度 100%未満", lt60:"完成度 60%未満", lt30:"完成度 30%未満" };
 
   const isTodoFilter = !!TODO_LABELS[masterFilter];

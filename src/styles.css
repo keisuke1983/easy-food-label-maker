@@ -2822,6 +2822,16 @@ kbd {
 .row-check { width: 15px; height: 15px; cursor: pointer; }
 .master-row--selected { background: #eff6ff !important; }
 .master-row--selected:hover { background: #dbeafe !important; }
+/* ソート可能ヘッダー */
+.mt-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.mt-sortable:hover { background: var(--bg-alt); }
+.mt-sort-active { color: var(--blue); }
+/* 賞味期限列 */
+.mt-col-expiry { width: 96px; white-space: nowrap; font-size: 12px; }
+.mt-expiry-date { color: var(--text-sub); }
+.mt-expiry-expired { color: #dc2626; font-weight: 700; }
+.mt-expiry-soon { color: #d97706; font-weight: 600; }
+.mt-expiry-none { color: var(--text-muted); }
 
 /* ── 詳細画面 未入力ジャンプボタン ──────────────────────────────────── */
 .dcb-missing-btn {

@@ -532,7 +532,7 @@ function batchPrint() {
   }).join("");
   const style = document.createElement("style");
   style.id = "print-style";
-  style.textContent = `@media print { body>*{display:none!important} #batch-print-frame{display:block!important;position:fixed;inset:0;background:#fff;padding:${printCfg.margin||3}mm} .label-paper{width:${printCfg.w||90}mm!important;font-size:${printCfg.fs||7.5}pt!important;break-inside:avoid} }`;
+  style.textContent = `@page{margin:0;size:auto} @media print { body>*{display:none!important} #batch-print-frame{display:block!important;position:fixed;inset:0;background:#fff;padding:${printCfg.margin||3}mm;-webkit-print-color-adjust:exact;print-color-adjust:exact} .label-paper{width:${printCfg.w||90}mm!important;font-size:${printCfg.fs||7.5}pt!important;break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact} }`;
   const frame = document.createElement("div"); frame.id = "batch-print-frame"; frame.innerHTML = `<style>${style.textContent.replace(/@media print \{|\}/g,"")}</style>${html}`;
   document.body.appendChild(frame); document.head.appendChild(style);
   const cleanup = () => { frame.remove(); style.remove(); };
@@ -1509,10 +1509,11 @@ function printLabels() {
   const style = document.createElement("style");
   style.id = "print-style";
   style.textContent = `
+    @page { margin: 0; size: auto; }
     @media print {
       body > * { display: none !important; }
-      #print-area { display: block !important; position: fixed !important; top: ${printOffsetY || 0}mm !important; left: ${printOffsetX || 0}mm !important; background: #fff !important; padding: ${printCfg.margin}mm !important; }
-      #print-area .label-paper { width: ${printCfg.w || 90}mm !important; ${printCfg.h ? `min-height: ${printCfg.h}mm !important;` : ""} font-size: ${printCfg.fs || 7.5}pt !important; box-shadow: none !important; break-inside: avoid; }
+      #print-area { display: block !important; position: fixed !important; top: ${printOffsetY || 0}mm !important; left: ${printOffsetX || 0}mm !important; background: #fff !important; padding: ${printCfg.margin}mm !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      #print-area .label-paper { width: ${printCfg.w || 90}mm !important; ${printCfg.h ? `min-height: ${printCfg.h}mm !important;` : ""} font-size: ${printCfg.fs || 7.5}pt !important; box-shadow: none !important; break-inside: avoid; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       #print-area .label-paper th, #print-area .label-paper td { font-size: inherit !important; }
       #print-area .print-stack { display: grid !important; gap: 4mm !important; }
       #print-area .preview-heading { display: none !important; }

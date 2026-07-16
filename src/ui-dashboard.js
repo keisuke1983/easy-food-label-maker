@@ -109,7 +109,7 @@ function dashboardHtml() {
     return saasLayout("ダッシュボード", dashboardEmptyHtml());
   }
 
-  // ── calcCompletion をこの描画サイクル内でメモ化 ──
+  // ── calcCompletion メモ化 ──
   const _compCache = new Map();
   const cachedCompletion = (p, d) => {
     if (!_compCache.has(p.id)) _compCache.set(p.id, calcCompletion(p, d));
@@ -132,122 +132,202 @@ function dashboardHtml() {
     }
   }
 
-  const total = products.length;
-  const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
-  const incomplete = derivedAll.filter(({ p, d }) => cachedCompletion(p, d).pct < 100).length;
-  const completedCount = total - incomplete;
-
-  const now = new Date();
+  const now     = new Date();
   const todayIso = now.toISOString().split("T")[0];
   const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
-  const ym = `${now.getFullYear()}/${now.getMonth()+1}`;
-  const thisMonthCount = products.filter(p => (p.createdAt || p.updatedAt || "").startsWith(ym)).length;
+  const ym       = `${now.getFullYear()}/${now.getMonth()+1}`;
 
-  // ── 期限アラート ──
-  const expiredCount      = products.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
-  const expiringSoonCount = products.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso).length;
-  const expiryAlert = expiredCount > 0
-    ? `<div class="expiry-alert expiry-alert--danger" role="alert">🚨 <strong>${expiredCount}件</strong>の商品が賞味期限切れです。<button class="expiry-alert-btn" data-todo-key="expired">確認する →</button></div>`
-    : expiringSoonCount > 0
-    ? `<div class="expiry-alert expiry-alert--warn" role="alert">⏰ <strong>${expiringSoonCount}件</strong>の商品が30日以内に期限を迎えます。<button class="expiry-alert-btn" data-todo-key="expiringSoon">確認する →</button></div>`
-    : "";
-  const stg = getStorageInfo();
-  const storageAlert = stg.pct >= 80
-    ? `<div class="expiry-alert expiry-alert--${stg.pct >= 95 ? "danger" : "warn"}" role="alert">${stg.pct >= 95 ? "🚨" : "⚠️"} 保存容量が残りわずかです（使用中 ${stg.usedMB}MB / 5MB）。<button class="expiry-alert-btn" data-nav="settings-nav">バックアップを保存する →</button></div>`
-    : "";
+  const total      = products.length;
+  const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
+  const completedCount = derivedAll.filter(({ p, d }) => cachedCompletion(p, d).pct >= 100).length;
 
-  // ── KPI行 ──
-  const reviewCount = products.filter(p => p.approvalStatus === "review").length;
-  const kpiHtml = `<div class="dash-kpi-row">
-    <button class="dash-kpi-card" data-nav="products" data-set-filter="all">
-      <div class="dash-kpi-num">${total}</div><div class="dash-kpi-lbl">商品数</div>
-    </button>
-    <button class="dash-kpi-card kpi-green" data-todo-key="incomplete">
-      <div class="dash-kpi-num">${completedCount}</div><div class="dash-kpi-lbl">完成済み</div>
-    </button>
-    <button class="dash-kpi-card kpi-blue" data-nav="products" data-set-filter="active">
-      <div class="dash-kpi-num">${products.filter(p=>p.publishStatus==="active").length}</div><div class="dash-kpi-lbl">公開中</div>
-    </button>
-    <button class="dash-kpi-card kpi-amber" data-nav="products">
-      <div class="dash-kpi-num">${thisMonthCount}</div><div class="dash-kpi-lbl">今月追加</div>
-    </button>
-    <button class="dash-kpi-card" data-nav="products" data-set-filter="starred">
-      <div class="dash-kpi-num">${products.filter(p=>p.starred).length}</div><div class="dash-kpi-lbl">お気に入り</div>
-    </button>
-    <button class="dash-kpi-card kpi-purple" data-nav="team-approval">
-      <div class="dash-kpi-num">${reviewCount}</div><div class="dash-kpi-lbl">承認待ち</div>
-    </button>
-  </div>`;
+  const onSaleCount    = products.filter(p => p.publishStatus === "active").length;
+  const inDevCount     = products.filter(p => !p.publishStatus || p.publishStatus !== "active").length;
+  const thisMonthCount = products.filter(p => (p.updatedAt || p.createdAt || "").startsWith(ym)).length;
+  const reviewCount    = products.filter(p => p.approvalStatus === "review").length;
 
-  // ── クイックアクションバー ──
-  const quickHtml = `<div class="dash-quick-bar">
-    ${registerBtnHtml()}
-    <button class="dash-qbtn" data-nav="products">📦 商品一覧</button>
-    <button class="dash-qbtn" data-nav="spec-sheet-nav">📋 規格書作成</button>
-    <button class="dash-qbtn" data-nav="ai-descriptions-nav">✨ AI説明文</button>
-    <button class="dash-qbtn" data-nav="ai-label-check-nav">🔬 表示チェック</button>
-    <button class="dash-qbtn" data-nav="team-approval">👥 チーム・承認</button>
-  </div>`;
-
-  // ── 今日やること ──
-  const todos = calcTodo(derivedAll);
-  const todoHtml = `<div class="dash-panel">
-    <div class="dash-panel-hd">📋 今日やること</div>
-    ${todos.length === 0
-      ? `<div class="dash-panel-empty">✅ すべて完了しています！</div>`
-      : `<div class="todo-items">${todos.map(t => `
-          <button class="todo-item" data-todo-key="${t.key}">
-            <span class="todo-count">${t.count}</span>
-            <span class="todo-label">${escapeHtml(t.label)}</span>
-            <span class="todo-arrow">→</span>
-          </button>`).join("")}</div>`}
-  </div>`;
-
-  // ── AIからのお知らせ ──
   const suggestions = generateAiSuggestions(derivedAll);
 
-  // ── 今すぐやること フォーカスカード ──
-  const topSug = suggestions[0];
-  const focusHtml = topSug ? (() => {
-    const ctaBtn = topSug.nav
-      ? `<button class="action primary focus-cta" data-nav="${escapeHtml(topSug.nav)}">${escapeHtml(topSug.action)} →</button>`
-      : `<button class="action primary focus-cta" data-nav="products" data-todo-key="${escapeHtml(topSug.filterKey||"")}">${escapeHtml(topSug.action)} →</button>`;
-    return `<div class="focus-action-card focus-lvl-${topSug.level}">
-      <div class="focus-left">
-        <span class="focus-badge">⚡ 今すぐやること</span>
-        <span class="focus-icon">${topSug.icon}</span>
-      </div>
-      <div class="focus-body">
-        <p class="focus-title">${escapeHtml(topSug.title)}</p>
-        <p class="focus-msg">${escapeHtml(topSug.msg)}</p>
-      </div>
-      ${ctaBtn}
-    </div>`;
-  })() : "";
+  const expiredCount      = products.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
+  const expiringSoonCount = products.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso).length;
+  const stg = getStorageInfo();
+
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  const todayStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日（${weekdays[now.getDay()]}）`;
+
+  // システム状況用データ
+  const supabaseUrl  = (() => { try { return localStorage.getItem("fmcc-supabase-url") || ""; } catch { return ""; } })();
+  const lastSyncRaw  = (() => { try { return localStorage.getItem("fmcc-last-sync") || ""; } catch { return ""; } })();
+  const planKey      = (() => { try { return localStorage.getItem("food-label-plan") || "free"; } catch { return "free"; } })();
+  const planInfo     = typeof PLANS !== "undefined" ? (PLANS[planKey] || PLANS.free) : null;
+  const planLabel    = planInfo ? planInfo.label : planKey;
+  const limitStr     = planInfo && planInfo.limit !== Infinity ? `${planInfo.limit}件まで` : "無制限";
 
   const levelCls = { critical:"sug-critical", high:"sug-high", medium:"sug-medium", low:"sug-low" };
   const levelLbl = { critical:"緊急", high:"重要", medium:"推奨", low:"参考" };
-  const aiHtml = `<div class="dash-panel">
-    <div class="dash-panel-hd">🤖 AIからのお知らせ</div>
-    ${suggestions.length === 0
-      ? `<div class="dash-panel-empty">✅ 現時点で改善提案はありません</div>`
-      : `<div class="ai-sug-list">${suggestions.map(s => `
-          <div class="ai-sug-item ${levelCls[s.level]||""}">
-            <div class="ai-sug-row">
-              <span class="ai-sug-badge ${levelCls[s.level]||""}">${levelLbl[s.level]||""}</span>
-              <span class="ai-sug-title">${s.icon} ${escapeHtml(s.title)}</span>
-            </div>
-            <div class="ai-sug-msg">${escapeHtml(s.msg)}</div>
-            <div class="ai-sug-actions">
-              <button class="ai-sug-btn" ${s.nav?`data-nav="${s.nav}"`:`data-todo-key="${s.filterKey||"all"}"`}>${escapeHtml(s.action)} →</button>
-              ${s.topProductId ? `<button class="ai-sug-btn-direct" data-nav-product-detail="${escapeHtml(s.topProductId)}" title="${escapeHtml(s.topProductName||"")}を開く">直接開く →</button>` : ""}
-            </div>
-          </div>`).join("")}</div>`}
+
+  // ─────────────────────────────────────────────────
+  // ① ヘッダー（ブランド + KPI）
+  // ─────────────────────────────────────────────────
+  const alertBits = [
+    expiredCount > 0
+      ? `<div class="db2-alert db2-alert-danger"><span>🚨</span><span><strong>${expiredCount}件</strong>の商品が賞味期限切れです</span><button class="db2-alert-btn" data-todo-key="expired">確認する →</button></div>`
+      : "",
+    expiringSoonCount > 0
+      ? `<div class="db2-alert db2-alert-warn"><span>⏰</span><span><strong>${expiringSoonCount}件</strong>が30日以内に賞味期限を迎えます</span><button class="db2-alert-btn" data-todo-key="expiringSoon">確認する →</button></div>`
+      : "",
+    stg.pct >= 80
+      ? `<div class="db2-alert db2-alert-${stg.pct >= 95 ? "danger" : "warn"}"><span>${stg.pct >= 95 ? "🚨" : "⚠️"}</span><span>保存容量が残りわずかです（${stg.usedMB}MB / 5MB使用中）</span><button class="db2-alert-btn" data-nav="settings-nav">設定 →</button></div>`
+      : "",
+  ].filter(Boolean).join("");
+
+  const headerHtml = `
+  <div class="db2-header">
+    <div class="db2-header-top">
+      <div class="db2-brand-row">
+        <img src="./assets/app-icon.svg" alt="" class="db2-brand-icon" onerror="this.style.display='none'">
+        <div>
+          <div class="db2-brand-name">Food<span>Pilot</span></div>
+          <div class="db2-brand-sub">食品メーカーのAI商品管理プラットフォーム</div>
+        </div>
+      </div>
+      <div class="db2-today-badge">${todayStr}</div>
+    </div>
+    <div class="db2-kpi-row">
+      <button class="db2-kpi-card" data-nav="products" data-set-filter="all">
+        <div class="db2-kpi-val">${total}</div>
+        <div class="db2-kpi-lbl">管理商品数</div>
+      </button>
+      <button class="db2-kpi-card db2-kpi-green" data-nav="products" data-set-filter="active">
+        <div class="db2-kpi-val">${onSaleCount}</div>
+        <div class="db2-kpi-lbl">販売中</div>
+      </button>
+      <button class="db2-kpi-card db2-kpi-blue" data-todo-key="incomplete">
+        <div class="db2-kpi-val">${inDevCount}</div>
+        <div class="db2-kpi-lbl">開発中</div>
+      </button>
+      <button class="db2-kpi-card db2-kpi-amber" data-nav="products">
+        <div class="db2-kpi-val">${thisMonthCount}</div>
+        <div class="db2-kpi-lbl">今月更新</div>
+      </button>
+      <div class="db2-kpi-card ${suggestions.length > 0 ? "db2-kpi-red" : "db2-kpi-muted"}">
+        <div class="db2-kpi-val">${suggestions.length}</div>
+        <div class="db2-kpi-lbl">AI改善提案</div>
+      </div>
+    </div>
   </div>`;
 
-  // ── 最近編集した商品 ──
+  // ─────────────────────────────────────────────────
+  // ② AIサマリー（最優先表示）
+  // ─────────────────────────────────────────────────
+  const topSug = suggestions[0];
+  const aiTopHtml = `
+  <div class="db2-ai-section">
+    <div class="db2-ai-briefing">
+      <div class="db2-ai-briefing-hd">
+        <span class="db2-ai-star">✦</span>
+        <span class="db2-ai-briefing-title">今日のAIブリーフィング</span>
+        ${aiBriefingText && !aiBriefingLoading
+          ? `<button class="db2-ai-refresh" data-action="refresh-ai-briefing" title="再生成">↺ 更新</button>`
+          : ""}
+      </div>
+      ${aiBriefingLoading
+        ? `<div class="db2-ai-loading"><span class="ai-briefing-spinner"></span>AIが今日の状況を分析中...</div>`
+        : aiBriefingText
+        ? `<p class="db2-ai-text">${escapeHtml(aiBriefingText)}</p>`
+        : `<div class="db2-ai-empty">
+            <button class="action primary db2-ai-gen-btn" data-action="fetch-ai-briefing">✦ 今日のブリーフィングを生成</button>
+            <span class="db2-ai-hint">商品データをAIが分析し、今日の優先タスクを提案します</span>
+           </div>`}
+    </div>
+    ${topSug ? `
+    <div class="db2-focus-card db2-focus-${topSug.level}">
+      <div class="db2-focus-badge">⚡ 今すぐやること</div>
+      <div class="db2-focus-body">
+        <span class="db2-focus-icon">${topSug.icon}</span>
+        <div>
+          <p class="db2-focus-title">${escapeHtml(topSug.title)}</p>
+          <p class="db2-focus-msg">${escapeHtml(topSug.msg)}</p>
+        </div>
+      </div>
+      <div class="db2-focus-actions">
+        <button class="action primary" style="font-size:12px;padding:6px 14px"
+          ${topSug.nav
+            ? `data-nav="${escapeHtml(topSug.nav)}"`
+            : `data-nav="products" data-todo-key="${escapeHtml(topSug.filterKey||"")}"`}>${escapeHtml(topSug.action)} →</button>
+        ${topSug.topProductId
+          ? `<button class="ai-sug-btn-direct" data-nav-product-detail="${escapeHtml(topSug.topProductId)}">直接開く →</button>`
+          : ""}
+      </div>
+    </div>` : `
+    <div class="db2-all-ok">✅ 現時点で改善が必要な項目はありません。すべての商品が良好な状態です。</div>`}
+    ${suggestions.length > 1 ? `
+    <div class="db2-sug-mini-list">
+      ${suggestions.slice(1, 4).map(s => `
+        <div class="db2-sug-mini ai-sug-item ${levelCls[s.level]||""}">
+          <span class="ai-sug-badge ${levelCls[s.level]||""}">${levelLbl[s.level]||""}</span>
+          <span class="db2-sug-mini-title">${s.icon} ${escapeHtml(s.title)}</span>
+          <button class="db2-sug-mini-btn"
+            ${s.nav
+              ? `data-nav="${escapeHtml(s.nav)}"`
+              : `data-todo-key="${escapeHtml(s.filterKey||"all")}"`}>→</button>
+        </div>`).join("")}
+      ${suggestions.length > 4
+        ? `<div class="db2-sug-more">他 ${suggestions.length - 4} 件の提案あり（↓ AIおすすめ参照）</div>`
+        : ""}
+    </div>` : ""}
+  </div>`;
+
+  // ─────────────────────────────────────────────────
+  // ③ クイックアクション
+  // ─────────────────────────────────────────────────
+  const quickHtml = `
+  <div class="db2-quick-section">
+    <div class="db2-section-hd">クイックアクション</div>
+    <div class="db2-quick-grid">
+      <button class="db2-quick-card db2-quick-primary" data-quick-new="1">
+        <span class="db2-quick-icon">＋</span>
+        <span class="db2-quick-label">新規商品を登録</span>
+        <span class="db2-quick-desc">商品を手動で新規作成</span>
+      </button>
+      <button class="db2-quick-card" data-nav="reg-spec">
+        <span class="db2-quick-icon">📄</span>
+        <span class="db2-quick-label">規格書から登録</span>
+        <span class="db2-quick-desc">テキストを貼り付けてAI解析</span>
+      </button>
+      <button class="db2-quick-card" data-nav="reg-photo">
+        <span class="db2-quick-icon">📷</span>
+        <span class="db2-quick-label">写真から登録</span>
+        <span class="db2-quick-desc">画像からAIが自動入力</span>
+      </button>
+      <button class="db2-quick-card" data-nav="reg-ai-chat">
+        <span class="db2-quick-icon">🤖</span>
+        <span class="db2-quick-label">AIで登録</span>
+        <span class="db2-quick-desc">対話形式で商品を作成</span>
+      </button>
+      <button class="db2-quick-card" data-nav="products">
+        <span class="db2-quick-icon">🏷</span>
+        <span class="db2-quick-label">ラベル作成</span>
+        <span class="db2-quick-desc">商品を選んでPDF印刷</span>
+      </button>
+      <button class="db2-quick-card" data-nav="spec-sheet-nav">
+        <span class="db2-quick-icon">📑</span>
+        <span class="db2-quick-label">規格書作成</span>
+        <span class="db2-quick-desc">A4フォーマットで出力</span>
+      </button>
+      <button class="db2-quick-card" data-nav="ai-descriptions-nav">
+        <span class="db2-quick-icon">✨</span>
+        <span class="db2-quick-label">AI説明文</span>
+        <span class="db2-quick-desc">EC用の説明文を自動生成</span>
+      </button>
+    </div>
+  </div>`;
+
+  // ─────────────────────────────────────────────────
+  // ④ 最近の作業
+  // ─────────────────────────────────────────────────
   const recent = [...products].sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||"")).slice(0, 6);
-  const recentHtml = recent.map(p => {
+  const recentCardsHtml = recent.map(p => {
     const rd = derivedAll.find(x => x.p.id === p.id);
     const comp = rd ? cachedCompletion(rd.p, rd.d) : { pct: 0 };
     const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
@@ -255,97 +335,109 @@ function dashboardHtml() {
       ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="" onerror="this.onerror=null;this.outerHTML='<div class=\\'recent-prod-thumb-ph recent-prod-thumb-err\\'>⚠️</div>'">`
       : `<div class="recent-prod-thumb-ph">📦</div>`;
     const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus||"draft")) || PRODUCT_STATUSES[0];
+    const updStr = (p.updatedAt||"").substring(0, 10);
     return `<button class="recent-prod-card" data-nav-product-detail="${escapeHtml(p.id)}">
       ${thumb}
       <div class="recent-prod-info">
         <div class="recent-prod-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</div>
         <div class="recent-prod-meta">
           <span class="pipeline-chip" style="color:${ps.color};background:${ps.bg}">${ps.label}</span>
-          ${p.category?`<span class="tag-chip">${escapeHtml(p.category)}</span>`:""}
+          ${p.category ? `<span class="tag-chip">${escapeHtml(p.category)}</span>` : ""}
         </div>
         <div class="recent-prod-bar"><div class="recent-prod-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
-        <div class="recent-prod-pct" style="color:${pctColor}">${comp.pct}%</div>
+        <div class="db2-recent-foot">
+          <span class="recent-prod-pct" style="color:${pctColor}">${comp.pct}%</span>
+          ${updStr ? `<span class="db2-recent-date">${updStr}</span>` : ""}
+        </div>
       </div>
     </button>`;
   }).join("");
 
-  // ── 完成度分布 ──
+  const recentHtml = `
+  <div class="db2-section-wrap">
+    <div class="db2-section-hd">最近の作業 <span class="db2-section-hd-sub">直近に編集した商品</span></div>
+    <div class="recent-prod-grid">${recentCardsHtml}</div>
+    <div class="db2-section-footer">
+      <button class="db2-see-all-btn" data-nav="products" data-set-filter="all">すべての商品を見る →</button>
+    </div>
+  </div>`;
+
+  // ─────────────────────────────────────────────────
+  // ⑤ AIおすすめ（全件）
+  // ─────────────────────────────────────────────────
+  const aiRecommHtml = `
+  <div class="dash-panel db2-recomm-panel">
+    <div class="db2-panel-hd-row">
+      <span class="db2-panel-title">🤖 AIおすすめ</span>
+      <span class="db2-panel-badge">${suggestions.length}件の改善提案</span>
+    </div>
+    ${suggestions.length === 0
+      ? `<div class="dash-panel-empty">✅ 現時点で改善提案はありません</div>`
+      : `<div class="ai-sug-list">
+          ${suggestions.map(s => `
+          <div class="ai-sug-item ${levelCls[s.level]||""}">
+            <div class="ai-sug-row">
+              <span class="ai-sug-badge ${levelCls[s.level]||""}">${levelLbl[s.level]||""}</span>
+              <span class="ai-sug-title">${s.icon} ${escapeHtml(s.title)}</span>
+            </div>
+            <div class="ai-sug-msg">${escapeHtml(s.msg)}</div>
+            <div class="ai-sug-actions">
+              <button class="ai-sug-btn"
+                ${s.nav
+                  ? `data-nav="${escapeHtml(s.nav)}"`
+                  : `data-todo-key="${escapeHtml(s.filterKey||"all")}"`}>${escapeHtml(s.action)} →</button>
+              ${s.topProductId
+                ? `<button class="ai-sug-btn-direct" data-nav-product-detail="${escapeHtml(s.topProductId)}" title="${escapeHtml(s.topProductName||"")}を開く">直接開く →</button>`
+                : ""}
+            </div>
+          </div>`).join("")}
+        </div>`}
+  </div>`;
+
+  // ─────────────────────────────────────────────────
+  // 統計パネル（右カラム）
+  // ─────────────────────────────────────────────────
   const compDist = derivedAll.reduce((acc,{p,d}) => {
     const pct = cachedCompletion(p,d).pct;
     if (pct===100) acc.done++; else if (pct>=60) acc.near++; else if (pct>=30) acc.low++; else acc.veryLow++;
     return acc;
   }, {done:0,near:0,low:0,veryLow:0});
+  const avgComp = derivedAll.length
+    ? Math.round(derivedAll.reduce((s,{p,d})=>s+cachedCompletion(p,d).pct,0)/derivedAll.length)
+    : 0;
+
   const compDistHtml = total >= 2 ? `<div class="dash-panel">
-    <div class="dash-panel-hd">📈 完成度の内訳</div>
+    <div class="dash-panel-hd">📈 完成度の内訳<span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px">平均 ${avgComp}%</span></div>
     <div class="comp-dist-rows">
       <div class="comp-dist-row"><span class="comp-dist-dot" style="background:#16a34a"></span><span class="comp-dist-label">完成（100%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.done/total*100)}%;background:#16a34a"></div></div><span class="comp-dist-count">${compDist.done}件</span></div>
       <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt100"><span class="comp-dist-dot" style="background:#2563eb"></span><span class="comp-dist-label">あと少し（60〜99%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.near/total*100)}%;background:#2563eb"></div></div><span class="comp-dist-count">${compDist.near}件</span></button>
       <button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt60"><span class="comp-dist-dot" style="background:#d97706"></span><span class="comp-dist-label">要対応（30〜59%）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.low/total*100)}%;background:#d97706"></div></div><span class="comp-dist-count">${compDist.low}件</span></button>
-      ${compDist.veryLow>0?`<button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt30"><span class="comp-dist-dot" style="background:#dc2626"></span><span class="comp-dist-label">要注意（30%未満）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.veryLow/total*100)}%;background:#dc2626"></div></div><span class="comp-dist-count">${compDist.veryLow}件</span></button>`:""}
+      ${compDist.veryLow > 0 ? `<button class="comp-dist-row comp-dist-clickable" data-set-completion-filter="lt30"><span class="comp-dist-dot" style="background:#dc2626"></span><span class="comp-dist-label">要注意（30%未満）</span><div class="comp-dist-bar-wrap"><div class="comp-dist-bar" style="width:${Math.round(compDist.veryLow/total*100)}%;background:#dc2626"></div></div><span class="comp-dist-count">${compDist.veryLow}件</span></button>` : ""}
     </div>
   </div>` : "";
 
-  // ── カテゴリ棒グラフ ──
   const catCounts = {};
   products.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category]||0)+1; });
   const catEntries = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxCat = catEntries.length ? catEntries[0][1] : 1;
-  const catHtml = `<div class="dash-panel">
+  const catHtml = catEntries.length >= 2 ? `<div class="dash-panel">
     <div class="dash-panel-hd">📊 カテゴリ別商品数</div>
-    ${catEntries.length >= 2
-      ? `<div class="cat-chart-list">
-          ${catEntries.map(([cat,count])=>`
-            <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
-              <span class="cat-chart-label">${escapeHtml(cat)}</span>
-              <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
-              <span class="cat-chart-count">${count}件</span>
-            </button>`).join("")}
-        </div>`
-      : `<div class="dash-panel-empty">カテゴリが設定された商品が2件以上になると表示されます</div>`}
-  </div>`;
-
-  // ── 週次サマリー ──
-  const weekDay = now.getDay();
-  const daysToMon = weekDay === 0 ? 6 : weekDay - 1;
-  const weekStart = new Date(now); weekStart.setDate(weekStart.getDate()-daysToMon); weekStart.setHours(0,0,0,0);
-  const lastWeekStart = new Date(weekStart); lastWeekStart.setDate(lastWeekStart.getDate()-7);
-  const parseProdDate = s => { if(!s) return null; const d=new Date(s.replace(/\//g,'-')); return isNaN(d.getTime())?null:d; };
-  const thisWeekNew  = products.filter(p=>{ const d=parseProdDate(p.createdAt); return d&&d>=weekStart; }).length;
-  const lastWeekNew  = products.filter(p=>{ const d=parseProdDate(p.createdAt); return d&&d>=lastWeekStart&&d<weekStart; }).length;
-  const thisWeekUpd  = products.filter(p=>{ const d=parseProdDate(p.updatedAt); return d&&d>=weekStart; }).length;
-  const avgComp = derivedAll.length ? Math.round(derivedAll.reduce((s,{p,d})=>s+cachedCompletion(p,d).pct,0)/derivedAll.length) : 0;
-  const newDiff = thisWeekNew - lastWeekNew;
-  const weeklyHtml = `<div class="dash-panel dash-weekly-panel">
-    <div class="dash-panel-hd">📅 今週のサマリー（${now.getMonth()+1}/${weekStart.getDate()}〜）</div>
-    <div class="weekly-stats">
-      <div class="weekly-stat">
-        <div class="weekly-num">${thisWeekNew}</div>
-        <div class="weekly-label">新規追加</div>
-        <div class="weekly-diff ${newDiff>0?'weekly-up':newDiff<0?'weekly-down':''}">先週比 ${newDiff>0?'+':''}${newDiff}件</div>
-      </div>
-      <div class="weekly-stat">
-        <div class="weekly-num">${thisWeekUpd}</div>
-        <div class="weekly-label">今週更新</div>
-        <div class="weekly-diff">商品</div>
-      </div>
-      <div class="weekly-stat">
-        <div class="weekly-num">${avgComp}%</div>
-        <div class="weekly-label">完成度平均</div>
-        <div class="weekly-diff">${completedCount}/${total}件完成</div>
-      </div>
+    <div class="cat-chart-list">
+      ${catEntries.map(([cat,count]) => `
+        <button class="cat-chart-row" data-set-category="${escapeHtml(cat)}">
+          <span class="cat-chart-label">${escapeHtml(cat)}</span>
+          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/maxCat*100)}%"></div></div>
+          <span class="cat-chart-count">${count}件</span>
+        </button>`).join("")}
     </div>
-  </div>`;
+  </div>` : "";
 
-  // ── 原価サマリー ──
   const withCost = derivedAll.filter(({c})=>c.totalCost>0);
-  const costHtml = !withCost.length ? `<div class="dash-panel">
-    <div class="dash-panel-hd">💰 原価サマリー</div>
-    <div class="dash-panel-empty">原価を登録すると利益率サマリーが表示されます<br><button class="dash-panel-empty-btn" data-nav="products">商品に原価を登録する →</button></div>
-  </div>` : (() => {
-    const rates = withCost.filter(({c})=>c.costRate!==null).map(({c})=>c.costRate);
+  const costHtml = withCost.length ? (() => {
+    const rates   = withCost.filter(({c})=>c.costRate!==null).map(({c})=>c.costRate);
     const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
-    const best = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
-    const worst = [...withCost].filter(({c})=>c.costRate!==null&&c.costRate>40).sort((a,b)=>(b.c.costRate||0)-(a.c.costRate||0))[0];
+    const best    = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
+    const worst   = [...withCost].filter(({c})=>c.costRate!==null&&c.costRate>40).sort((a,b)=>(b.c.costRate||0)-(a.c.costRate||0))[0];
     return `<div class="dash-panel">
       <div class="dash-panel-hd">💰 原価サマリー</div>
       <div class="dash-cost-grid">
@@ -355,46 +447,79 @@ function dashboardHtml() {
         <div class="dash-cost-item"><div class="dash-cost-val">${withCost.length}</div><div class="dash-cost-lbl">原価登録済み</div></div>
       </div>
     </div>`;
-  })();
-
-  // ── AIブリーフィングカード ──
-  const briefingHtml = `<div class="ai-briefing-card">
-    <div class="ai-briefing-hd">
-      <span class="ai-briefing-icon">✦</span>
-      <span class="ai-briefing-label">AI今日のブリーフィング</span>
-      ${aiBriefingText && !aiBriefingLoading ? `<button class="ai-briefing-refresh" data-action="refresh-ai-briefing" title="再生成">↺ 更新</button>` : ""}
-    </div>
-    ${aiBriefingLoading
-      ? `<div class="ai-briefing-loading"><span class="ai-briefing-spinner"></span>AIが今日の状況を分析中...</div>`
-      : aiBriefingText
-      ? `<p class="ai-briefing-text">${escapeHtml(aiBriefingText)}</p>`
-      : `<div class="ai-briefing-empty">
-          <button class="action primary ai-briefing-btn" data-action="fetch-ai-briefing">✦ 今日のブリーフィングを生成</button>
-          <span class="ai-briefing-hint">商品データをAIが分析し、今日の優先タスクを提案します</span>
-         </div>`
-    }
+  })() : `<div class="dash-panel">
+    <div class="dash-panel-hd">💰 原価サマリー</div>
+    <div class="dash-panel-empty">原価を登録すると利益率サマリーが表示されます<br><button class="dash-panel-empty-btn" data-nav="products">商品に原価を登録する →</button></div>
   </div>`;
 
+  // ─────────────────────────────────────────────────
+  // ⑥ システム状況
+  // ─────────────────────────────────────────────────
+  const syncEnabled = !!supabaseUrl;
+  const syncStatus  = syncEnabled
+    ? (lastSyncRaw ? `<span class="db2-sys-ok">● クラウド同期済み</span>` : `<span class="db2-sys-warn">● 未同期</span>`)
+    : `<span class="db2-sys-off">● ローカル保存のみ</span>`;
+  const saveStatus  = stg.pct >= 80
+    ? `<span class="db2-sys-warn">⚠ ${stg.pct}%使用中</span>`
+    : `<span class="db2-sys-ok">✓ 正常（${stg.pct}%）</span>`;
+  const lastSyncStr = lastSyncRaw ? (() => {
+    try {
+      return new Date(lastSyncRaw).toLocaleString("ja-JP",
+        { month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" });
+    } catch { return lastSyncRaw.substring(0, 16); }
+  })() : "";
+
+  const systemHtml = `
+  <div class="db2-system-footer">
+    <div class="db2-sys-item">
+      <span class="db2-sys-label">クラウド同期</span>
+      ${syncStatus}
+      ${lastSyncStr ? `<span class="db2-sys-detail">最終: ${escapeHtml(lastSyncStr)}</span>` : ""}
+    </div>
+    <div class="db2-sys-sep"></div>
+    <div class="db2-sys-item">
+      <span class="db2-sys-label">ライセンス</span>
+      <span class="db2-sys-ok">${escapeHtml(planLabel)}</span>
+      <span class="db2-sys-detail">${limitStr}</span>
+    </div>
+    <div class="db2-sys-sep"></div>
+    <div class="db2-sys-item">
+      <span class="db2-sys-label">ローカル保存</span>
+      ${saveStatus}
+    </div>
+    <div class="db2-sys-sep"></div>
+    <div class="db2-sys-item">
+      <span class="db2-sys-label">管理商品数</span>
+      <span class="db2-sys-detail">${total}件</span>
+    </div>
+    ${reviewCount > 0 ? `
+    <div class="db2-sys-sep"></div>
+    <div class="db2-sys-item">
+      <span class="db2-sys-label">承認待ち</span>
+      <span class="db2-sys-warn">${reviewCount}件</span>
+    </div>` : ""}
+    <button class="db2-sys-settings-btn" data-nav="settings-nav">⚙ 設定</button>
+  </div>`;
+
+  // ─────────────────────────────────────────────────
+  // 組み立て
+  // ─────────────────────────────────────────────────
   return saasLayout("ダッシュボード", `
-    ${storageAlert}
-    ${expiryAlert}
-    ${briefingHtml}
-    ${kpiHtml}
-    ${focusHtml}
-    ${quickHtml}
-    <div class="dash-main-grid">
-      ${todoHtml}
-      ${aiHtml}
+    ${alertBits}
+    ${headerHtml}
+    <div class="db2-top-grid">
+      <div class="db2-top-left">${aiTopHtml}</div>
+      <div class="db2-top-right">${quickHtml}</div>
     </div>
-    <div class="dash-section">
-      <h2 class="dash-section-title">🕐 最近編集した商品</h2>
-      <div class="recent-prod-grid">${recentHtml}</div>
+    ${recentHtml}
+    <div class="db2-bottom-grid">
+      <div class="db2-bottom-main">${aiRecommHtml}</div>
+      <div class="db2-bottom-side">
+        ${compDistHtml}
+        ${catHtml}
+        ${costHtml}
+      </div>
     </div>
-    <div class="dash-bottom-grid">
-      ${weeklyHtml}
-      ${compDistHtml}
-      ${catHtml}
-      ${costHtml}
-    </div>
+    ${systemHtml}
   `);
 }

@@ -655,6 +655,10 @@ function setupDelegation() {
     const masterViewEl = t.closest("[data-master-view]");
     if (masterViewEl) { masterView=masterViewEl.dataset.masterView; safeSet("fmcc-master-view",masterView); render(); return; }
 
+    // [data-sort-col] — テーブルヘッダーのソート切替
+    const sortColEl = t.closest("[data-sort-col]");
+    if (sortColEl) { masterSort=sortColEl.dataset.sortCol; safeSet("fmcc-master-sort",masterSort); render(); return; }
+
     // [data-use-template] — ビルトインテンプレートで新規作成
     const useTplEl = t.closest("[data-use-template]");
     if (useTplEl) {
@@ -870,7 +874,7 @@ function setupDelegation() {
       const p = products.find(x=>x.id===productDetailId); if(!p)return;
       p.ingredients.push({ id: uid(), name: "", weight: "" });
       render();
-      setTimeout(() => document.querySelector(`[data-master-ing-name="${idx + 1}"]`)?.focus(), 30);
+      requestAnimationFrame(() => document.querySelector(`[data-master-ing-name="${idx + 1}"]`)?.focus());
       return;
     }
     if (t.matches("[data-ing-name]")) {
@@ -889,7 +893,7 @@ function setupDelegation() {
       // 最後の行なら新しい行を追加してフォーカス
       p.ingredients.push({ id: uid(), name: "", weight: "" });
       render();
-      setTimeout(() => document.querySelector(`[data-ing-name="${idx + 1}"]`)?.focus(), 30);
+      requestAnimationFrame(() => document.querySelector(`[data-ing-name="${idx + 1}"]`)?.focus());
       return;
     }
   });

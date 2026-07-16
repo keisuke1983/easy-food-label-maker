@@ -762,11 +762,15 @@ const DEMO_STEPS = [
     heading:"商品写真を撮るだけで\nAIが原材料・製造者・栄養成分を自動で読み取ります",
     point:"パッケージ裏面を撮影するだけ。Llama Vision AIが原材料名・製造者・アレルゲン・栄養成分をゼロ入力で抽出します。" },
 
-  { step:3, title:"AI自動入力結果",                      view:"edit",
+  { step:3, title:"AI自動入力結果",                      view:"edit", openSection:"基本情報",
     heading:"写真から全項目が自動入力されました",
     point:"商品名・原材料7品目・製造者・賞味期限・保存方法が入力済みです。修正が必要な箇所だけ直して保存するだけ。手入力と比べて工数が大幅に削減されます。" },
 
-  { step:4, title:"食品表示ラベル",                       view:"label-nav",
+  { step:4, title:"栄養成分の自動計算",                   view:"edit", openSection:"栄養成分",
+    heading:"原材料の重量から\n栄養成分を自動で計算します",
+    point:"原材料ごとの重量（g）を入力するだけで、エネルギー・たんぱく質・脂質・炭水化物・食塩相当量をFoodPilotが自動計算します。栄養士への外注が不要になります。" },
+
+  { step:5, title:"食品表示ラベル",                       view:"label-nav",
     heading:"食品表示ラベルが\nリアルタイムで自動生成されます",
     point:"入力と同時にラベルが更新されます。サイズ・フォントを自由に調整し、そのままPDF印刷またはPNG書き出しができます。食品表示法に沿ったレイアウトを自動で構成します。" },
 
@@ -778,9 +782,9 @@ const DEMO_STEPS = [
     heading:"楽天・Amazon・Yahoo用の\n商品説明文をAIが自動生成します",
     point:"登録した商品情報をもとに、ECサイト向けの魅力的な商品説明文をAIが自動作成。販路（楽天・Amazon・自社EC）ごとに文体を最適化します。コピーライターへの外注が不要になります。" },
 
-  { step:7, title:"原価・利益管理",                       view:"product-detail",
+  { step:7, title:"原価・利益管理",                       view:"product-detail", detailTab:"cost",
     heading:"原価率・粗利率・粗利額を\n商品ごとにリアルタイム計算",
-    point:"材料費・包装費・送料を入力するだけで原価率と粗利が即計算されます。「どの商品が一番儲かるか」をすべての商品で横断管理できます。", highlightCost:true },
+    point:"材料費・包装費・送料を入力するだけで原価率と粗利が即計算されます。「どの商品が一番儲かるか」をすべての商品で横断管理できます。" },
 
   { step:8, title:"AIが今日の課題を検出",                 view:"dashboard",
     heading:"AIが商品ごとの課題を自動で検出し\n優先順位をつけて提案します",
@@ -858,9 +862,17 @@ function applyDemoStep() {
   registerMenuOpen = false;
   if (s.view === "dashboard")                { saasView = "dashboard"; view = "saas"; }
   else if (s.view === "reg-photo")           { saasView = "reg-photo"; view = "saas"; }
-  else if (s.view === "edit")                { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "edit"; }
-  else if (s.view === "label-nav")           { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "label-nav"; }
-  else if (s.view === "product-detail")      { productDetailId = demoProductId; saasView = "product-detail"; view = "saas"; }
+  else if (s.view === "edit" || s.view === "label-nav") {
+    editId = demoProductId;
+    draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct());
+    view = "edit"; saasView = s.view === "label-nav" ? "label-nav" : "edit";
+    if (s.openSection) openSections = new Set([s.openSection]);
+  }
+  else if (s.view === "product-detail") {
+    productDetailId = demoProductId;
+    productDetailTab = s.detailTab || "basic";
+    saasView = "product-detail"; view = "saas";
+  }
   else if (s.view === "spec-sheet-nav")      { specSheetId = demoProductId; saasView = "spec-sheet-nav"; view = "saas"; }
   else if (s.view === "ai-descriptions-nav") { aiDescId = demoProductId; saasView = "ai-descriptions-nav"; view = "saas"; }
 }

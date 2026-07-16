@@ -285,10 +285,10 @@ function dashboardHtml() {
   <div class="db2-quick-section">
     <div class="db2-section-hd">クイックアクション</div>
     <div class="db2-quick-grid">
-      <button class="db2-quick-card db2-quick-primary" data-quick-new="1">
+      <button class="db2-quick-card db2-quick-primary" data-reg-toggle>
         <span class="db2-quick-icon">＋</span>
         <span class="db2-quick-label">新規商品を登録</span>
-        <span class="db2-quick-desc">商品を手動で新規作成</span>
+        <span class="db2-quick-desc">写真・テンプレート・手入力から選択</span>
       </button>
       <button class="db2-quick-card" data-nav="reg-spec">
         <span class="db2-quick-icon">📄</span>

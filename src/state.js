@@ -87,3 +87,8 @@ let cloudSyncMessage = "";
 // ── AIダッシュボードブリーフィング ─────────────────────────────────────
 let aiBriefingText = "";
 let aiBriefingLoading = false;
+
+// ── デモモード ──────────────────────────────────────────────────────────
+let demoMode = false;
+let demoStep = 1;
+let demoProductId = null;

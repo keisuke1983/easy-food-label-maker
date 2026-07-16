@@ -752,6 +752,142 @@ function focusKey(el) {
   if (el.id) return `#${el.id}`;
   return null;
 }
+// ══ デモモード ════════════════════════════════════════════════════════════
+const DEMO_STEPS = [
+  { step:1, title:"FoodPilotとは？",   fullscreen:true,  view:"dashboard",           heading:"商品情報を一度登録するだけで、\n食品表示・規格書・原価・AIまで一元管理できます。",         point:"食品メーカーの現場業務に必要なすべてがFoodPilot一つで完結します。他のツールへの切り替えは不要です。" },
+  { step:2, title:"商品登録方法",       fullscreen:true,  view:"dashboard",           heading:"4つの方法で商品を登録できます",                                                    point:"今回は規格書から登録します。PDFや写真をAIがスキャンし、商品情報を自動で抽出します。", showRegMethods:true },
+  { step:3, title:"デモ商品登録",                         view:"edit",                heading:"規格書からの読み込み完了",                                                         point:"商品名・原材料・製造者情報が自動入力されています。内容の確認・修正後に保存するだけです。" },
+  { step:4, title:"商品カルテ",                           view:"product-detail",      heading:"商品に関する全情報を一元管理",                                                     point:"基本情報・食品表示・原価・規格書・AI・履歴をタブで切り替えて管理できます。商品カルテとして機能します。" },
+  { step:5, title:"食品表示ラベル",                        view:"label-nav",           heading:"リアルタイムでラベルをプレビュー",                                                 point:"登録した情報から食品表示ラベルが自動生成されます。PDF印刷まで1クリックで完結します。" },
+  { step:6, title:"商品規格書",                           view:"spec-sheet-nav",      heading:"A4規格書をワンクリックで出力",                                                     point:"商品情報から規格書が自動生成されます。署名欄付きのPDFを出力して取引先へ即日提出できます。" },
+  { step:7, title:"原価管理",                             view:"product-detail",      heading:"商品ごとの利益も一元管理できます",                                                  point:"原価率・粗利率・粗利額をリアルタイム計算。全商品の収益状況をダッシュボードで把握できます。", highlightCost:true },
+  { step:8, title:"AI機能",                               view:"ai-descriptions-nav", heading:"AIが商品管理を強力にサポート",                                                     point:"AI商品説明文・食品表示法チェック・相談チャット・Vision登録など、AIが業務を自動化します。" },
+  { step:9, title:"デモ完了",           fullscreen:true,  view:"dashboard",           heading:"商品を一度登録するだけで、\nFoodPilotが商品管理を支援します。",                      point:"ご覧いただいた機能はすべて標準搭載です。無料プランからはじめて、必要に応じてアップグレードできます。" },
+];
+
+const DEMO_SAMPLE = {
+  _isDemo: true,
+  name: "有機抹茶クッキー",
+  internalName: "有機抹茶クッキー",
+  category: "菓子類",
+  janCode: "4901234567890",
+  netWeight: "80",
+  netWeightUnit: "g",
+  expiryType: "best-before",
+  expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  storageMethod: "直射日光・高温多湿を避け、常温で保存してください。",
+  publishStatus: "active",
+  manufacturerName: "株式会社サンプルフーズ",
+  manufacturerAddress: "東京都渋谷区代々木1-1-1 フードビル3F",
+  manufacturerPostal: "151-0053",
+  manufacturerPhone: "03-1234-5678",
+  manufacturerType: ["製造者"],
+  ingredients: [
+    { name: "小麦粉", weight: 42 },
+    { name: "バター", weight: 20 },
+    { name: "砂糖", weight: 18 },
+    { name: "卵", weight: 12 },
+    { name: "有機抹茶パウダー", weight: 5 },
+    { name: "食塩", weight: 1 },
+    { name: "膨張剤", weight: 0.5, isAdditive: true },
+  ],
+  allergens: [],
+  allergensMode: "auto",
+  directCost: "120",
+  price: "680",
+  costMode: "direct",
+  approvalStatus: "approved",
+};
+
+function startDemo() {
+  products = products.filter(p => !p._isDemo);
+  const dp = Object.assign({}, DEMO_SAMPLE, {
+    id: "demo-fp-" + Date.now(),
+    updatedAt: new Date().toISOString().replace("T"," ").slice(0,16),
+    createdAt:  new Date().toISOString().replace("T"," ").slice(0,16),
+  });
+  demoProductId = dp.id;
+  products.unshift(dp);
+  try { localStorage.setItem("food-label-products-static", JSON.stringify(products)); } catch {}
+  demoMode = true;
+  demoStep = 1;
+  applyDemoStep();
+  render();
+}
+
+function endDemo() {
+  products = products.filter(p => !p._isDemo);
+  try { localStorage.setItem("food-label-products-static", JSON.stringify(products)); } catch {}
+  demoMode = false;
+  demoStep = 1;
+  demoProductId = null;
+  saasView = "dashboard";
+  view = "saas";
+  render();
+}
+
+function applyDemoStep() {
+  const s = DEMO_STEPS[demoStep - 1];
+  sidebarOpen = false;
+  registerMenuOpen = false;
+  if (s.view === "dashboard")           { saasView = "dashboard"; view = "saas"; }
+  else if (s.view === "edit")           { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "edit"; }
+  else if (s.view === "label-nav")      { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "label-nav"; }
+  else if (s.view === "product-detail") { productDetailId = demoProductId; saasView = "product-detail"; view = "saas"; }
+  else if (s.view === "spec-sheet-nav") { specSheetId = demoProductId; saasView = "spec-sheet-nav"; view = "saas"; }
+  else if (s.view === "ai-descriptions-nav") { aiDescId = demoProductId; saasView = "ai-descriptions-nav"; view = "saas"; }
+}
+
+function demoOverlayHtml() {
+  const TOTAL = DEMO_STEPS.length;
+  const s = DEMO_STEPS[demoStep - 1];
+  const pct = Math.round((demoStep / TOTAL) * 100);
+  const prevBtn = demoStep > 1 ? `<button class="demo-btn-sec" data-action="demo-prev">← 戻る</button>` : "";
+  const nextLabel = demoStep === TOTAL ? "デモを終了する ✓" : "次へ →";
+  const topBar = `
+    <div class="demo-topbar">
+      <div class="demo-topbar-left">
+        <span class="demo-step-badge">STEP ${demoStep} / ${TOTAL}</span>
+        <span class="demo-topbar-title">${escapeHtml(s.title)}</span>
+        <div class="demo-progress-track"><div class="demo-progress-fill" style="width:${pct}%"></div></div>
+      </div>
+      <button class="demo-end-btn" data-action="demo-end">✕ デモ終了</button>
+    </div>`;
+
+  if (s.fullscreen) {
+    const regHtml = s.showRegMethods ? `
+      <div class="demo-reg-grid">
+        <div class="demo-reg-card"><div class="demo-reg-icon">📷</div><div class="demo-reg-label">商品写真から登録</div><div class="demo-reg-desc">AIが写真を解析して自動入力</div></div>
+        <div class="demo-reg-card demo-reg-card--active"><div class="demo-reg-icon">📄</div><div class="demo-reg-label">規格書から登録</div><div class="demo-reg-desc">PDF・Excelから自動抽出</div><div class="demo-reg-now">← 今回はこちら</div></div>
+        <div class="demo-reg-card"><div class="demo-reg-icon">🤖</div><div class="demo-reg-label">AIで登録</div><div class="demo-reg-desc">チャット形式で情報を作成</div></div>
+        <div class="demo-reg-card"><div class="demo-reg-icon">✏️</div><div class="demo-reg-label">手入力</div><div class="demo-reg-desc">従来どおり手動で入力</div></div>
+      </div>` : "";
+    return `
+      <div class="demo-overlay demo-fullscreen" id="demo-overlay">
+        ${topBar}
+        <div class="demo-center">
+          <p class="demo-step-num-big">STEP ${demoStep}</p>
+          <h2 class="demo-heading">${escapeHtml(s.heading).replace(/\n/g,"<br>")}</h2>
+          ${regHtml}
+          <div class="demo-point-box"><span class="demo-point-icon">💡</span><span><b>ここがポイント</b><br>${escapeHtml(s.point)}</span></div>
+          <div class="demo-nav-row">${prevBtn}<button class="demo-btn-prim" data-action="demo-next">${nextLabel}</button></div>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="demo-overlay demo-float" id="demo-overlay">
+      ${topBar}
+      <div class="demo-callout">
+        <div class="demo-callout-head">📌 ${escapeHtml(s.title)}</div>
+        <div class="demo-callout-msg">${escapeHtml(s.heading)}</div>
+        <div class="demo-point-box"><span class="demo-point-icon">💡</span><span><b>ここがポイント</b><br>${escapeHtml(s.point)}</span></div>
+        <div class="demo-nav-row">${prevBtn}<button class="demo-btn-prim" data-action="demo-next">${nextLabel}</button></div>
+      </div>
+    </div>`;
+}
+// ═════════════════════════════════════════════════════════════════════════
+
 function render() {
   clearTimeout(renderTimer);
   const active = document.activeElement;
@@ -796,7 +932,7 @@ function render() {
       <button class="action" onclick="saasView='dashboard';productDetailId=null;render()">ダッシュボードに戻る</button>
     </div>`;
   }
-  document.getElementById("root").innerHTML = `${pageHtml}${tutorialHtml()}`;
+  document.getElementById("root").innerHTML = `${pageHtml}${tutorialHtml()}${demoMode ? demoOverlayHtml() : ""}`;
   bindDynamic();
   window.scrollTo({ top: scrollY, behavior: "instant" });
   const fc = document.querySelector(".form-column");

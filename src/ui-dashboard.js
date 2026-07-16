@@ -34,6 +34,7 @@ function dashboardEmptyHtml() {
       <h1 class="onboarding-title">FoodPilot へようこそ</h1>
       <p class="onboarding-sub">食品メーカー・小規模食品事業者のための<br>AI搭載・商品管理＆食品表示ラベル作成ツール</p>
       ${registerBtnHtml()}
+      <button class="action demo-start-btn" data-action="demo-start">🎯 デモを開始（10分で価値を体感）</button>
     </div>
     <div class="onboarding-steps">
       ${STEPS.map((s, i) => `
@@ -191,7 +192,10 @@ function dashboardHtml() {
           <div class="db2-brand-sub">食品メーカーのAI商品管理プラットフォーム</div>
         </div>
       </div>
-      <div class="db2-today-badge">${todayStr}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="db2-today-badge">${todayStr}</div>
+        <button class="demo-start-btn demo-start-btn--sm" data-action="demo-start">🎯 デモ</button>
+      </div>
     </div>
     <div class="db2-kpi-row">
       <button class="db2-kpi-card" data-nav="products" data-set-filter="all">

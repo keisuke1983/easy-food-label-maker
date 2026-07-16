@@ -86,6 +86,10 @@ function setupDelegation() {
         case "save": saveCurrent(); return;
         case "save-master": saveMaster(); return;
         case "back-to-saas": saasView = productDetailId ? "product-detail" : "products"; view = "saas"; render(); return;
+        case "demo-start": startDemo(); return;
+        case "demo-next": if (demoStep >= DEMO_STEPS.length) { endDemo(); } else { demoStep++; applyDemoStep(); render(); } return;
+        case "demo-prev": if (demoStep > 1) { demoStep--; applyDemoStep(); render(); } return;
+        case "demo-end": endDemo(); return;
         case "retry-photo-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
         case "retry-spec-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
 

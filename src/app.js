@@ -766,7 +766,7 @@ const DEMO_STEPS = [
     heading:"写真から全項目が自動入力されました",
     point:"商品名・原材料7品目・製造者・賞味期限・保存方法が入力済みです。修正が必要な箇所だけ直して保存するだけ。手入力と比べて工数が大幅に削減されます。" },
 
-  { step:4, title:"栄養成分の自動計算",                   view:"edit", clickSection:"栄養成分",
+  { step:4, title:"栄養成分の自動計算",                   view:"edit", clickSection:"栄養成分表示",
     heading:"原材料の重量から\n栄養成分を自動で計算します",
     point:"原材料ごとの重量（g）を入力するだけで、エネルギー・たんぱく質・脂質・炭水化物・食塩相当量をFoodPilotが自動計算します。栄養士への外注が不要になります。" },
 
@@ -879,15 +879,22 @@ function startDemoClickSection(sectionName) {
     }, 700);
   }, 400);
 }
-function startDemoPrintAnim() {
+function startDemoPrintTypewriter() {
   setTimeout(() => {
-    const el = document.querySelector(".preview-column");
-    if (!el) return;
-    el.classList.remove("demo-print-reveal");
-    void el.offsetWidth;
-    el.classList.add("demo-print-reveal");
-    setTimeout(() => el.classList.remove("demo-print-reveal"), 3200);
-  }, 250);
+    const cells = Array.from(document.querySelectorAll(".label-paper td"));
+    if (!cells.length) return;
+    const saved = cells.map(el => { const t = el.textContent; el.textContent = ""; return { el, t }; });
+    let i = 0, c = 0;
+    function tick() {
+      if (i >= saved.length) return;
+      const { el, t } = saved[i];
+      if (c < t.length) {
+        el.textContent += t[c++];
+        setTimeout(tick, 20 + Math.random() * 15);
+      } else { i++; c = 0; setTimeout(tick, 110); }
+    }
+    tick();
+  }, 350);
 }
 function startDemoClickGenerate() {
   setTimeout(() => {
@@ -940,12 +947,12 @@ function applyDemoStep() {
     editId = demoProductId;
     draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct());
     view = "edit"; saasView = s.view === "label-nav" ? "label-nav" : "edit";
-    if (s.printAnim) startDemoPrintAnim();
+    if (s.printAnim) startDemoPrintTypewriter();
     if (s.autoScroll) {
       openSections = new Set(["基本情報", "原材料"]);
       startDemoAutoScroll(150);
     } else if (s.clickSection) {
-      openSections = new Set(["基本情報", "原材料"]);
+      openSections = new Set(["商品情報", "原材料"]);
       startDemoClickSection(s.clickSection);
     } else if (s.openSection) {
       openSections = new Set([s.openSection]);

@@ -866,7 +866,14 @@ function applyDemoStep() {
     editId = demoProductId;
     draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct());
     view = "edit"; saasView = s.view === "label-nav" ? "label-nav" : "edit";
-    if (s.openSection) openSections = new Set([s.openSection]);
+    if (s.openSection) {
+      openSections = new Set([s.openSection]);
+      const sec = s.openSection;
+      setTimeout(() => {
+        const btn = document.querySelector(`[data-toggle-section="${sec}"]`);
+        if (btn) btn.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    }
   }
   else if (s.view === "product-detail") {
     productDetailId = demoProductId;

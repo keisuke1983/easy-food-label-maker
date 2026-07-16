@@ -3464,4 +3464,13 @@ div.db2-kpi-card { cursor: default; }
 .onboarding-hero .reg-btn-wrap,
 .onboarding-hero .demo-start-btn { display:block; margin:0 auto; }
 .onboarding-hero { display:flex; flex-direction:column; align-items:center; gap:12px; }
+@keyframes demo-click-ripple {
+  0%   { box-shadow: 0 0 0 0 rgba(255,140,0,.7); outline: 2px solid rgba(255,140,0,.9); }
+  40%  { box-shadow: 0 0 0 10px rgba(255,140,0,.15); outline: 2px solid rgba(255,140,0,.6); transform: scale(.97); }
+  100% { box-shadow: 0 0 0 14px rgba(255,140,0,0); outline: 2px solid rgba(255,140,0,0); transform: scale(1); }
+}
+.demo-click-anim {
+  animation: demo-click-ripple .55s ease forwards;
+  border-radius: 6px;
+}
 /* ═══════════════════════════════════════════════════════════════════════ */

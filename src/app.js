@@ -766,7 +766,7 @@ const DEMO_STEPS = [
     heading:"写真から全項目が自動入力されました",
     point:"商品名・原材料7品目・製造者・賞味期限・保存方法が入力済みです。修正が必要な箇所だけ直して保存するだけ。手入力と比べて工数が大幅に削減されます。" },
 
-  { step:4, title:"栄養成分の自動計算",                   view:"edit", openSection:"栄養成分",
+  { step:4, title:"栄養成分の自動計算",                   view:"edit", clickSection:"栄養成分",
     heading:"原材料の重量から\n栄養成分を自動で計算します",
     point:"原材料ごとの重量（g）を入力するだけで、エネルギー・たんぱく質・脂質・炭水化物・食塩相当量をFoodPilotが自動計算します。栄養士への外注が不要になります。" },
 
@@ -778,11 +778,11 @@ const DEMO_STEPS = [
     heading:"A4規格書がワンクリックで完成\n取引先へその場で提出できます",
     point:"原材料・アレルゲン・栄養成分・製造者を整形したA4規格書を自動生成。署名欄付きPDFを出力して取引先に即日提出できます。規格書作成の外注コストをゼロにできます。" },
 
-  { step:6, title:"AI商品説明文",                        view:"ai-descriptions-nav",
+  { step:6, title:"AI商品説明文",                        view:"ai-descriptions-nav", clickGenerate:true,
     heading:"楽天・Amazon・Yahoo用の\n商品説明文をAIが自動生成します",
     point:"登録した商品情報をもとに、ECサイト向けの魅力的な商品説明文をAIが自動作成。販路（楽天・Amazon・自社EC）ごとに文体を最適化します。コピーライターへの外注が不要になります。" },
 
-  { step:7, title:"原価・利益管理",                       view:"product-detail", detailTab:"cost",
+  { step:7, title:"原価・利益管理",                       view:"product-detail", detailTab:"cost", autoScroll:true,
     heading:"原価率・粗利率・粗利額を\n商品ごとにリアルタイム計算",
     point:"材料費・包装費・送料を入力するだけで原価率と粗利が即計算されます。「どの商品が一番儲かるか」をすべての商品で横断管理できます。" },
 
@@ -833,19 +833,47 @@ let demoScrollTimer = null;
 function stopDemoAutoScroll() {
   if (demoScrollTimer) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
 }
-function startDemoAutoScroll() {
+function startDemoAutoScroll(delay = 150) {
   stopDemoAutoScroll();
-  window.scrollTo(0, 0);
-  const duration = 5000;
-  const start = Date.now();
-  demoScrollTimer = setInterval(() => {
-    const elapsed = Date.now() - start;
-    const t = Math.min(elapsed / duration, 1);
-    const eased = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
-    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-    window.scrollTo(0, maxScroll * eased);
-    if (t >= 1) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
-  }, 16);
+  setTimeout(() => {
+    window.scrollTo(0, 0);
+    const duration = 5000;
+    const start = Date.now();
+    demoScrollTimer = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      window.scrollTo(0, maxScroll * eased);
+      if (t >= 1) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
+    }, 16);
+  }, delay);
+}
+function startDemoClickSection(sectionName) {
+  setTimeout(() => {
+    const btn = document.querySelector(`[data-toggle-section="${sectionName}"]`);
+    if (!btn) return;
+    btn.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      btn.classList.add("demo-click-anim");
+      setTimeout(() => {
+        btn.click();
+        btn.classList.remove("demo-click-anim");
+        setTimeout(() => btn.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+      }, 500);
+    }, 700);
+  }, 400);
+}
+function startDemoClickGenerate() {
+  setTimeout(() => {
+    const btn = document.querySelector('[data-action="generate-ai-desc"]');
+    if (!btn) return;
+    btn.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      btn.classList.add("demo-click-anim");
+      setTimeout(() => { btn.click(); btn.classList.remove("demo-click-anim"); }, 500);
+    }, 700);
+  }, 800);
 }
 
 function startDemo() {
@@ -889,7 +917,10 @@ function applyDemoStep() {
     view = "edit"; saasView = s.view === "label-nav" ? "label-nav" : "edit";
     if (s.autoScroll) {
       openSections = new Set(["基本情報", "原材料"]);
-      setTimeout(() => startDemoAutoScroll(), 150);
+      startDemoAutoScroll(150);
+    } else if (s.clickSection) {
+      openSections = new Set(["基本情報", "原材料"]);
+      startDemoClickSection(s.clickSection);
     } else if (s.openSection) {
       openSections = new Set([s.openSection]);
       const sec = s.openSection;
@@ -903,9 +934,13 @@ function applyDemoStep() {
     productDetailId = demoProductId;
     productDetailTab = s.detailTab || "basic";
     saasView = "product-detail"; view = "saas";
+    if (s.autoScroll) startDemoAutoScroll(300);
   }
   else if (s.view === "spec-sheet-nav")      { specSheetId = demoProductId; saasView = "spec-sheet-nav"; view = "saas"; }
-  else if (s.view === "ai-descriptions-nav") { aiDescId = demoProductId; saasView = "ai-descriptions-nav"; view = "saas"; }
+  else if (s.view === "ai-descriptions-nav") {
+    aiDescId = demoProductId; saasView = "ai-descriptions-nav"; view = "saas";
+    if (s.clickGenerate) startDemoClickGenerate();
+  }
 }
 
 function demoOverlayHtml() {

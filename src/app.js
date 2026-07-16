@@ -770,7 +770,7 @@ const DEMO_STEPS = [
     heading:"原材料の重量から\n栄養成分を自動で計算します",
     point:"原材料ごとの重量（g）を入力するだけで、エネルギー・たんぱく質・脂質・炭水化物・食塩相当量をFoodPilotが自動計算します。栄養士への外注が不要になります。" },
 
-  { step:5, title:"食品表示ラベル",                       view:"label-nav",
+  { step:5, title:"食品表示ラベル",                       view:"label-nav", printAnim:true,
     heading:"食品表示ラベルが\nリアルタイムで自動生成されます",
     point:"入力と同時にラベルが更新されます。サイズ・フォントを自由に調整し、そのままPDF印刷またはPNG書き出しができます。食品表示法に沿ったレイアウトを自動で構成します。" },
 
@@ -859,10 +859,35 @@ function startDemoClickSection(sectionName) {
       setTimeout(() => {
         btn.click();
         btn.classList.remove("demo-click-anim");
-        setTimeout(() => btn.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+        setTimeout(() => {
+          btn.scrollIntoView({ behavior: "smooth", block: "start" });
+          setTimeout(() => {
+            const startY = window.scrollY;
+            const endY = startY + window.innerHeight * 0.65;
+            const duration = 2500;
+            const t0 = Date.now();
+            stopDemoAutoScroll();
+            demoScrollTimer = setInterval(() => {
+              const t = Math.min((Date.now() - t0) / duration, 1);
+              const eased = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+              window.scrollTo(0, startY + (endY - startY) * eased);
+              if (t >= 1) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
+            }, 16);
+          }, 500);
+        }, 300);
       }, 500);
     }, 700);
   }, 400);
+}
+function startDemoPrintAnim() {
+  setTimeout(() => {
+    const el = document.querySelector(".preview-column");
+    if (!el) return;
+    el.classList.remove("demo-print-reveal");
+    void el.offsetWidth;
+    el.classList.add("demo-print-reveal");
+    setTimeout(() => el.classList.remove("demo-print-reveal"), 3200);
+  }, 250);
 }
 function startDemoClickGenerate() {
   setTimeout(() => {
@@ -915,6 +940,7 @@ function applyDemoStep() {
     editId = demoProductId;
     draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct());
     view = "edit"; saasView = s.view === "label-nav" ? "label-nav" : "edit";
+    if (s.printAnim) startDemoPrintAnim();
     if (s.autoScroll) {
       openSections = new Set(["基本情報", "原材料"]);
       startDemoAutoScroll(150);

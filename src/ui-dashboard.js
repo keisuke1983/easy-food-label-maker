@@ -33,7 +33,7 @@ function dashboardEmptyHtml() {
       <img src="./assets/app-icon.svg" alt="" class="onboarding-icon">
       <h1 class="onboarding-title">FoodPilot へようこそ</h1>
       <p class="onboarding-sub">食品メーカー・小規模食品事業者のための<br>AI搭載・商品管理＆食品表示ラベル作成ツール</p>
-      <button class="action primary onboarding-cta" data-quick-new="1">＋ 最初の商品を登録する</button>
+      ${registerBtnHtml()}
     </div>
     <div class="onboarding-steps">
       ${STEPS.map((s, i) => `

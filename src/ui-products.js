@@ -123,8 +123,6 @@ function productsListHtml() {
   // テーブルビュー（masterView === "table" のときだけ使う）
   const allVisibleIds = list.map(p => p.id);
   const allChecked = allVisibleIds.length > 0 && allVisibleIds.every(id => masterSelected.has(id));
-  const todayIso = new Date().toISOString().split("T")[0];
-  const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
   const sortIcon = col => masterSort === col ? " ▲" : "";
   const tableHtml = masterView === "table" && list.length ? `<table class="master-table" data-visible-ids="${allVisibleIds.join(",")}">
     <thead><tr>

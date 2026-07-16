@@ -754,15 +754,41 @@ function focusKey(el) {
 }
 // ══ デモモード ════════════════════════════════════════════════════════════
 const DEMO_STEPS = [
-  { step:1, title:"FoodPilotとは？",   fullscreen:true,  view:"dashboard",           heading:"商品情報を一度登録するだけで、\n食品表示・規格書・原価・AIまで一元管理できます。",         point:"食品メーカーの現場業務に必要なすべてがFoodPilot一つで完結します。他のツールへの切り替えは不要です。" },
-  { step:2, title:"商品登録方法",       fullscreen:true,  view:"dashboard",           heading:"4つの方法で商品を登録できます",                                                    point:"今回は規格書から登録します。PDFや写真をAIがスキャンし、商品情報を自動で抽出します。", showRegMethods:true },
-  { step:3, title:"デモ商品登録",                         view:"edit",                heading:"規格書からの読み込み完了",                                                         point:"商品名・原材料・製造者情報が自動入力されています。内容の確認・修正後に保存するだけです。" },
-  { step:4, title:"商品カルテ",                           view:"product-detail",      heading:"商品に関する全情報を一元管理",                                                     point:"基本情報・食品表示・原価・規格書・AI・履歴をタブで切り替えて管理できます。商品カルテとして機能します。" },
-  { step:5, title:"食品表示ラベル",                        view:"label-nav",           heading:"リアルタイムでラベルをプレビュー",                                                 point:"登録した情報から食品表示ラベルが自動生成されます。PDF印刷まで1クリックで完結します。" },
-  { step:6, title:"商品規格書",                           view:"spec-sheet-nav",      heading:"A4規格書をワンクリックで出力",                                                     point:"商品情報から規格書が自動生成されます。署名欄付きのPDFを出力して取引先へ即日提出できます。" },
-  { step:7, title:"原価管理",                             view:"product-detail",      heading:"商品ごとの利益も一元管理できます",                                                  point:"原価率・粗利率・粗利額をリアルタイム計算。全商品の収益状況をダッシュボードで把握できます。", highlightCost:true },
-  { step:8, title:"AI機能",                               view:"ai-descriptions-nav", heading:"AIが商品管理を強力にサポート",                                                     point:"AI商品説明文・食品表示法チェック・相談チャット・Vision登録など、AIが業務を自動化します。" },
-  { step:9, title:"デモ完了",           fullscreen:true,  view:"dashboard",           heading:"商品を一度登録するだけで、\nFoodPilotが商品管理を支援します。",                      point:"ご覧いただいた機能はすべて標準搭載です。無料プランからはじめて、必要に応じてアップグレードできます。" },
+  { step:1, title:"FoodPilotとは？",   fullscreen:true,  view:"dashboard",
+    heading:"商品情報を一度登録するだけで、\n食品表示・規格書・原価・AIまで自動化できます。",
+    point:"食品メーカーが毎日行う「ラベル作成・規格書提出・原価計算」をFoodPilot一つに集約。作業時間を最大80%削減した事例があります。" },
+
+  { step:2, title:"写真から登録", fullscreen:true, view:"reg-photo", showRegMethods:true,
+    heading:"商品写真を撮るだけで\nAIが原材料・製造者・栄養成分を自動で読み取ります",
+    point:"パッケージ裏面を撮影するだけ。Llama Vision AIが原材料名・製造者・アレルゲン・栄養成分をゼロ入力で抽出します。" },
+
+  { step:3, title:"AI自動入力結果",                      view:"edit",
+    heading:"写真から全項目が自動入力されました",
+    point:"商品名・原材料7品目・製造者・賞味期限・保存方法が入力済みです。修正が必要な箇所だけ直して保存するだけ。手入力と比べて工数が大幅に削減されます。" },
+
+  { step:4, title:"食品表示ラベル",                       view:"label-nav",
+    heading:"食品表示ラベルが\nリアルタイムで自動生成されます",
+    point:"入力と同時にラベルが更新されます。サイズ・フォントを自由に調整し、そのままPDF印刷またはPNG書き出しができます。食品表示法に沿ったレイアウトを自動で構成します。" },
+
+  { step:5, title:"商品規格書",                          view:"spec-sheet-nav",
+    heading:"A4規格書がワンクリックで完成\n取引先へその場で提出できます",
+    point:"原材料・アレルゲン・栄養成分・製造者を整形したA4規格書を自動生成。署名欄付きPDFを出力して取引先に即日提出できます。規格書作成の外注コストをゼロにできます。" },
+
+  { step:6, title:"AI商品説明文",                        view:"ai-descriptions-nav",
+    heading:"楽天・Amazon・Yahoo用の\n商品説明文をAIが自動生成します",
+    point:"登録した商品情報をもとに、ECサイト向けの魅力的な商品説明文をAIが自動作成。販路（楽天・Amazon・自社EC）ごとに文体を最適化します。コピーライターへの外注が不要になります。" },
+
+  { step:7, title:"原価・利益管理",                       view:"product-detail",
+    heading:"原価率・粗利率・粗利額を\n商品ごとにリアルタイム計算",
+    point:"材料費・包装費・送料を入力するだけで原価率と粗利が即計算されます。「どの商品が一番儲かるか」をすべての商品で横断管理できます。", highlightCost:true },
+
+  { step:8, title:"AIが今日の課題を検出",                 view:"dashboard",
+    heading:"AIが商品ごとの課題を自動で検出し\n優先順位をつけて提案します",
+    point:"未入力項目・期限切れ・原価未設定・製造者情報なしなど、法令違反リスクも含めてAIが毎日チェック。担当者が見落とすミスを防ぎます。" },
+
+  { step:9, title:"デモ完了",           fullscreen:true,  view:"dashboard",
+    heading:"商品を一度登録するだけで、\nFoodPilotが商品管理をすべて支援します。",
+    point:"ラベル作成・規格書・AI説明文・原価管理・食品表示チェックがすべて標準搭載。無料プランから今日はじめられます。" },
 ];
 
 const DEMO_SAMPLE = {
@@ -830,11 +856,12 @@ function applyDemoStep() {
   const s = DEMO_STEPS[demoStep - 1];
   sidebarOpen = false;
   registerMenuOpen = false;
-  if (s.view === "dashboard")           { saasView = "dashboard"; view = "saas"; }
-  else if (s.view === "edit")           { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "edit"; }
-  else if (s.view === "label-nav")      { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "label-nav"; }
-  else if (s.view === "product-detail") { productDetailId = demoProductId; saasView = "product-detail"; view = "saas"; }
-  else if (s.view === "spec-sheet-nav") { specSheetId = demoProductId; saasView = "spec-sheet-nav"; view = "saas"; }
+  if (s.view === "dashboard")                { saasView = "dashboard"; view = "saas"; }
+  else if (s.view === "reg-photo")           { saasView = "reg-photo"; view = "saas"; }
+  else if (s.view === "edit")                { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "edit"; }
+  else if (s.view === "label-nav")           { editId = demoProductId; draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct()); view = "edit"; saasView = "label-nav"; }
+  else if (s.view === "product-detail")      { productDetailId = demoProductId; saasView = "product-detail"; view = "saas"; }
+  else if (s.view === "spec-sheet-nav")      { specSheetId = demoProductId; saasView = "spec-sheet-nav"; view = "saas"; }
   else if (s.view === "ai-descriptions-nav") { aiDescId = demoProductId; saasView = "ai-descriptions-nav"; view = "saas"; }
 }
 
@@ -857,8 +884,8 @@ function demoOverlayHtml() {
   if (s.fullscreen) {
     const regHtml = s.showRegMethods ? `
       <div class="demo-reg-grid">
-        <div class="demo-reg-card"><div class="demo-reg-icon">📷</div><div class="demo-reg-label">商品写真から登録</div><div class="demo-reg-desc">AIが写真を解析して自動入力</div></div>
-        <div class="demo-reg-card demo-reg-card--active"><div class="demo-reg-icon">📄</div><div class="demo-reg-label">規格書から登録</div><div class="demo-reg-desc">PDF・Excelから自動抽出</div><div class="demo-reg-now">← 今回はこちら</div></div>
+        <div class="demo-reg-card demo-reg-card--active"><div class="demo-reg-icon">📷</div><div class="demo-reg-label">商品写真から登録</div><div class="demo-reg-desc">パッケージ裏面を撮るだけでAIが全項目を自動入力</div><div class="demo-reg-now">← 今回はこちら</div></div>
+        <div class="demo-reg-card"><div class="demo-reg-icon">📄</div><div class="demo-reg-label">規格書から登録</div><div class="demo-reg-desc">PDF・Excelから自動抽出</div></div>
         <div class="demo-reg-card"><div class="demo-reg-icon">🤖</div><div class="demo-reg-label">AIで登録</div><div class="demo-reg-desc">チャット形式で情報を作成</div></div>
         <div class="demo-reg-card"><div class="demo-reg-icon">✏️</div><div class="demo-reg-label">手入力</div><div class="demo-reg-desc">従来どおり手動で入力</div></div>
       </div>` : "";

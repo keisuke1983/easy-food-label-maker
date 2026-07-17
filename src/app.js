@@ -3126,43 +3126,27 @@ function recipeCompareHtml(p, versions, ids) {
 }
 
 function karteTabHtml(p, d) {
-  const comp = calcCompletion(p, d);
+  const comp      = calcCompletion(p, d);
+  const costs     = calcCosts(p);
   const compColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+  const isReleased = (p.phase || "released") === "released";
 
-  const recentEvents = loadTimeline(p.id).slice(0, 5);
-  const recentTlHtml = recentEvents.length
-    ? recentEvents.map(ev => `
+  // ── タイムライン ──
+  const tlEvents = loadTimeline(p.id).slice(0, 8);
+  const tlHtml = tlEvents.length
+    ? `<div class="karte-tl-list">${tlEvents.map(ev => `
         <div class="karte-tl-row">
           <span class="karte-tl-ico">${ev.icon || "📌"}</span>
           <div class="karte-tl-body">
             <span class="karte-tl-lbl">${escapeHtml(ev.label)}</span>
-            <span class="karte-tl-date">${escapeHtml(ev.savedAt || "")}</span>
+            <span class="karte-tl-date">${escapeHtml(ev.savedAt || "")}${ev.savedBy && ev.savedBy !== "—" ? ` · ${escapeHtml(ev.savedBy)}` : ""}</span>
+            ${ev.comment ? `<span class="karte-tl-cmt">${escapeHtml(ev.comment)}</span>` : ""}
           </div>
-        </div>`).join("")
-    : `<p class="karte-empty">まだイベントはありません</p>`;
+        </div>`).join("")}</div>
+      <button class="karte-link" data-detail-tab="history">すべての履歴を見る →</button>`
+    : `<p class="karte-empty">まだイベントはありません。ラベルを保存すると自動記録されます。</p>`;
 
-  const allergens = d.allergens || [];
-  const allergenHtml = allergens.length
-    ? allergens.map(a => `<span class="karte-chip karte-chip--allergen">${escapeHtml(a)}</span>`).join("")
-    : `<span class="karte-none">なし（または未入力）</span>`;
-
-  const nutr = d.nutrition;
-  const nutrRows = nutr && nutr.kcal > 0
-    ? `<div class="karte-nutr-grid">
-        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.kcal}</span><span class="karte-nutr-lbl">kcal</span></div>
-        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.protein}g</span><span class="karte-nutr-lbl">たんぱく質</span></div>
-        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.fat}g</span><span class="karte-nutr-lbl">脂質</span></div>
-        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.carbs}g</span><span class="karte-nutr-lbl">炭水化物</span></div>
-        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.salt}g</span><span class="karte-nutr-lbl">食塩相当量</span></div>
-      </div>`
-    : `<span class="karte-none">原材料の重量を入力すると自動計算されます</span>`;
-
-  const apMap = { review: { txt:"👥 承認待ち", cls:"review" }, approved: { txt:"✅ 承認済み", cls:"ok" }, rejected: { txt:"↩ 差し戻し", cls:"ng" } };
-  const apInfo = apMap[p.approvalStatus];
-  const approvalHtml = apInfo
-    ? `<span class="karte-chip karte-chip--ap-${apInfo.cls}">${apInfo.txt}</span>`
-    : `<span class="karte-none">未申請</span>`;
-
+  // ── 完成度チェック ──
   const CHECK_ITEMS = ["名称","内容量","賞味期限","保存方法","製造者名","製造者住所","原材料名"];
   const checklistHtml = CHECK_ITEMS.map(lbl => {
     const missing = comp.missing.includes(lbl);
@@ -3172,57 +3156,139 @@ function karteTabHtml(p, d) {
     </div>`;
   }).join("");
 
+  // ── 原価サマリー ──
+  const costOk  = costs.costRate !== null && costs.costRate <= 35;
+  const costWarn = costs.costRate !== null && costs.costRate > 40;
+  const costColor = costWarn ? "#dc2626" : costOk ? "#16a34a" : "inherit";
+  const costHtml = `
+    <div class="karte-cost-grid">
+      <div class="karte-cost-item">
+        <div class="karte-cost-val">${costs.totalCost > 0 ? `¥${Math.round(costs.totalCost).toLocaleString()}` : "—"}</div>
+        <div class="karte-cost-lbl">原価</div>
+      </div>
+      <div class="karte-cost-item">
+        <div class="karte-cost-val" style="color:${costColor}">${costs.costRate !== null ? `${costs.costRate}%` : "—"}</div>
+        <div class="karte-cost-lbl">原価率</div>
+      </div>
+      <div class="karte-cost-item">
+        <div class="karte-cost-val">${costs.profitRate !== null ? `${costs.profitRate}%` : "—"}</div>
+        <div class="karte-cost-lbl">粗利率</div>
+      </div>
+    </div>
+    <button class="karte-link" data-detail-tab="cost">原価を詳しく見る →</button>`;
+
+  // ── 栄養成分 ──
+  const nutr = d.nutrition;
+  const nutrHtml = nutr && nutr.kcal > 0
+    ? `<div class="karte-nutr-grid">
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.kcal}</span><span class="karte-nutr-lbl">kcal</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.protein}g</span><span class="karte-nutr-lbl">たんぱく質</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.fat}g</span><span class="karte-nutr-lbl">脂質</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.carbs}g</span><span class="karte-nutr-lbl">炭水化物</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.salt}g</span><span class="karte-nutr-lbl">食塩相当量</span></div>
+      </div>`
+    : `<span class="karte-none">原材料の重量を入力すると自動計算されます</span>`;
+
+  // ── アレルゲン ──
+  const allergens = d.allergens || [];
+  const allergenHtml = allergens.length
+    ? allergens.map(a => `<span class="karte-chip karte-chip--allergen">${escapeHtml(a)}</span>`).join("")
+    : `<span class="karte-none">なし（または未入力）</span>`;
+
+  // ── 承認 ──
+  const apMap = { review:{ txt:"👥 承認待ち", cls:"review" }, approved:{ txt:"✅ 承認済み", cls:"ok" }, rejected:{ txt:"↩ 差し戻し", cls:"ng" } };
+  const apInfo = apMap[p.approvalStatus];
+  const approvalChip = apInfo ? `<span class="karte-chip karte-chip--ap-${apInfo.cls}">${apInfo.txt}</span>` : `<span class="karte-none">未申請</span>`;
+
+  // ── 商品基本情報 ──
+  const infoRows = [
+    ["商品名", p.name],
+    ["内容量", p.volume],
+    ["賞味期限", p.bestBefore],
+    ["保存方法", p.storage],
+    ["カテゴリ", p.category],
+    isReleased ? ["発売日", p.releasedAt] : ["担当者", p.specResponsible],
+  ].filter(([, v]) => v).map(([lbl, val]) =>
+    `<div class="karte-info-row"><span class="karte-info-lbl">${lbl}</span><span class="karte-info-val">${escapeHtml(val)}</span></div>`
+  ).join("");
+
   return `<div class="karte-layout">
+
+    <!-- 左列: ラベル + アクション -->
     <div class="karte-col karte-col--left">
       <div class="karte-panel karte-panel--preview">
         <div class="karte-panel-hd">🏷 ラベルプレビュー</div>
         <div class="karte-label-wrap">${basicLabelHtml(p, d)}</div>
         <div style="margin-top:8px">${nutritionLabelHtml(d)}</div>
-        <div class="karte-label-actions">
-          <button class="action primary" style="font-size:12px" data-label-from="${escapeHtml(p.id)}">✏️ ラベル編集</button>
-          <button class="action" style="font-size:12px" data-action="open-print-preview">🖨 印刷</button>
-        </div>
       </div>
       <div class="karte-panel">
-        <div class="karte-panel-hd">📜 最近の記録</div>
-        <div class="karte-tl-list">${recentTlHtml}</div>
-        <button class="karte-link" data-detail-tab="history">すべての履歴を見る →</button>
+        <div class="karte-panel-hd">⚡ クイックアクション</div>
+        <div class="karte-quick-actions">
+          <button class="karte-qa-btn" data-label-from="${escapeHtml(p.id)}">✏️ ラベル編集</button>
+          <button class="karte-qa-btn" data-action="open-print-preview">🖨 印刷・PDF</button>
+          <button class="karte-qa-btn" data-spec-from="${escapeHtml(p.id)}">📄 規格書</button>
+          <button class="karte-qa-btn" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談</button>
+          <button class="karte-qa-btn" data-ai-from="${escapeHtml(p.id)}">✨ AI説明文</button>
+          <button class="karte-qa-btn" data-detail-tab="ai">🔍 表示チェック</button>
+        </div>
       </div>
     </div>
+
+    <!-- 右列: 情報パネル群 -->
     <div class="karte-col karte-col--right">
+
+      <!-- 商品基本情報 -->
+      ${infoRows ? `<div class="karte-panel">
+        <div class="karte-panel-hd">ℹ️ 商品情報</div>
+        <div class="karte-info-list">${infoRows}</div>
+        <button class="karte-link" data-detail-tab="basic">詳細を編集 →</button>
+      </div>` : ""}
+
+      <!-- 完成度 -->
       <div class="karte-panel karte-panel--comp">
         <div class="karte-comp-hd">
-          <span class="karte-panel-hd" style="margin-bottom:0">完成度</span>
+          <span class="karte-panel-hd" style="margin-bottom:0">📋 完成度</span>
           <span class="karte-comp-pct" style="color:${compColor}">${comp.pct}%</span>
         </div>
         <div class="karte-comp-bar"><div class="karte-comp-bar-fill" style="width:${comp.pct}%;background:${compColor}"></div></div>
         <div class="karte-check-grid">${checklistHtml}</div>
       </div>
+
+      <!-- 原価サマリー -->
+      <div class="karte-panel">
+        <div class="karte-panel-hd">💰 原価サマリー</div>
+        ${costHtml}
+      </div>
+
+      <!-- タイムライン -->
+      <div class="karte-panel">
+        <div class="karte-panel-hd">📜 商品タイムライン</div>
+        ${tlHtml}
+      </div>
+
+      <!-- アレルゲン -->
       <div class="karte-panel">
         <div class="karte-panel-hd">🥜 アレルゲン</div>
         <div class="karte-chips-row">${allergenHtml}</div>
         <button class="karte-link" data-detail-tab="ingredients">原材料を編集 →</button>
       </div>
+
+      <!-- 栄養成分 -->
       <div class="karte-panel">
         <div class="karte-panel-hd">🔬 栄養成分（100g当たり）</div>
-        ${nutrRows}
+        ${nutrHtml}
       </div>
+
+      <!-- 承認 -->
       <div class="karte-panel">
         <div class="karte-panel-hd">👥 承認ステータス</div>
-        <div>${approvalHtml}</div>
-        ${p.phase === "development" && p.productStatus === "approved" && p.approvalStatus === "approved"
+        <div>${approvalChip}</div>
+        ${p.productStatus === "approved" && p.approvalStatus === "approved"
           ? `<div style="margin-top:8px"><button class="action primary" style="font-size:12px" data-action="release-product" data-pid="${escapeHtml(p.id)}">🚀 発売する</button></div>`
           : ""}
         <button class="karte-link" data-detail-tab="approval">チーム承認を管理する →</button>
       </div>
-      <div class="karte-panel">
-        <div class="karte-panel-hd">🤖 AIアクション</div>
-        <div class="karte-ai-actions">
-          <button class="action" style="font-size:12px" data-detail-tab="ai">✅ 表示チェック</button>
-          <button class="action" style="font-size:12px" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談</button>
-          <button class="action" style="font-size:12px" data-ai-from="${escapeHtml(p.id)}">✨ AI説明文</button>
-        </div>
-      </div>
+
     </div>
   </div>`;
 }

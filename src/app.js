@@ -1855,9 +1855,46 @@ function costEditorHtml(p) {
       </div>
     </div>`;
 
+  // ── 目標原価率 + シミュレーター ──
+  const targetRate = parseFloat(p.targetCostRate || "") || null;
+  const curRate    = costs.costRate;
+  const diff       = (targetRate !== null && curRate !== null) ? curRate - targetRate : null;
+  const overTarget = diff !== null && diff > 0;
+  // 目標原価率を達成するのに必要な販売価格
+  const neededPrice = (targetRate !== null && costs.totalCost > 0)
+    ? Math.ceil(costs.totalCost / (targetRate / 100)) : null;
+
+  const targetFieldHtml = `
+    <div class="cost-sim-bar">
+      <label class="cost-sim-field">
+        <span class="cost-sim-label">🎯 目標原価率</span>
+        <div class="cost-sim-input-wrap">
+          <input type="number" class="cost-sim-input" data-master-field="targetCostRate"
+            value="${p.targetCostRate || ""}" placeholder="例: 30" min="1" max="99" step="1">
+          <span class="cost-sim-pct">%</span>
+        </div>
+      </label>
+      <div class="cost-sim-result ${targetRate !== null && curRate !== null ? (overTarget ? "cost-sim-over" : "cost-sim-ok") : ""}"
+           id="ck-sim-result" style="${targetRate === null || curRate === null ? "display:none" : ""}">
+        ${targetRate !== null && curRate !== null
+          ? overTarget
+            ? `⚠ 目標より <strong>+${diff}%</strong> 超過`
+            : `✅ 目標達成（余裕 <strong>${Math.abs(diff)}%</strong>）`
+          : ""}
+      </div>
+      <div class="cost-sim-needed">
+        目標達成には <strong id="ck-needed-val">${neededPrice !== null ? "¥" + neededPrice.toLocaleString() : "—"}</strong> 以上で販売する必要があります
+      </div>
+    </div>
+    <div class="cost-warn-banner" id="ck-warn-banner" style="${overTarget ? "" : "display:none"}">
+      ⚠️ 現在の原価率 <strong>${curRate}%</strong> は目標 <strong>${targetRate}%</strong> を超えています。
+      原材料費を削減するか、販売価格を <strong>¥${neededPrice?.toLocaleString() || "—"}</strong> 以上に引き上げてください。
+    </div>`;
+
   // ── サマリー ──
   const fmt = (n) => n > 0 ? `¥${Math.round(n).toLocaleString()}` : "¥0";
   const summary = `<div class="cost-summary-v2">
+    ${targetFieldHtml}
     <div class="cost-kpi-row">
       <div class="cost-kpi">
         <div class="cost-kpi-label">総原価</div>
@@ -3421,6 +3458,27 @@ function refreshCostKpis() {
   if ($("ck-profit")) $("ck-profit").textContent = costRate !== null ? (100 - costRate) + "%" : "—";
   if ($("ck-cost"))   $("ck-cost").textContent   = costRate !== null ? costRate + "%" : "—";
   ["ck-profit-wrap","ck-cost-wrap"].forEach(id => { if ($(id)) $(id).className = "cost-kpi " + mc; });
+  // 目標原価率とのリアルタイム比較
+  const targetRate = parseFloat(document.querySelector("[data-master-field='targetCostRate']")?.value) || null;
+  const simResult  = $("ck-sim-result");
+  const warnBanner = $("ck-warn-banner");
+  const neededEl   = $("ck-needed-val");
+  if (simResult && targetRate !== null && costRate !== null) {
+    const diff = costRate - targetRate;
+    const over = diff > 0;
+    simResult.className = "cost-sim-result " + (over ? "cost-sim-over" : "cost-sim-ok");
+    simResult.innerHTML = over
+      ? `⚠ 目標より <strong>+${diff}%</strong> 超過`
+      : `✅ 目標達成（余裕 <strong>${Math.abs(diff)}%</strong>）`;
+    simResult.style.display = "";
+    if (warnBanner) { warnBanner.style.display = over ? "" : "none"; }
+  } else if (simResult) {
+    simResult.style.display = "none";
+  }
+  if (neededEl && targetRate !== null && totalCost > 0) {
+    const needed = Math.ceil(totalCost / (targetRate / 100));
+    neededEl.textContent = "¥" + needed.toLocaleString();
+  }
 }
 
 function handleImageFile(file) {

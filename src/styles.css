@@ -4076,3 +4076,51 @@ div.db2-kpi-card { cursor: default; }
   .db2-act-to { background: #052e16; color: #86efac; }
 }
 
+
+/* ── 原価シミュレーター強化 ─────────────────────────────────────────── */
+.cost-sim-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--bg-sub, #f8fafc);
+  border: 1.5px solid var(--border, #e2e8f0); border-radius: 10px;
+  margin-bottom: 10px;
+}
+.cost-sim-field { display: flex; align-items: center; gap: 8px; }
+.cost-sim-label { font-size: 13px; font-weight: 700; color: var(--text, #1e293b); white-space: nowrap; }
+.cost-sim-input-wrap { display: flex; align-items: center; gap: 4px; }
+.cost-sim-input {
+  width: 72px; padding: 6px 8px; border: 1.5px solid var(--border, #e2e8f0);
+  border-radius: 6px; font-size: 14px; font-weight: 700; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cost-sim-input:focus { border-color: #2563eb; outline: none; }
+.cost-sim-pct { font-size: 14px; font-weight: 700; color: var(--text-sub, #64748b); }
+.cost-sim-result {
+  font-size: 13px; font-weight: 600; padding: 4px 10px;
+  border-radius: 6px; white-space: nowrap;
+}
+.cost-sim-ok { background: #dcfce7; color: #15803d; }
+.cost-sim-over { background: #fee2e2; color: #b91c1c; }
+.cost-sim-needed { font-size: 12px; color: var(--text-sub, #64748b); white-space: nowrap; }
+.cost-warn-banner {
+  background: #fff7ed; border: 1.5px solid #fed7aa; border-radius: 8px;
+  padding: 10px 14px; font-size: 13px; color: #92400e; margin-bottom: 10px;
+  line-height: 1.5;
+}
+.cost-warn-banner strong { color: #b45309; }
+
+/* ── 発売準備チェック (rr-*) ── */
+.rr-box { border: 1.5px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+.rr-hd { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.rr-badge { font-size: 11px; font-weight: 600; border-radius: 99px; padding: 2px 8px; }
+.rr-badge--ok { background: #dcfce7; color: #15803d; }
+.rr-badge--ng { background: #fee2e2; color: #b91c1c; }
+.rr-badge--warn { background: #fef9c3; color: #854d0e; }
+.rr-items { padding: 6px 0; }
+.rr-item { display: flex; align-items: baseline; gap: 6px; padding: 5px 12px; font-size: 12px; }
+.rr-item--ok { color: var(--text-base, #1e293b); }
+.rr-item--ng { color: #b91c1c; }
+.rr-item--warn { color: #92400e; }
+.rr-ico { font-size: 13px; flex-shrink: 0; }
+.rr-lbl { flex: 1; }
+.rr-detail { font-size: 11px; color: inherit; opacity: .8; white-space: nowrap; }
+

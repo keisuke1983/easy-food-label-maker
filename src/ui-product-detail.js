@@ -152,10 +152,11 @@ function karteTabHtml(p, d) {
         ${nutrHtml}
       </div>
 
-      <!-- 承認 -->
+      <!-- 承認 + 発売準備チェック -->
       <div class="karte-panel">
         <div class="karte-panel-hd">👥 承認ステータス</div>
         <div>${approvalChip}</div>
+        ${!isReleased ? releaseReadinessHtml(p, d) : ""}
         ${p.productStatus === "approved" && p.approvalStatus === "approved"
           ? `<div style="margin-top:8px"><button class="action primary" style="font-size:12px" data-action="release-product" data-pid="${escapeHtml(p.id)}">🚀 発売する</button></div>`
           : ""}
@@ -834,5 +835,74 @@ function checkFoodLabel(p, d) {
   }
 
   return issues;
+}
+
+function releaseReadinessHtml(p, d) {
+  const comp = calcCompletion(p, d);
+  const costs = calcCosts(p);
+
+  const items = [
+    {
+      label: "ラベル必須項目（完成度100%）",
+      ok: comp.pct >= 100,
+      detail: comp.pct < 100 ? `未入力: ${comp.missing.join("・")}` : null,
+      critical: true,
+    },
+    {
+      label: "原価・販売価格が設定済み",
+      ok: costs.totalCost > 0 && costs.price > 0,
+      detail: costs.totalCost === 0 ? "原価未入力" : costs.price === 0 ? "販売価格未入力" : null,
+      critical: true,
+    },
+    {
+      label: "原価率が目標以内（≤目標原価率）",
+      ok: (() => {
+        const target = parseFloat(p.targetCostRate || "") || null;
+        if (!target || costs.costRate === null) return true;
+        return costs.costRate <= target;
+      })(),
+      detail: (() => {
+        const target = parseFloat(p.targetCostRate || "") || null;
+        if (!target || costs.costRate === null) return null;
+        const diff = costs.costRate - target;
+        return diff > 0 ? `目標比 +${diff.toFixed(1)}%` : null;
+      })(),
+      critical: false,
+    },
+    {
+      label: "チーム承認済み",
+      ok: p.approvalStatus === "approved",
+      detail: p.approvalStatus === "rejected" ? "差し戻し中" : p.approvalStatus === "review" ? "承認待ち" : "未申請",
+      critical: true,
+    },
+    {
+      label: "担当者が設定済み",
+      ok: !!(p.specResponsible && p.specResponsible.trim()),
+      detail: null,
+      critical: false,
+    },
+  ];
+
+  const blockers = items.filter(i => i.critical && !i.ok);
+  const allOk = items.every(i => i.ok);
+
+  const itemsHtml = items.map(item => `
+    <div class="rr-item${item.ok ? " rr-item--ok" : item.critical ? " rr-item--ng" : " rr-item--warn"}">
+      <span class="rr-ico">${item.ok ? "✅" : item.critical ? "🚫" : "⚠️"}</span>
+      <span class="rr-lbl">${escapeHtml(item.label)}</span>
+      ${item.detail && !item.ok ? `<span class="rr-detail">${escapeHtml(item.detail)}</span>` : ""}
+    </div>`).join("");
+
+  return `<div class="rr-box" style="margin-top:10px">
+    <div class="rr-hd">
+      <span style="font-weight:600;font-size:12px">🚀 発売準備チェック</span>
+      ${allOk
+        ? `<span class="rr-badge rr-badge--ok">準備完了</span>`
+        : blockers.length > 0
+          ? `<span class="rr-badge rr-badge--ng">${blockers.length}件 未完了</span>`
+          : `<span class="rr-badge rr-badge--warn">要確認</span>`}
+    </div>
+    <div class="rr-items">${itemsHtml}</div>
+  </div>`;
 }
 

@@ -363,9 +363,19 @@ function setupDelegation() {
         case "release-product": {
           const pid = ael.dataset.pid;
           const p = products.find(x => x.id === pid); if (!p) return;
+          const d = derive(p);
+          const comp = calcCompletion(p, d);
+          const costs = calcCosts(p);
+          const blockers = [];
+          if (comp.pct < 100) blockers.push(`ラベル未入力項目: ${comp.missing.join("・")}`);
+          if (costs.totalCost === 0 || costs.price === 0) blockers.push("原価または販売価格が未設定");
+          if (p.approvalStatus !== "approved") blockers.push("チーム承認が未完了");
+          const blockerNote = blockers.length
+            ? `\n\n⚠️ 未完了の必須項目:\n${blockers.map(b => `・${b}`).join("\n")}`
+            : "";
           showModal({
-            message: `「${p.name || "この商品"}」を発売済みにしますか？\n発売後は商品管理（発売後）に移動します。`,
-            confirmLabel: "🚀 発売する",
+            message: `「${p.name || "この商品"}」を発売済みにしますか？\n発売後は商品管理（発売後）に移動します。${blockerNote}`,
+            confirmLabel: blockers.length ? "⚠️ このまま発売する" : "🚀 発売する",
             cancelLabel: "キャンセル",
             onConfirm: () => {
               const now = new Date().toLocaleDateString("ja-JP");

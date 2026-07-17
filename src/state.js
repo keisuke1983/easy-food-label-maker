@@ -97,3 +97,5 @@ let demoProductId = null;
 let devDetailTab = "overview"; // "overview"|"recipe"|"trial"|"cost"|"nutrition"|"approval"
 let activeRecipeVersionId = null; // null = 採用版
 let newTrialBatchOpen = false;
+let recipeCompareMode = false; // レシピ版比較モード
+let recipeCompareIds = []; // 比較対象バージョンID（最大4件）

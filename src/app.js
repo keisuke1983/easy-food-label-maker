@@ -2750,28 +2750,54 @@ function devDetailHtml() {
 
   // ② レシピ版タブ
   else if (_tab === "recipe") {
+    const canCompare = versions.length >= 2;
+    const compareSelected = recipeCompareIds.filter(id => versions.find(v => v.id === id));
+
+    // ── バージョン選択バー ──
     const versionTabs = versions.length
       ? `<div class="devd-ver-tabs">${versions.map(v => {
           const isAdopted  = v.id === p.adoptedRecipeVersionId;
           const isActive   = v.id === (activeVer?.id);
-          return `<button class="devd-ver-tab${isActive?" active":""}" data-set-active-version="${escapeHtml(v.id)}">
-            ${v.label || `Ver.${v.versionNum}`}
-            ${isAdopted ? `<span class="devd-ver-adopted">採用中</span>` : `<span class="devd-ver-status devd-ver-status--${v.status||"draft"}">${{draft:"下書き",testing:"試作中",rejected:"却下",adopted:"採用"}[v.status]||v.status}</span>`}
-          </button>`;
+          const isChecked  = recipeCompareMode && compareSelected.includes(v.id);
+          return recipeCompareMode
+            ? `<label class="devd-ver-tab devd-ver-tab--check${isChecked?" active":""}">
+                <input type="checkbox" class="rcmp-check" data-compare-check="${escapeHtml(v.id)}" ${isChecked?"checked":""} style="display:none">
+                <span class="rcmp-check-box">${isChecked?"✓":""}</span>
+                ${v.label || `Ver.${v.versionNum}`}
+                ${isAdopted ? `<span class="devd-ver-adopted">採用中</span>` : `<span class="devd-ver-status devd-ver-status--${v.status||"draft"}">${{draft:"下書き",testing:"試作中",rejected:"却下",adopted:"採用"}[v.status]||v.status}</span>`}
+              </label>`
+            : `<button class="devd-ver-tab${isActive?" active":""}" data-set-active-version="${escapeHtml(v.id)}">
+                ${v.label || `Ver.${v.versionNum}`}
+                ${isAdopted ? `<span class="devd-ver-adopted">採用中</span>` : `<span class="devd-ver-status devd-ver-status--${v.status||"draft"}">${{draft:"下書き",testing:"試作中",rejected:"却下",adopted:"採用"}[v.status]||v.status}</span>`}
+              </button>`;
         }).join("")}
-        <button class="devd-ver-tab devd-ver-tab--add" data-action="add-recipe-version" data-pid="${escapeHtml(p.id)}">＋ 新バージョン</button>
+        ${!recipeCompareMode ? `<button class="devd-ver-tab devd-ver-tab--add" data-action="add-recipe-version" data-pid="${escapeHtml(p.id)}">＋ 新バージョン</button>` : ""}
       </div>`
       : `<div class="devd-empty-ver"><p>レシピバージョンがありません。</p><button class="action primary" data-action="add-recipe-version" data-pid="${escapeHtml(p.id)}">＋ 最初のバージョンを作成</button></div>`;
 
-    let verDetailHtml = "";
-    if (activeVer) {
+    // ── 比較モード切替ボタン ──
+    const compareBtnBar = canCompare ? `
+      <div class="rcmp-toolbar">
+        ${recipeCompareMode
+          ? `<span class="rcmp-hint-txt">${compareSelected.length < 2 ? "比較するバージョンを2つ以上選択" : `${compareSelected.length}件を比較中`}</span>
+             <button class="action action--compare-exit" data-action="toggle-compare-mode">← 通常表示に戻る</button>`
+          : `<button class="action action--compare" data-action="toggle-compare-mode">⚡ バージョンを比較する</button>`}
+      </div>` : "";
+
+    // ── メインコンテンツ ──
+    let mainContent = "";
+    if (recipeCompareMode) {
+      mainContent = compareSelected.length >= 2
+        ? recipeCompareHtml(p, versions, compareSelected)
+        : `<div class="rcmp-select-prompt"><p>上のバージョンタブにチェックを入れてください（2〜4件）</p></div>`;
+    } else if (activeVer) {
       const verD = derive({ ...p, ingredients: activeVer.ingredients || [] });
       const verC = calcCosts({ ...p, ingredients: activeVer.ingredients || [], directCost: activeVer.directCost || "", costMode: activeVer.costMode || "direct", costItems: activeVer.costItems || [] });
       const isAdopted = activeVer.id === p.adoptedRecipeVersionId;
       const ingHtml = (activeVer.ingredients || []).length
         ? `<table class="report-table" style="font-size:13px"><thead><tr><th>原材料名</th><th>重量(g)</th></tr></thead><tbody>${(activeVer.ingredients).map(i => `<tr><td>${escapeHtml(i.name||"")}</td><td style="font-variant-numeric:tabular-nums">${escapeHtml(i.weight||"")}</td></tr>`).join("")}</tbody></table>`
         : `<p class="devd-empty">原材料が未入力です。</p>`;
-      verDetailHtml = `
+      mainContent = `
         <div class="devd-ver-detail">
           <div class="devd-ver-detail-hd">
             <div>
@@ -2804,7 +2830,7 @@ function devDetailHtml() {
           </div>
         </div>`;
     }
-    tabContent = `${versionTabs}${verDetailHtml}`;
+    tabContent = `${compareBtnBar}${versionTabs}${mainContent}`;
   }
 
   // ③ 試作評価タブ
@@ -2957,6 +2983,146 @@ function devDetailHtml() {
     ${tabNav}
     <div class="devd-tab-body">${tabContent}</div>
   `);
+}
+
+// ── レシピバージョン並列比較 ──────────────────────────────────────────────
+function recipeCompareHtml(p, versions, ids) {
+  const SCORE_KEYS = [["taste","味"],["texture","食感"],["aroma","香り"],["appearance","見た目"],["cost","コスト"]];
+  const batches = p.trialBatches || [];
+  const cols = ids.map(id => versions.find(v => v.id === id)).filter(Boolean);
+  if (cols.length < 2) {
+    return `<p class="rcmp-hint">比較するバージョンを2つ以上選択してください。</p>`;
+  }
+
+  // 各列の derived/cost データ
+  const colData = cols.map(v => {
+    const vp = { ...p, ingredients: v.ingredients || [], directCost: v.directCost || "", costMode: v.costMode || "direct", costItems: v.costItems || [] };
+    const d  = derive(vp);
+    const c  = calcCosts(vp);
+    // その版に紐づく試作記録の最新スコア
+    const myBatches = batches.filter(b => b.recipeVersionId === v.id);
+    const latestBatch = myBatches[myBatches.length - 1] || null;
+    const avgBatch = myBatches.length ? {
+      taste: myBatches.reduce((s,b)=>s+(b.scores?.taste||0),0)/myBatches.length,
+      texture: myBatches.reduce((s,b)=>s+(b.scores?.texture||0),0)/myBatches.length,
+      aroma: myBatches.reduce((s,b)=>s+(b.scores?.aroma||0),0)/myBatches.length,
+      appearance: myBatches.reduce((s,b)=>s+(b.scores?.appearance||0),0)/myBatches.length,
+      cost: myBatches.reduce((s,b)=>s+(b.scores?.cost||0),0)/myBatches.length,
+    } : null;
+    return { v, d, c, latestBatch, avgBatch, batchCount: myBatches.length };
+  });
+
+  // 原材料の union（全版で出現する名称の和集合）
+  const allIngNames = [...new Set(cols.flatMap(v => (v.ingredients||[]).map(i => i.name).filter(Boolean)))];
+  // 重量が版によって違う原材料を特定
+  const diffIngNames = new Set(allIngNames.filter(name => {
+    const weights = cols.map(v => (v.ingredients||[]).find(i => i.name === name)?.weight || "");
+    return new Set(weights).size > 1;
+  }));
+
+  const targetRate = parseFloat(p.devProject?.targetCostRate) || null;
+
+  // セルレンダラー
+  const numDiff = (vals, fmt) => {
+    const uniq = new Set(vals.map(v => v ?? "—"));
+    const hasDiff = uniq.size > 1;
+    return vals.map(v => `<td class="rcmp-cell${hasDiff?" rcmp-diff":""}">${fmt(v)}</td>`).join("");
+  };
+
+  // ── ヘッダー行 ──
+  const headerCells = colData.map(({ v }) => {
+    const isAdopted = v.id === p.adoptedRecipeVersionId;
+    return `<th class="rcmp-th${isAdopted?" rcmp-adopted-col":""}">
+      <div class="rcmp-th-name">${escapeHtml(v.label || `Ver.${v.versionNum}`)}</div>
+      <div class="rcmp-th-status">
+        ${isAdopted
+          ? `<span class="devd-ver-adopted">✅ 採用中</span>`
+          : `<span class="devd-ver-status devd-ver-status--${v.status||"draft"}">${{draft:"下書き",testing:"試作中",rejected:"却下",adopted:"採用"}[v.status]||v.status}</span>`}
+      </div>
+      ${!isAdopted ? `<button class="action primary rcmp-adopt-btn" data-action="adopt-recipe-version" data-pid="${escapeHtml(p.id)}" data-vid="${escapeHtml(v.id)}">この版を採用</button>` : ""}
+    </th>`;
+  }).join("");
+
+  // ── 原材料行 ──
+  const ingRows = allIngNames.map(name => {
+    const isDiff = diffIngNames.has(name);
+    const cells = cols.map(v => {
+      const ing = (v.ingredients||[]).find(i => i.name === name);
+      const exists = !!ing;
+      const w = ing?.weight || "";
+      let cls = "rcmp-cell";
+      if (!exists) cls += " rcmp-ing-missing";
+      else if (isDiff) cls += " rcmp-ing-diff";
+      return `<td class="${cls}">${exists ? `${escapeHtml(w)}<span class="rcmp-unit">g</span>` : `<span class="rcmp-na">—</span>`}</td>`;
+    }).join("");
+    return `<tr><td class="rcmp-row-lbl">${escapeHtml(name)}</td>${cells}</tr>`;
+  }).join("");
+
+  // ── 栄養成分行 ──
+  const nutrRows = [["kcal","エネルギー","kcal"],["protein","たんぱく質","g"],["fat","脂質","g"],["carbs","炭水化物","g"],["salt","食塩相当量","g"]].map(([key,lbl,unit]) => {
+    const vals = colData.map(({d}) => d.nutrition[key] || null);
+    const uniq = new Set(vals.map(v => v ?? "—"));
+    const hasDiff = uniq.size > 1;
+    const cells = vals.map(v => `<td class="rcmp-cell${hasDiff?" rcmp-diff":""}">${v ? `${v}<span class="rcmp-unit">${unit}</span>` : `<span class="rcmp-na">—</span>`}</td>`).join("");
+    return `<tr><td class="rcmp-row-lbl">${lbl}</td>${cells}</tr>`;
+  }).join("");
+
+  // ── 原価行 ──
+  const costRows = [
+    ["原価(¥)", colData.map(({c}) => c.totalCost > 0 ? `¥${Math.round(c.totalCost).toLocaleString()}` : null)],
+    ["原価率", colData.map(({c}) => c.costRate !== null ? `${c.costRate}%` : null)],
+    ...(targetRate ? [["目標比", colData.map(({c}) => {
+      if (c.costRate === null) return null;
+      const diff = c.costRate - targetRate;
+      return diff <= 0 ? `<span style="color:#16a34a">✅ ${diff === 0 ? "±0" : diff.toFixed(1)}%</span>` : `<span style="color:#dc2626">⚠️ +${diff.toFixed(1)}%</span>`;
+    })]] : []),
+  ].map(([lbl, vals]) => {
+    const rawVals = vals.map(v => typeof v === "string" && v.startsWith("<") ? v : v);
+    const plainVals = vals.map(v => typeof v === "string" ? v.replace(/<[^>]+>/g,"") : "—");
+    const hasDiff = new Set(plainVals).size > 1;
+    const cells = vals.map(v => `<td class="rcmp-cell${hasDiff?" rcmp-diff":""}">${v ?? `<span class="rcmp-na">—</span>`}</td>`).join("");
+    return `<tr><td class="rcmp-row-lbl">${lbl}</td>${cells}</tr>`;
+  }).join("");
+
+  // ── アレルゲン行 ──
+  const allergenCells = colData.map(({d}) => {
+    const al = d.allergens || [];
+    return `<td class="rcmp-cell rcmp-al-cell">${al.length ? al.map(a=>`<span class="rcmp-al-chip">${escapeHtml(a)}</span>`).join("") : `<span class="rcmp-na">なし</span>`}</td>`;
+  }).join("");
+
+  // ── 試作スコア行 ──
+  const stars = n => n > 0 ? "★".repeat(Math.min(5,Math.round(n))) + "☆".repeat(Math.max(0,5-Math.round(n))) : "—";
+  const scoreRows = SCORE_KEYS.map(([key, lbl]) => {
+    const vals = colData.map(({avgBatch}) => avgBatch ? avgBatch[key] : null);
+    const hasDiff = new Set(vals.map(v => v !== null ? Math.round(v) : "—")).size > 1;
+    const cells = vals.map(v => `<td class="rcmp-cell${hasDiff?" rcmp-diff":""}"><span class="rcmp-stars">${stars(v)}</span></td>`).join("");
+    return `<tr><td class="rcmp-row-lbl">${lbl}</td>${cells}</tr>`;
+  }).join("");
+  const batchCountRow = `<tr><td class="rcmp-row-lbl">試作回数</td>${colData.map(({batchCount}) => `<td class="rcmp-cell">${batchCount}回</td>`).join("")}</tr>`;
+
+  return `
+  <div class="rcmp-legend">
+    <span class="rcmp-legend-item rcmp-legend-diff">差異あり</span>
+    <span class="rcmp-legend-item rcmp-legend-missing">未使用原材料</span>
+  </div>
+  <div class="table-wrap">
+    <table class="rcmp-table">
+      <thead><tr><th class="rcmp-row-lbl-th"></th>${headerCells}</tr></thead>
+      <tbody>
+        <tr class="rcmp-section-hd"><td colspan="${cols.length+1}">📦 原材料（g）</td></tr>
+        ${ingRows || `<tr><td colspan="${cols.length+1}" class="rcmp-na" style="padding:12px">原材料が入力されていません</td></tr>`}
+        <tr class="rcmp-section-hd"><td colspan="${cols.length+1}">💰 原価</td></tr>
+        ${costRows}
+        <tr class="rcmp-section-hd"><td colspan="${cols.length+1}">🔬 栄養成分（100g当たり）</td></tr>
+        ${nutrRows}
+        <tr class="rcmp-section-hd"><td colspan="${cols.length+1}">⚠️ アレルゲン</td></tr>
+        <tr><td class="rcmp-row-lbl">検出アレルゲン</td>${allergenCells}</tr>
+        <tr class="rcmp-section-hd"><td colspan="${cols.length+1}">📊 試作評価（平均スコア）</td></tr>
+        ${batchCountRow}
+        ${scoreRows}
+      </tbody>
+    </table>
+  </div>`;
 }
 
 function karteTabHtml(p, d) {

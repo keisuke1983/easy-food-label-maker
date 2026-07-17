@@ -307,6 +307,25 @@ function setupDelegation() {
           return;
         }
 
+        case "toggle-compare-mode": {
+          recipeCompareMode = !recipeCompareMode;
+          if (recipeCompareMode) {
+            // 比較モード開始時：採用版と最新版を初期選択
+            const p = products.find(x => x.id === productDetailId);
+            const vers = p?.recipeVersions || [];
+            if (vers.length >= 2) {
+              const adoptedId = p.adoptedRecipeVersionId || vers[0]?.id;
+              const otherId   = vers.filter(v => v.id !== adoptedId).slice(-1)[0]?.id;
+              recipeCompareIds = [adoptedId, otherId].filter(Boolean);
+            } else {
+              recipeCompareIds = vers.map(v => v.id);
+            }
+          } else {
+            recipeCompareIds = [];
+          }
+          render(); return;
+        }
+
         case "open-trial-batch": {
           newTrialBatchOpen = true; render(); return;
         }
@@ -817,6 +836,20 @@ function setupDelegation() {
     // [data-set-active-version] — レシピ版タブ選択
     const savEl = t.closest("[data-set-active-version]");
     if (savEl) { activeRecipeVersionId=savEl.dataset.setActiveVersion; render(); return; }
+
+    // [data-compare-check] — 比較バージョン選択チェックボックス
+    const cmpEl = t.closest("[data-compare-check]");
+    if (cmpEl) {
+      const vid = cmpEl.dataset.compareCheck;
+      const chk = cmpEl.querySelector("input[type=checkbox]");
+      const isChecked = chk ? !chk.checked : !recipeCompareIds.includes(vid);
+      if (isChecked) {
+        if (recipeCompareIds.length < 4 && !recipeCompareIds.includes(vid)) recipeCompareIds = [...recipeCompareIds, vid];
+      } else {
+        recipeCompareIds = recipeCompareIds.filter(id => id !== vid);
+      }
+      render(); return;
+    }
 
     // [data-clear-search]
     if (t.closest("[data-clear-search]")) { masterSearch=""; render(); setTimeout(()=>document.querySelector("[data-master-search]")?.focus(),30); return; }

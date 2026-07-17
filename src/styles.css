@@ -3886,3 +3886,54 @@ div.db2-kpi-card { cursor: default; }
 .devd-note       { font-size: 11px; color: var(--text-sub, #64748b); margin-top: 8px; }
 .devd-empty      { font-size: 13px; color: var(--text-sub, #64748b); padding: 24px; text-align: center; }
 .devd-empty-sm   { font-size: 12px; color: var(--text-sub, #64748b); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   レシピバージョン並列比較 (.rcmp-*)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── ツールバー ── */
+.rcmp-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.rcmp-hint-txt { font-size: 13px; color: var(--text-sub, #64748b); }
+.action--compare      { background: #eff6ff; color: #2563eb; border: 1px solid #93c5fd; font-weight: 600; }
+.action--compare:hover { background: #dbeafe; }
+.action--compare-exit { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+/* ── 比較チェック付きバージョンタブ ── */
+.devd-ver-tab--check { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+.devd-ver-tab--check.active { border-color: #2563eb; background: #eff6ff; }
+.rcmp-check-box { width: 16px; height: 16px; border-radius: 4px; border: 2px solid #cbd5e1; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; flex-shrink: 0; }
+.devd-ver-tab--check.active .rcmp-check-box { background: #2563eb; border-color: #2563eb; color: #fff; }
+
+/* ── 比較促進プロンプト ── */
+.rcmp-select-prompt { padding: 32px; text-align: center; background: #f8fafc; border-radius: 8px; color: var(--text-sub, #64748b); font-size: 14px; }
+.rcmp-hint { padding: 16px; text-align: center; color: var(--text-sub, #64748b); font-size: 13px; }
+
+/* ── 凡例 ── */
+.rcmp-legend { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.rcmp-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-sub, #64748b); }
+.rcmp-legend-item::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.rcmp-legend-diff::before    { background: #fef9c3; border: 1px solid #fde68a; }
+.rcmp-legend-missing::before { background: #fee2e2; border: 1px solid #fca5a5; }
+
+/* ── 比較テーブル ── */
+.rcmp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rcmp-table th, .rcmp-table td { padding: 8px 10px; border: 1px solid var(--border, #e2e8f0); vertical-align: top; }
+.rcmp-th { text-align: center; min-width: 140px; background: #f8fafc; }
+.rcmp-th.rcmp-adopted-col { background: #f0fdf4; }
+.rcmp-th-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.rcmp-th-status { margin-bottom: 6px; }
+.rcmp-adopt-btn { width: 100%; font-size: 11px; padding: 4px 8px; margin-top: 4px; }
+.rcmp-row-lbl-th { width: 110px; background: #f8fafc; }
+.rcmp-row-lbl { font-size: 12px; color: var(--text-sub, #64748b); font-weight: 500; white-space: nowrap; background: #f8fafc; }
+.rcmp-cell { text-align: center; font-variant-numeric: tabular-nums; }
+.rcmp-diff    { background: #fef9c3 !important; }
+.rcmp-ing-missing { background: #fee2e2 !important; }
+.rcmp-ing-diff    { background: #fef9c3 !important; }
+.rcmp-na { color: #cbd5e1; font-size: 12px; }
+.rcmp-unit { font-size: 10px; color: var(--text-sub, #64748b); margin-left: 1px; }
+.rcmp-stars { font-size: 14px; color: #f59e0b; letter-spacing: 1px; }
+.rcmp-al-cell { text-align: left; }
+.rcmp-al-chip { display: inline-block; padding: 1px 6px; border-radius: 12px; background: #fef9c3; color: #854d0e; font-size: 11px; margin: 1px; }
+
+/* ── セクション見出し行 ── */
+.rcmp-section-hd td { background: #f1f5f9; font-size: 12px; font-weight: 700; color: var(--text, #1e293b); padding: 6px 10px; letter-spacing: .3px; }

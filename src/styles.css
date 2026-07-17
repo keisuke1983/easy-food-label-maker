@@ -4124,3 +4124,19 @@ div.db2-kpi-card { cursor: default; }
 .rr-lbl { flex: 1; }
 .rr-detail { font-size: 11px; color: inherit; opacity: .8; white-space: nowrap; }
 
+/* ── 商品画像 UX (⑧) ── */
+.product-thumb-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; width: 72px; height: 72px; border-radius: 8px; border: 1.5px dashed #94a3b8;
+  background: #f8fafc; color: #64748b; cursor: pointer; font-size: 20px;
+  transition: border-color .15s, background .15s;
+}
+.product-thumb-add:hover { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+.thumb-add-label { font-size: 9px; font-weight: 600; line-height: 1; }
+.no-img-banner {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 10px; margin-bottom: 12px;
+  font-size: 13px; color: #92400e; line-height: 1.5;
+}
+.no-img-banner-ico { font-size: 22px; flex-shrink: 0; }
+

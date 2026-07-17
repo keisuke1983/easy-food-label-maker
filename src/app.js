@@ -211,6 +211,7 @@ const DETAIL_JUMP_MAP = {
   "製造者名":  { tab: "basic",       field: "[data-master-field='manufacturerName']" },
   "製造者住所": { tab: "basic",      field: "[data-master-field='manufacturerAddress']" },
   "原材料名":  { tab: "ingredients", field: "[data-master-ing-name='0']" },
+  "商品画像":  { tab: "basic",       field: "#image-drop-zone" },
 };
 
 // チェックタブ "修正する →" ジャンプマップ（checkFoodLabel の field 名 → tab/selector）

@@ -77,7 +77,7 @@ function productsListHtml() {
     const comp = calcCompletion(p, d);
     const thumb = p.imageDataUrl
       ? `<img class="product-thumb" src="${p.imageDataUrl}" alt="商品画像" onerror="this.onerror=null;this.outerHTML='<div class=\\'product-thumb-placeholder product-thumb-error\\'>⚠️</div>'">`
-      : `<div class="product-thumb-placeholder">📦</div>`;
+      : `<button class="product-thumb-placeholder product-thumb-add" data-open-and-jump="${escapeHtml(p.id)}:商品画像" title="クリックして画像を追加" onclick="event.stopPropagation()">📷<span class="thumb-add-label">画像を追加</span></button>`;
     const missingHtml = comp.missing.length
       ? `<div class="comp-missing">${comp.missing.map(m=>`<button class="comp-missing-btn" data-open-and-jump="${escapeHtml(p.id)}:${escapeHtml(m)}" title="${escapeHtml(m)}の入力欄へ移動">${escapeHtml(m)}</button>`).join("")}</div>`
       : "";
@@ -227,6 +227,17 @@ function productsListHtml() {
     ? `<span class="result-count">${list.length}件</span>`
     : "";
 
+  const noImgBanner = masterFilter === "noImage" && list.length > 0
+    ? `<div class="no-img-banner">
+        <span class="no-img-banner-ico">📷</span>
+        <div>
+          <strong>${list.length}件</strong>の商品に画像が未登録です。
+          カードの「📷 画像を追加」ボタンをクリックすると、その商品の画像アップロード画面へすぐ移動できます。
+        </div>
+        <button class="action" style="flex-shrink:0;font-size:12px" data-master-filter="all">すべて表示</button>
+      </div>`
+    : "";
+
   const SORT_LABELS = { updatedAt:"更新日（新しい順）", name:"商品名（あいうえお順）", completion:"完成度（低い順）", expiryDate:"賞味期限（近い順）", releasedAt:"発売日（新しい順）" };
   const COMPLETION_LABELS = { lt100:"完成度 100%未満", lt60:"完成度 60%未満", lt30:"完成度 30%未満" };
 
@@ -322,6 +333,7 @@ function productsListHtml() {
     ${presetChips}
     <div class="kbd-hints"><kbd>D</kbd> ダッシュ &nbsp;·&nbsp; <kbd>P</kbd> 商品一覧 &nbsp;·&nbsp; <kbd>N</kbd> 新規登録 &nbsp;·&nbsp; <kbd>/</kbd> 検索 &nbsp;·&nbsp; <kbd>?</kbd> ヘルプ</div>
     ${bulkBarHtml}
+    ${noImgBanner}
     <div class="master-list${masterView==="table"?" master-list--table":""}">${currentContent || emptyHtml}</div>
   `);
 }

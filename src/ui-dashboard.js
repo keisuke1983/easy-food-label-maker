@@ -551,13 +551,118 @@ function dashboardHtml() {
   </div>`;
 
   // ─────────────────────────────────────────────────
+  // ⑤ PLM: 開発中プロジェクト
+  // ─────────────────────────────────────────────────
+  const devProducts = products.filter(p => p.phase === "development")
+    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")).slice(0, 5);
+  const DEVPHASE_LABELS = { ideation:"💡 企画", development:"🔨 開発", testing:"🧪 試作", review:"👥 審査", approved:"✅ 承認済" };
+  const devProjectsHtml = devProducts.length > 0 ? `
+  <div class="db2-section-wrap">
+    <div class="db2-section-hd">🔬 開発中プロジェクト <span class="db2-section-hd-sub">${devProducts.length}件</span></div>
+    <div class="db2-devproj-list">
+      ${devProducts.map(p => {
+        const dp = p.devProject || {};
+        const devPhaseLabel = DEVPHASE_LABELS[dp.devPhase] || "🔨 開発";
+        const trials = (p.trialBatches || []).length;
+        const versions = (p.recipeVersions || []).length;
+        const targetDate = dp.targetReleaseDate || "";
+        const daysLeft = targetDate ? Math.ceil((new Date(targetDate) - now) / 86400000) : null;
+        const daysStr = daysLeft !== null
+          ? (daysLeft < 0 ? `<span class="db2-devproj-late">⚠ ${Math.abs(daysLeft)}日超過</span>`
+             : daysLeft <= 30 ? `<span class="db2-devproj-soon">${daysLeft}日後</span>`
+             : `<span class="db2-devproj-date">${targetDate}</span>`)
+          : "";
+        const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || "draft")) || PRODUCT_STATUSES[0];
+        return `<button class="db2-devproj-card" data-nav-product-detail="${escapeHtml(p.id)}">
+          <div class="db2-devproj-top">
+            <span class="db2-devproj-name">${escapeHtml(p.internalName || p.name || "（名称未入力）")}</span>
+            <span class="pipeline-chip" style="color:${ps.color};background:${ps.bg}">${ps.label}</span>
+          </div>
+          <div class="db2-devproj-meta">
+            <span class="db2-devproj-phase">${devPhaseLabel}</span>
+            ${trials > 0 ? `<span class="db2-devproj-stat">🧪 試作 ${trials}件</span>` : ""}
+            ${versions > 0 ? `<span class="db2-devproj-stat">📋 レシピ ${versions}版</span>` : ""}
+            ${daysStr}
+          </div>
+          ${dp.projectName ? `<div class="db2-devproj-pname">${escapeHtml(dp.projectName)}</div>` : ""}
+        </button>`;
+      }).join("")}
+    </div>
+    <div class="db2-section-footer">
+      <button class="db2-see-all-btn" data-nav="dev-products">すべての開発商品を見る →</button>
+    </div>
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
+  // ⑥ PLM: 全商品横断アクティビティフィード
+  // ─────────────────────────────────────────────────
+  const activityItems = [];
+  products.forEach(p => {
+    const tl = loadTimeline(p.id);
+    tl.slice(0, 3).forEach(ev => {
+      activityItems.push({ p, ev });
+    });
+  });
+  activityItems.sort((a, b) => (b.ev.savedAt || "").localeCompare(a.ev.savedAt || ""));
+  const topActivity = activityItems.slice(0, 10);
+  const activityFeedHtml = topActivity.length > 0 ? `
+  <div class="db2-section-wrap">
+    <div class="db2-section-hd">📡 最近の変更 <span class="db2-section-hd-sub">全商品の更新履歴</span></div>
+    <div class="db2-activity-feed">
+      ${topActivity.map(({ p, ev }) => {
+        const dotColor = TIMELINE_EVENT_COLORS[ev.eventType] || "#94a3b8";
+        const pName = p.internalName || p.name || "（名称未入力）";
+        const changes = ev.changes && Object.keys(ev.changes).length > 0;
+        const firstChange = changes ? Object.entries(ev.changes)[0] : null;
+        const changeStr = firstChange
+          ? ` <span class="db2-act-from">${escapeHtml(String(firstChange[1].from || "—"))}</span><span class="db2-act-arrow">→</span><span class="db2-act-to">${escapeHtml(String(firstChange[1].to || "—"))}</span>`
+          : "";
+        return `<button class="db2-act-row" data-nav-product-detail="${escapeHtml(p.id)}">
+          <span class="db2-act-dot" style="background:${dotColor}">${ev.icon || "📌"}</span>
+          <div class="db2-act-body">
+            <span class="db2-act-prod">${escapeHtml(pName)}</span>
+            <span class="db2-act-sep">›</span>
+            <span class="db2-act-label">${escapeHtml(ev.label)}</span>
+            ${changeStr}
+          </div>
+          <span class="db2-act-date">${escapeHtml((ev.savedAt || "").substring(0, 10))}</span>
+        </button>`;
+      }).join("")}
+    </div>
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
+  // ⑦ PLM: 最近発売した商品
+  // ─────────────────────────────────────────────────
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().split("T")[0];
+  const recentReleased = rel
+    .filter(p => p.releasedAt && p.releasedAt >= ninetyDaysAgo && p.productStatus !== "discontinued")
+    .sort((a, b) => (b.releasedAt || "").localeCompare(a.releasedAt || "")).slice(0, 5);
+  const recentReleasedHtml = recentReleased.length > 0 ? `
+  <div class="db2-section-wrap">
+    <div class="db2-section-hd">🚀 最近発売した商品 <span class="db2-section-hd-sub">直近90日</span></div>
+    <div class="db2-released-list">
+      ${recentReleased.map(p => `
+        <button class="db2-released-row" data-nav-product-detail="${escapeHtml(p.id)}">
+          <span class="db2-released-date">${escapeHtml(p.releasedAt || "")}</span>
+          <span class="db2-released-name">${escapeHtml(p.internalName || p.name || "（名称未入力）")}</span>
+          ${p.category ? `<span class="tag-chip">${escapeHtml(p.category)}</span>` : ""}
+          <span class="db2-released-arrow">›</span>
+        </button>`).join("")}
+    </div>
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
   // 組み立て
   // ─────────────────────────────────────────────────
   return saasLayout("ダッシュボード", `
     ${alertBits}
     ${headerHtml}
     ${urgentHtml}
+    ${devProjectsHtml}
     ${recentHtml}
+    ${activityFeedHtml}
+    ${recentReleasedHtml}
     <div class="db2-top-grid">
       <div class="db2-top-left">${aiTopHtml}</div>
       <div class="db2-top-right">${quickHtml}</div>

@@ -4014,3 +4014,65 @@ div.db2-kpi-card { cursor: default; }
   .tl2-change-row { background: var(--bg-sub, #1e293b); }
 }
 
+
+/* ── ダッシュボード PLM追加セクション ───────────────────────────────── */
+/* 開発中プロジェクト */
+.db2-devproj-list { display: flex; flex-direction: column; gap: 6px; }
+.db2-devproj-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 14px; border-radius: 10px;
+  border: 1.5px solid var(--border, #e2e8f0);
+  background: var(--bg, #fff); cursor: pointer; text-align: left; width: 100%;
+  transition: border-color .15s, box-shadow .15s;
+}
+.db2-devproj-card:hover { border-color: #2563eb; box-shadow: 0 1px 6px rgba(37,99,235,.12); }
+.db2-devproj-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.db2-devproj-name { font-size: 13px; font-weight: 700; color: var(--text, #1e293b); flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db2-devproj-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.db2-devproj-phase { font-size: 11px; font-weight: 600; color: var(--text-sub, #64748b); }
+.db2-devproj-stat { font-size: 11px; color: var(--text-sub, #64748b); }
+.db2-devproj-date { font-size: 11px; color: var(--text-sub, #64748b); }
+.db2-devproj-soon { font-size: 11px; font-weight: 700; color: #d97706; }
+.db2-devproj-late { font-size: 11px; font-weight: 700; color: #dc2626; }
+.db2-devproj-pname { font-size: 11px; color: var(--text-sub, #64748b); font-style: italic; text-align: left; }
+
+/* アクティビティフィード */
+.db2-activity-feed { display: flex; flex-direction: column; gap: 2px; }
+.db2-act-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  border: none; background: transparent; width: 100%; text-align: left;
+  transition: background .12s;
+}
+.db2-act-row:hover { background: var(--bg-sub, #f8fafc); }
+.db2-act-dot {
+  width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 11px; flex-shrink: 0; color: #fff;
+}
+.db2-act-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12px; }
+.db2-act-prod { font-weight: 700; color: var(--text, #1e293b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.db2-act-sep { color: var(--text-sub, #94a3b8); font-size: 10px; }
+.db2-act-label { color: var(--text-sub, #475569); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.db2-act-from { background: #fee2e2; color: #b91c1c; border-radius: 3px; padding: 0 4px; font-size: 11px; white-space: nowrap; }
+.db2-act-arrow { color: #94a3b8; font-size: 10px; }
+.db2-act-to { background: #dcfce7; color: #15803d; border-radius: 3px; padding: 0 4px; font-size: 11px; white-space: nowrap; }
+.db2-act-date { font-size: 11px; color: var(--text-sub, #94a3b8); flex-shrink: 0; white-space: nowrap; }
+
+/* 最近発売した商品 */
+.db2-released-list { display: flex; flex-direction: column; gap: 2px; }
+.db2-released-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  border: none; background: transparent; width: 100%; text-align: left;
+  transition: background .12s;
+}
+.db2-released-row:hover { background: var(--bg-sub, #f8fafc); }
+.db2-released-date { font-size: 11px; color: var(--text-sub, #64748b); flex-shrink: 0; font-variant-numeric: tabular-nums; width: 72px; }
+.db2-released-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--text, #1e293b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db2-released-arrow { color: var(--text-sub, #94a3b8); font-size: 14px; flex-shrink: 0; }
+
+@media (prefers-color-scheme: dark) {
+  .db2-act-from { background: #450a0a; color: #fca5a5; }
+  .db2-act-to { background: #052e16; color: #86efac; }
+}
+

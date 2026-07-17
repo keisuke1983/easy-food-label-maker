@@ -1227,6 +1227,14 @@ function setupDelegation() {
     }
   });
 
+  // ── focusin: 重要フィールドの変更前値をキャプチャ ──
+  document.addEventListener("focusin", e => {
+    const t = e.target;
+    if (t.matches("[data-master-field]") && TRACKED_MASTER_FIELDS && TRACKED_MASTER_FIELDS[t.dataset.masterField]) {
+      t.dataset._tlOldVal = t.value;
+    }
+  });
+
   // ── change ──
   document.addEventListener("change", e => {
     const t = e.target;
@@ -1250,7 +1258,29 @@ function setupDelegation() {
     if (t.id==="spec-show-cost")               { specShowCost=t.checked; render(); return; }
     if (t.id==="spec-show-sig")                { specShowSig=t.checked; render(); return; }
     if (t.matches("[data-cost-name],[data-cost-amount],[data-cost-unit],[data-cost-price],[data-cost-punit],[data-cost-loss]")) { saveCostItems(); render(); return; }
-    if (t.matches("[data-master-field],[data-sales-ch]")) { scheduleAutoSaveMaster(); return; }
+    if (t.matches("[data-master-field],[data-sales-ch]")) {
+      // 重要フィールドの変更をタイムラインに自動記録
+      const f = t.dataset.masterField;
+      if (f && TRACKED_MASTER_FIELDS && TRACKED_MASTER_FIELDS[f]) {
+        const tlOldVal = t.dataset._tlOldVal;
+        const tlNewVal = t.value;
+        if (tlOldVal !== undefined && tlOldVal !== tlNewVal && tlNewVal.trim()) {
+          const tp = products.find(x => x.id === productDetailId);
+          if (tp) {
+            saveTimelineEvent(
+              tp.id,
+              "field_changed",
+              `✏️ ${TRACKED_MASTER_FIELDS[f]}を変更`,
+              "",
+              [f],
+              { [f]: { from: tlOldVal, to: tlNewVal } }
+            );
+          }
+        }
+        delete t.dataset._tlOldVal;
+      }
+      scheduleAutoSaveMaster(); return;
+    }
     if (t.matches("[data-dev-proj-field]")) {
       const p = products.find(x => x.id === productDetailId); if (!p) return;
       if (!p.devProject) p.devProject = {};

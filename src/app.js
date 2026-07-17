@@ -275,8 +275,31 @@ const TIMELINE_EVENT_ICONS = {
   status_changed:      "🔄", approval_requested: "👥", approved:           "✅",
   rejected:            "↩",  approval_cancelled: "🚫",
   label_edited:        "🏷", ai_consulted:        "🤖", pdf_exported:       "🖨", duplicated:         "📋",
+  field_changed:       "✏️",
 };
-function saveTimelineEvent(pid, eventType, label, comment = "", changedFields = []) {
+// 自動タイムライン記録するフィールド名 → 表示ラベル
+const TRACKED_MASTER_FIELDS = {
+  name:             "商品名",
+  price:            "販売価格",
+  category:         "カテゴリ",
+  bestBefore:       "賞味期限",
+  volume:           "内容量",
+  storage:          "保存方法",
+  manufacturerName: "製造者名",
+  originCountry:    "原料原産地",
+  internalName:     "管理名",
+};
+// イベント種別 → ドット色
+const TIMELINE_EVENT_COLORS = {
+  registered:       "#16a34a", duplicated:        "#16a34a",
+  label_edited:     "#2563eb", field_changed:     "#2563eb", spec_updated: "#2563eb",
+  approved:         "#059669", released:          "#059669",
+  rejected:         "#dc2626", approval_cancelled:"#dc2626", discontinued: "#6b7280",
+  approval_requested:"#d97706",
+  ai_consulted:     "#7c3aed", pdf_exported:      "#64748b",
+  status_changed:   "#0891b2",
+};
+function saveTimelineEvent(pid, eventType, label, comment = "", changedFields = [], changes = {}) {
   try {
     const key = `food-label-timeline-${pid}`;
     const events = JSON.parse(safeGet(key) || "[]");
@@ -288,8 +311,9 @@ function saveTimelineEvent(pid, eventType, label, comment = "", changedFields = 
       savedBy: currentUserName || "—",
       comment,
       changedFields,
+      changes,
     });
-    safeSet(key, JSON.stringify(events.slice(0, 100)));
+    safeSet(key, JSON.stringify(events.slice(0, 200)));
   } catch {}
 }
 function loadTimeline(pid) {
@@ -3578,18 +3602,21 @@ function productDetailHtml() {
     // タイムラインイベントと変更履歴スナップショットをマージして時系列表示
     const tlItems = tl.map(ev => ({
       type: "event",
+      eventType: ev.eventType || "label_edited",
       icon: ev.icon || "📌",
       label: ev.label,
-      savedAt: ev.savedAt,
+      savedAt: ev.savedAt || "",
       savedBy: ev.savedBy,
       comment: ev.comment,
       changedFields: ev.changedFields || [],
+      changes: ev.changes || {},
     }));
     const snapItems = hist.map((h, i) => ({
       type: "snap",
+      eventType: "saved",
       icon: "💾",
-      label: "保存",
-      savedAt: h.savedAt,
+      label: "保存スナップショット",
+      savedAt: h.savedAt || "",
       savedBy: h.savedBy,
       diff: calcHistoryDiff(h.snapshot, p),
       restoreIdx: i,
@@ -3600,38 +3627,89 @@ function productDetailHtml() {
     );
 
     if (!allItems.length) {
-      tabContent = `<div class="detail-section"><p class="notice">変更履歴がありません。「保存する」のたびに自動記録されます。</p></div>`;
+      tabContent = `<div class="detail-section"><p class="notice">変更履歴がありません。フィールドを編集・保存すると自動記録されます。</p></div>`;
     } else {
-      const tlRows = allItems.map(item => {
+      // 月でグループ化
+      const groups = {};
+      allItems.forEach(item => {
+        const dt = item.savedAt ? new Date(item.savedAt.replace(/\//g, "-")) : null;
+        const key = dt && !isNaN(dt) ? `${dt.getFullYear()}年${dt.getMonth()+1}月` : "日時不明";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(item);
+      });
+
+      const renderChanges = (changes) => {
+        const entries = Object.entries(changes || {});
+        if (!entries.length) return "";
+        return `<div class="tl2-changes">${entries.map(([field, ch]) => {
+          const lbl = TRACKED_MASTER_FIELDS[field] || field;
+          const from = ch.from != null ? escapeHtml(String(ch.from)) : "—";
+          const to   = ch.to   != null ? escapeHtml(String(ch.to))   : "—";
+          return `<span class="tl2-change-row"><span class="tl2-change-lbl">${escapeHtml(lbl)}</span><span class="tl2-change-from">${from}</span><span class="tl2-change-arrow">→</span><span class="tl2-change-to">${to}</span></span>`;
+        }).join("")}</div>`;
+      };
+
+      const renderItem = (item) => {
+        const dotColor = TIMELINE_EVENT_COLORS[item.eventType] || "#94a3b8";
+        const metaRight = [
+          item.savedAt ? `<span class="tl2-date">${escapeHtml(item.savedAt)}</span>` : "",
+          item.savedBy && item.savedBy !== "—" ? `<span class="tl2-user">👤 ${escapeHtml(item.savedBy)}</span>` : "",
+        ].filter(Boolean).join("");
+
         if (item.type === "event") {
-          return `<div class="tl-row">
-            <div class="tl-dot-col"><span class="tl-icon-dot">${item.icon}</span></div>
-            <div class="tl-content">
-              <div class="tl-meta"><span class="tl-label-main">${escapeHtml(item.label)}</span>
-                <span class="tl-date">${escapeHtml(item.savedAt)}</span>
-                ${item.savedBy && item.savedBy !== "—" ? `<span class="tl-user">👤 ${escapeHtml(item.savedBy)}</span>` : ""}
+          const changesHtml = renderChanges(item.changes);
+          const fieldsHtml = !changesHtml && item.changedFields.length
+            ? `<div class="tl-fields">${item.changedFields.map(f=>`<span class="tl-field-chip">${escapeHtml(f)}</span>`).join("")}</div>` : "";
+          return `<div class="tl2-row">
+            <div class="tl2-dot-col">
+              <span class="tl2-dot" style="background:${dotColor};border-color:${dotColor}">${item.icon}</span>
+              <span class="tl2-line"></span>
+            </div>
+            <div class="tl2-body">
+              <div class="tl2-meta">
+                <span class="tl2-label">${escapeHtml(item.label)}</span>
+                <span class="tl2-meta-right">${metaRight}</span>
               </div>
-              ${item.comment ? `<div class="tl-comment">${escapeHtml(item.comment)}</div>` : ""}
-              ${item.changedFields.length ? `<div class="tl-fields">変更: ${item.changedFields.map(f=>`<span class="tl-field-chip">${escapeHtml(f)}</span>`).join("")}</div>` : ""}
+              ${item.comment ? `<div class="tl2-comment">${escapeHtml(item.comment)}</div>` : ""}
+              ${changesHtml}${fieldsHtml}
             </div>
           </div>`;
         } else {
-          return `<div class="tl-row">
-            <div class="tl-dot-col"><span class="tl-icon-dot">💾</span></div>
-            <div class="tl-content">
-              <div class="tl-meta"><span class="tl-label-main">保存</span>
-                <span class="tl-date">${escapeHtml(item.savedAt)}</span>
-                ${item.savedBy && item.savedBy !== "—" ? `<span class="tl-user">👤 ${escapeHtml(item.savedBy)}</span>` : ""}
-                <button class="action" style="font-size:11px;padding:2px 8px;margin-left:8px" data-restore-history="${item.restoreIdx}" data-history-pid="${escapeHtml(item.pid)}">↩ 戻す</button>
+          const diffHtml = item.diff && item.diff.length
+            ? `<div class="tl-fields" style="margin-top:4px">${item.diff.map(f=>`<span class="tl-field-chip">${escapeHtml(f)}</span>`).join("")}</div>`
+            : `<span class="tl2-comment" style="opacity:.5">変更なし</span>`;
+          return `<div class="tl2-row">
+            <div class="tl2-dot-col">
+              <span class="tl2-dot" style="background:#64748b;border-color:#64748b">💾</span>
+              <span class="tl2-line"></span>
+            </div>
+            <div class="tl2-body">
+              <div class="tl2-meta">
+                <span class="tl2-label">保存スナップショット</span>
+                <span class="tl2-meta-right">${metaRight}
+                  <button class="action" style="font-size:11px;padding:2px 8px" data-restore-history="${item.restoreIdx}" data-history-pid="${escapeHtml(item.pid)}">↩ 戻す</button>
+                </span>
               </div>
-              ${item.diff.length ? `<div class="tl-fields">変更: ${item.diff.map(f=>`<span class="tl-field-chip">${escapeHtml(f)}</span>`).join("")}</div>` : `<div class="tl-comment muted">変更なし</div>`}
+              ${diffHtml}
             </div>
           </div>`;
         }
-      }).join("");
+      };
+
+      const groupsHtml = Object.entries(groups).map(([month, items]) => `
+        <div class="tl2-month-group">
+          <div class="tl2-month-hd">${escapeHtml(month)}<span class="tl2-month-count">${items.length}件</span></div>
+          <div class="tl2-list">${items.map(renderItem).join("")}</div>
+        </div>`).join("");
+
+      const totalEvents = tlItems.length;
+      const totalSnaps  = snapItems.length;
       tabContent = `<div class="detail-section">
-        <h3 class="detail-section-title">📜 タイムライン・変更履歴</h3>
-        <div class="tl-list">${tlRows}</div>
+        <div class="tl2-header">
+          <h3 class="detail-section-title" style="margin-bottom:0">📜 商品タイムライン</h3>
+          <span class="tl2-summary">イベント ${totalEvents}件 / スナップショット ${totalSnaps}件</span>
+        </div>
+        <div class="tl2-groups">${groupsHtml}</div>
       </div>`;
     }
   } else if (false && tab === "check") { // 統合済み → _tab === "ai" で処理

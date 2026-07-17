@@ -8,8 +8,10 @@
 function productsListHtml() {
   const todayIso = new Date().toISOString().split("T")[0];
   const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const releasedStatuses = PRODUCT_STATUSES.filter(s => ["on_sale","discontinued"].includes(s.id));
 
-  let list = [...products];
+  const relAll = products.filter(p => (p.phase || "released") === "released");
+  let list = [...relAll];
   if (masterSearch) list = list.filter(p => (p.internalName||"").includes(masterSearch)||(p.name||"").includes(masterSearch)||(p.code||"").includes(masterSearch)||(p.category||"").includes(masterSearch));
   if (masterFilter==="starred")       list = list.filter(p=>p.starred);
   if (masterFilter==="active")        list = list.filter(p=>p.publishStatus==="active");
@@ -45,6 +47,13 @@ function productsListHtml() {
       if (!b.expiryDate) return -1;
       return a.expiryDate.localeCompare(b.expiryDate);
     });
+  } else if (masterSort==="releasedAt") {
+    list.sort((a,b)=>{
+      if (!a.releasedAt && !b.releasedAt) return 0;
+      if (!a.releasedAt) return 1;
+      if (!b.releasedAt) return -1;
+      return new Date(b.releasedAt) - new Date(a.releasedAt);
+    });
   } else {
     list.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""));
   }
@@ -78,15 +87,16 @@ function productsListHtml() {
       : p.expiryDate && p.expiryDate <= soonIso
       ? `<span class="expiry-chip soon">⏰ ${Math.max(0,Math.ceil((new Date(p.expiryDate)-Date.now())/864e5))}日後</span>`
       : "";
-    const _psCard = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || "draft")) || PRODUCT_STATUSES[0];
-    return `<div class="master-card" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集" style="border-left: 4px solid ${_psCard.color};">
+    const _psCard = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || "on_sale")) || PRODUCT_STATUSES.find(s => s.id === "on_sale") || PRODUCT_STATUSES[0];
+    const isDiscontinued = p.productStatus === "discontinued";
+    return `<div class="master-card${isDiscontinued?" master-card--discontinued":""}" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0" title="クリックで詳細編集" style="border-left: 4px solid ${_psCard.color};">
       <div class="master-card-inner">
         ${thumb}
         <div class="master-card-body">
           <div class="master-card-title-row">
             <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
             ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
-            ${(() => { const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0]; return `<select class="pipeline-chip-select" data-quick-status-select="${escapeHtml(p.id)}" style="color:${ps.color};background:${ps.bg};border-color:${ps.color}" onclick="event.stopPropagation()" title="クリックしてステータスを変更">${PRODUCT_STATUSES.map(s=>`<option value="${s.id}"${(p.productStatus||"draft")===s.id?" selected":""}>${s.label}</option>`).join("")}</select>`; })()}
+            ${(() => { const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"on_sale"))||PRODUCT_STATUSES.find(s=>s.id==="on_sale")||PRODUCT_STATUSES[0]; return `<select class="pipeline-chip-select" data-quick-status-select="${escapeHtml(p.id)}" style="color:${ps.color};background:${ps.bg};border-color:${ps.color}" onclick="event.stopPropagation()" title="クリックしてステータスを変更">${releasedStatuses.map(s=>`<option value="${s.id}"${(p.productStatus||"on_sale")===s.id?" selected":""}>${s.label}</option>`).join("")}</select>`; })()}
             ${statusBadge(p)}
             ${approvalBadge(p)}
             <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}" onclick="event.stopPropagation()">${p.starred?"★":"☆"}</button>
@@ -95,6 +105,9 @@ function productsListHtml() {
             ${p.code?`<span class="meta-item">品番：${escapeHtml(p.code)}</span>`:""}
             ${p.category?`<span class="meta-item">${escapeHtml(p.category)}</span>`:""}
             ${p.price?`<span class="meta-item">¥${escapeHtml(p.price)}</span>`:""}
+            ${p.releasedAt?`<span class="meta-item">🚀 ${escapeHtml(p.releasedAt)}</span>`:""}
+            ${(isDiscontinued&&p.discontinuedAt)?`<span class="meta-item">🔴 終売：${escapeHtml(p.discontinuedAt)}</span>`:""}
+            ${(isDiscontinued&&p.discontinuedReason)?`<span class="meta-item meta-discontinued-reason">${escapeHtml(p.discontinuedReason)}</span>`:""}
             <span class="meta-item">更新：${escapeHtml(p.updatedAt||"")}</span>
             ${(p.currentStock!=null&&p.currentStock!=="") ? `<span class="meta-item meta-stock">📦 在庫：${escapeHtml(String(p.currentStock))}${escapeHtml(p.stockUnit||"")}</span>` : ""}
             ${expiryChip}
@@ -131,6 +144,7 @@ function productsListHtml() {
       <th class="mt-col-comp mt-sortable${masterSort==="completion"?" mt-sort-active":""}" data-sort-col="completion">完成度${sortIcon("completion")}</th>
       <th class="mt-col-status">ステータス</th>
       <th class="mt-col-pub">公開状態</th>
+      <th class="mt-col-release mt-sortable${masterSort==="releasedAt"?" mt-sort-active":""}" data-sort-col="releasedAt">発売日${sortIcon("releasedAt")}</th>
       <th class="mt-col-expiry mt-sortable${masterSort==="expiryDate"?" mt-sort-active":""}" data-sort-col="expiryDate">賞味期限${sortIcon("expiryDate")}</th>
       <th class="mt-col-date mt-sortable${masterSort==="updatedAt"?" mt-sort-active":""}" data-sort-col="updatedAt">更新日${sortIcon("updatedAt")}</th>
       <th class="mt-col-cat">カテゴリ</th>
@@ -139,7 +153,7 @@ function productsListHtml() {
     <tbody>${list.map(p => {
       const d = derive(p);
       const comp = calcCompletion(p, d);
-      const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0];
+      const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"on_sale"))||PRODUCT_STATUSES.find(s=>s.id==="on_sale")||PRODUCT_STATUSES[0];
       const pctColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
       const expiryClass = p.expiryDate && p.expiryDate < todayIso ? "mt-expiry-expired"
         : p.expiryDate && p.expiryDate <= soonIso ? "mt-expiry-soon" : "";
@@ -147,12 +161,14 @@ function productsListHtml() {
         ? `<span class="mt-expiry-date ${expiryClass}">${escapeHtml(p.expiryDate)}</span>`
         : `<span class="mt-expiry-none">—</span>`;
       const isSelected = masterSelected.has(p.id);
-      return `<tr class="master-row${isSelected?" master-row--selected":""}" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
+      const isDiscRow = p.productStatus === "discontinued";
+      return `<tr class="master-row${isSelected?" master-row--selected":""}${isDiscRow?" master-row--discontinued":""}" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
         <td class="mt-col-check" onclick="event.stopPropagation()"><input type="checkbox" class="row-check" data-select-product="${escapeHtml(p.id)}" ${isSelected?"checked":""}></td>
         <td class="mt-col-name"><div class="mt-name-wrap">${p.starred?`<span class="mt-star">★</span>`:""}<span class="mt-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>${p.internalName&&p.name?`<small class="mt-display-name">${escapeHtml(p.name)}</small>`:""}</div></td>
         <td class="mt-col-comp"><div class="mt-comp-wrap"><div class="mt-comp-bar"><div class="mt-comp-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div><span class="mt-comp-pct" style="color:${pctColor}">${comp.pct}%</span></div></td>
-        <td class="mt-col-status" onclick="event.stopPropagation()"><select class="pipeline-chip-select" data-quick-status-select="${escapeHtml(p.id)}" style="color:${ps.color};background:${ps.bg};border-color:${ps.color}">${PRODUCT_STATUSES.map(s=>`<option value="${s.id}"${(p.productStatus||"draft")===s.id?" selected":""}>${s.label}</option>`).join("")}</select></td>
+        <td class="mt-col-status" onclick="event.stopPropagation()"><select class="pipeline-chip-select" data-quick-status-select="${escapeHtml(p.id)}" style="color:${ps.color};background:${ps.bg};border-color:${ps.color}">${releasedStatuses.map(s=>`<option value="${s.id}"${(p.productStatus||"on_sale")===s.id?" selected":""}>${s.label}</option>`).join("")}</select></td>
         <td>${statusBadge(p)}</td>
+        <td class="mt-col-release">${escapeHtml(p.releasedAt||"—")}</td>
         <td class="mt-col-expiry" onclick="event.stopPropagation()">${expiryHtml}</td>
         <td class="mt-col-date">${escapeHtml(p.updatedAt||"")}</td>
         <td class="mt-col-cat">${escapeHtml(p.category||"")}</td>
@@ -172,7 +188,7 @@ function productsListHtml() {
       <span class="bulk-count">${masterSelected.size}件選択中</span>
       <select class="bulk-status-select" id="bulk-status-select">
         <option value="">ステータスを選択...</option>
-        ${PRODUCT_STATUSES.map(s=>`<option value="${s.id}">${s.label}に変更</option>`).join("")}
+        ${releasedStatuses.map(s=>`<option value="${s.id}">${s.label}に変更</option>`).join("")}
       </select>
       <button class="action primary bulk-apply-btn" data-action="bulk-apply-status">一括変更</button>
       <button class="action danger bulk-delete-btn" data-action="bulk-delete" style="background:#ef4444;color:#fff;border:none">🗑 削除</button>
@@ -194,14 +210,24 @@ function productsListHtml() {
         ? `<div class="empty-state"><p>「${escapeHtml(masterSearch)}」に一致する商品が見つかりません。</p><button class="action" data-clear-search>検索をクリア</button></div>`
         : isAnyFilterActive
           ? `<div class="empty-state"><p>絞り込み条件に一致する商品がありません。</p><button class="action" data-clear-all-filters>フィルターをリセット</button></div>`
-          : `<div class="empty-state"><p>商品がまだ登録されていません。</p><button class="action primary" data-quick-new="1">＋ 最初の商品を登録する</button></div>`
+          : (() => {
+              const devReady = products.filter(p => p.phase === "development" && p.productStatus === "approved").length;
+              const devTotal = products.filter(p => p.phase === "development").length;
+              if (devReady > 0) {
+                return `<div class="empty-state"><p>発売後の商品がまだありません。</p><p class="empty-state-sub">承認済みの開発中商品が <strong>${devReady}件</strong> あります。🚀 発売することでここに表示されます。</p><button class="action primary" data-nav="dev-products">🔬 開発中商品を確認する</button></div>`;
+              }
+              if (devTotal > 0) {
+                return `<div class="empty-state"><p>発売後の商品がまだありません。</p><p class="empty-state-sub">開発中の商品を「承認済み」にして🚀 発売することでここに表示されます。</p><button class="action primary" data-nav="dev-products">🔬 開発中商品を確認する</button><button class="action" data-reg-mode="manual" style="margin-top:6px">✏️ 新規登録</button></div>`;
+              }
+              return `<div class="empty-state"><p>商品がまだ登録されていません。</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px"><button class="action primary" data-reg-mode="photo">📷 写真から登録</button><button class="action" data-reg-mode="spec">📄 規格書から登録</button><button class="action" data-reg-mode="manual">✏️ 手動で登録</button></div></div>`;
+            })()
     : "";
 
-  const resultCount = list.length !== products.length
+  const resultCount = list.length !== relAll.length
     ? `<span class="result-count">${list.length}件</span>`
     : "";
 
-  const SORT_LABELS = { updatedAt:"更新日（新しい順）", name:"商品名（あいうえお順）", completion:"完成度（低い順）", expiryDate:"賞味期限（近い順）" };
+  const SORT_LABELS = { updatedAt:"更新日（新しい順）", name:"商品名（あいうえお順）", completion:"完成度（低い順）", expiryDate:"賞味期限（近い順）", releasedAt:"発売日（新しい順）" };
   const COMPLETION_LABELS = { lt100:"完成度 100%未満", lt60:"完成度 60%未満", lt30:"完成度 30%未満" };
 
   const isTodoFilter = !!TODO_LABELS[masterFilter];
@@ -229,10 +255,10 @@ function productsListHtml() {
   const pipelineSelect = `
     <select class="sort-select" data-master-pipeline-filter title="ステータスで絞り込み">
       <option value="">ステータス: すべて</option>
-      ${PRODUCT_STATUSES.map(s=>`<option value="${s.id}"${masterPipelineFilter===s.id?" selected":""}>${s.label}</option>`).join("")}
+      ${releasedStatuses.map(s=>`<option value="${s.id}"${masterPipelineFilter===s.id?" selected":""}>${s.label}</option>`).join("")}
     </select>`;
 
-  const allCats = [...new Set(products.map(p=>p.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const allCats = [...new Set(relAll.map(p=>p.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
   const categorySelect = allCats.length ? `
     <select class="sort-select" data-master-category-filter title="カテゴリで絞り込み">
       <option value="">カテゴリ: すべて</option>
@@ -297,5 +323,86 @@ function productsListHtml() {
     <div class="kbd-hints"><kbd>D</kbd> ダッシュ &nbsp;·&nbsp; <kbd>P</kbd> 商品一覧 &nbsp;·&nbsp; <kbd>N</kbd> 新規登録 &nbsp;·&nbsp; <kbd>/</kbd> 検索 &nbsp;·&nbsp; <kbd>?</kbd> ヘルプ</div>
     ${bulkBarHtml}
     <div class="master-list${masterView==="table"?" master-list--table":""}">${currentContent || emptyHtml}</div>
+  `);
+}
+
+// ── 商品開発（発売前）一覧 ────────────────────────────────────────────
+function devProductsHtml() {
+  const allDevList = products.filter(p => p.phase === "development");
+  const STATUS_ORDER = ["draft","in_progress","review","approved"];
+  const devList = masterSearch
+    ? allDevList.filter(p => (p.internalName||"").includes(masterSearch)||(p.name||"").includes(masterSearch)||(p.code||"").includes(masterSearch)||(p.category||"").includes(masterSearch))
+    : allDevList;
+  const sorted = [...devList].sort((a, b) => {
+    const ia = STATUS_ORDER.indexOf(a.productStatus || "draft");
+    const ib = STATUS_ORDER.indexOf(b.productStatus || "draft");
+    if (ia !== ib) return ia - ib;
+    return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+  });
+  const devStatuses = PRODUCT_STATUSES.filter(s => STATUS_ORDER.includes(s.id));
+  const statusCounts = devStatuses.map(s => ({ ...s, count: allDevList.filter(p => (p.productStatus || "draft") === s.id).length }));
+  const statusStyleSelect = (s) => { const f = PRODUCT_STATUSES.find(x => x.id === s); return f ? `color:${f.color};background:${f.bg};border-color:${f.color}` : ""; };
+  const pipelineSummary = allDevList.length ? `<div class="dev-pipeline-summary">
+    ${statusCounts.map(s => `<div class="dps-item${s.count===0?" dps-item--zero":""}">
+      <span class="dps-chip" style="background:${s.bg};color:${s.color};border:1.5px solid ${s.color}40">${s.label}</span>
+      <span class="dps-count">${s.count}件</span>
+    </div>`).join(`<span class="dps-arrow">›</span>`)}
+  </div>` : "";
+
+  const cards = sorted.map(p => {
+    const d = derive(p);
+    const comp = calcCompletion(p, d);
+    const compColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+    const canRelease = p.productStatus === "approved";
+    return `<div class="dev-card" data-nav-product-detail="${escapeHtml(p.id)}">
+      <div class="dev-card-img">${p.imageDataUrl && p.imageDataUrl !== "1"
+        ? `<img src="${escapeHtml(p.imageDataUrl)}" alt="">`
+        : `<span class="dev-card-noimg">📦</span>`}
+      </div>
+      <div class="dev-card-body">
+        <div class="dev-card-name">${escapeHtml(p.name || "（名称未入力）")}</div>
+        <div class="dev-card-meta">
+          <select class="pipeline-chip-select dev-status-select" data-quick-status-select="${escapeHtml(p.id)}" onclick="event.stopPropagation()" style="${statusStyleSelect(p.productStatus || "draft")}">
+            ${devStatuses.map(s => `<option value="${s.id}"${(p.productStatus||"draft")===s.id?" selected":""}>${s.label}</option>`).join("")}
+          </select>
+          ${p.category ? `<span class="dev-cat-chip">${escapeHtml(p.category)}</span>` : ""}
+          ${p.updatedAt ? `<span class="dev-updated-at">更新: ${escapeHtml(p.updatedAt)}</span>` : ""}
+        </div>
+        <div class="dev-comp-bar" title="入力完成度 ${comp.pct}%">
+          <div class="dev-comp-fill" style="width:${comp.pct}%;background:${compColor}"></div>
+          <span class="dev-comp-pct" style="color:${compColor}">${comp.pct}%</span>
+        </div>
+        <div class="dev-card-actions">
+          <button class="action" data-nav-product-detail="${escapeHtml(p.id)}" onclick="event.stopPropagation()">編集</button>
+          ${canRelease ? `<button class="action action--release action--release--ready" data-action="release-product" data-pid="${escapeHtml(p.id)}" onclick="event.stopPropagation()">🚀 発売する</button>` : ""}
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  const totalDevCount = allDevList.length;
+  const emptyHtml = masterSearch
+    ? `<div class="empty-state"><p>「${escapeHtml(masterSearch)}」に一致する開発中商品が見つかりません。</p><button class="action" data-clear-search>検索をクリア</button></div>`
+    : `<div class="empty-state">
+        <div class="empty-ico">🔬</div>
+        <p>開発中の商品がありません</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px">
+          <button class="action primary" data-nav="template-select">✏️ 手動で登録</button>
+        </div>
+      </div>`;
+
+  return saasLayout("商品開発（発売前）", `
+    <div class="dev-header">
+      <h2 class="dev-title">🔬 開発中商品 <span class="dev-count">${masterSearch ? `${sorted.length}/${totalDevCount}` : `${totalDevCount}`}件</span></h2>
+      <div class="dev-header-actions">
+        <div class="dev-search-wrap">
+          <input class="search-box" placeholder="商品名・品番・カテゴリで検索... (/ キー)" data-master-search value="${escapeHtml(masterSearch)}">
+          ${masterSearch ? `<button class="search-clear-btn" data-clear-search title="検索をクリア">✕</button>` : ""}
+        </div>
+        ${totalDevCount ? `<button class="action primary" data-reg-mode="manual">＋ 新規登録</button>` : ""}
+      </div>
+    </div>
+    ${pipelineSummary}
+    ${sorted.length ? `<div class="dev-grid">${cards}</div>` : emptyHtml}
   `);
 }

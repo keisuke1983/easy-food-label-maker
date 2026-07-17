@@ -61,7 +61,7 @@ let aiLabelCheckResult = null;
 let aiLabelCheckLoading = false;
 let masterAutoSaveTimer = null;
 let masterAutoSaveStatus = ""; // "" | "editing" | "saved"
-let masterSort = "updatedAt"; // "updatedAt" | "name" | "completion"
+let masterSort = safeGet("fmcc-master-sort") || "updatedAt";
 let masterCategoryFilter = ""; // "" = すべて、それ以外はカテゴリ名で AND フィルタリング
 let masterCompletionFilter = ""; // "" | "lt100" | "lt60" | "lt30"
 let savedSearchPresets = (() => { try { return JSON.parse(safeGet("fmcc-saved-searches") || "[]"); } catch { return []; } })();
@@ -92,3 +92,8 @@ let aiBriefingLoading = false;
 let demoMode = false;
 let demoStep = 1;
 let demoProductId = null;
+
+// ── 商品開発（FoodPilot Develop）────────────────────────────────────────
+let devDetailTab = "overview"; // "overview"|"recipe"|"trial"|"cost"|"nutrition"|"approval"
+let activeRecipeVersionId = null; // null = 採用版
+let newTrialBatchOpen = false;

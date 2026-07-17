@@ -3,8 +3,8 @@ const TUTORIAL_STEPS = [
   {
     icon: "🎉", color: "#2563eb", bg: "#eff6ff",
     title: "FoodPilotへようこそ",
-    desc: "食品メーカー・小規模食品事業者のための商品管理＆食品表示ラベル作成ツールです。このガイドで主な使い方を説明します（約2分）。",
-    features: ["食品表示ラベルを自動生成", "AIで法令チェック・表示文作成", "複数商品をクラウドで一元管理"],
+    desc: "食品メーカーの商品ライフサイクルを一元管理するプラットフォームです。開発中から発売・終売まで、すべての工程をFoodPilotで管理できます（ガイド約2分）。",
+    features: ["開発中〜発売後の商品を一元管理", "AIで食品表示・法令チェック・相談", "チームで承認ワークフローを運用"],
     tip: "すでに使い方を知っている場合は「スキップ」してください。",
   },
   {
@@ -264,6 +264,36 @@ function saveHistory(p) {
 }
 function loadHistory(id) {
   try { return JSON.parse(safeGet(`food-label-history-${id}`) || "[]"); } catch { return []; }
+}
+
+// ── タイムラインイベント ──────────────────────────────────────────────
+const TIMELINE_EVENT_ICONS = {
+  registered:          "🆕", released:           "🚀", label_changed:      "🏷",
+  spec_updated:        "📄", cost_changed:        "💴", ai_reviewed:        "🤖",
+  oem_added:           "🏭", discontinued:       "🔴", photo_updated:      "📷",
+  spec_import:         "📥", ai_updated:         "✦",  saved:              "💾",
+  status_changed:      "🔄", approval_requested: "👥", approved:           "✅",
+  rejected:            "↩",  approval_cancelled: "🚫",
+  label_edited:        "🏷", ai_consulted:        "🤖", pdf_exported:       "🖨", duplicated:         "📋",
+};
+function saveTimelineEvent(pid, eventType, label, comment = "", changedFields = []) {
+  try {
+    const key = `food-label-timeline-${pid}`;
+    const events = JSON.parse(safeGet(key) || "[]");
+    events.unshift({
+      eventType,
+      icon: TIMELINE_EVENT_ICONS[eventType] || "📌",
+      label,
+      savedAt: new Date().toLocaleString("ja-JP"),
+      savedBy: currentUserName || "—",
+      comment,
+      changedFields,
+    });
+    safeSet(key, JSON.stringify(events.slice(0, 100)));
+  } catch {}
+}
+function loadTimeline(pid) {
+  try { return JSON.parse(safeGet(`food-label-timeline-${pid}`) || "[]"); } catch { return []; }
 }
 // CSV列名のエイリアスマップ（日本語ヘッダー → 英語フィールド名）
 const CSV_COLUMN_ALIASES = {
@@ -680,7 +710,7 @@ function normalizeLabelText(p) {
   return { next, changes };
 }
 
-function showModal({ message, confirmLabel = "OK", cancelLabel = null, dangerLabel = null, onConfirm, onCancel, onDanger }) {
+function showModal({ message, confirmLabel = "OK", cancelLabel = null, dangerLabel = null, hasInput = false, inputPlaceholder = "", onConfirm, onCancel, onDanger }) {
   document.querySelector(".app-modal")?.remove();
   const modal = document.createElement("div");
   modal.className = "app-modal";
@@ -690,6 +720,7 @@ function showModal({ message, confirmLabel = "OK", cancelLabel = null, dangerLab
   modal.innerHTML = `
     <div class="app-modal-card">
       <p class="app-modal-msg">${escapeHtml(message)}</p>
+      ${hasInput ? `<input class="app-modal-input" type="text" placeholder="${escapeHtml(inputPlaceholder)}" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;margin-bottom:12px;box-sizing:border-box">` : ""}
       <div class="app-modal-actions">
         ${cancelLabel ? `<button class="action app-modal-cancel">${escapeHtml(cancelLabel)}</button>` : ""}
         ${dangerLabel ? `<button class="action danger-outline app-modal-danger">${escapeHtml(dangerLabel)}</button>` : ""}
@@ -698,8 +729,9 @@ function showModal({ message, confirmLabel = "OK", cancelLabel = null, dangerLab
     </div>`;
   document.body.appendChild(modal);
   const prevFocus = document.activeElement;
-  const focusable = () => [...modal.querySelectorAll("button:not([disabled])")];
-  requestAnimationFrame(() => { focusable()[0]?.focus(); });
+  const inputEl = modal.querySelector(".app-modal-input");
+  const focusable = () => [...modal.querySelectorAll("button:not([disabled]),input")];
+  requestAnimationFrame(() => { (inputEl || focusable()[0])?.focus(); });
   const trapFocus = (e) => {
     if (e.key !== "Tab") return;
     const els = focusable();
@@ -710,10 +742,10 @@ function showModal({ message, confirmLabel = "OK", cancelLabel = null, dangerLab
   };
   modal.addEventListener("keydown", trapFocus);
   const close = () => { modal.remove(); prevFocus?.focus?.(); };
-  modal.querySelector(".app-modal-confirm").addEventListener("click", () => { close(); onConfirm?.(); });
+  const getInputVal = () => inputEl ? inputEl.value.trim() : undefined;
+  modal.querySelector(".app-modal-confirm").addEventListener("click", () => { const v = getInputVal(); close(); onConfirm?.(v); });
   modal.querySelector(".app-modal-cancel")?.addEventListener("click", () => { close(); onCancel?.(); });
   modal.querySelector(".app-modal-danger")?.addEventListener("click", () => { close(); onDanger?.(); });
-  // 背景クリックは単純にモーダルを閉じるだけ（破壊的アクションは実行しない）
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
 }
 
@@ -732,7 +764,7 @@ function showShortcutsPanel() {
       <tr><td><kbd>n</kbd></td><td>新規商品を追加</td></tr>
       <tr><td><kbd>/</kbd></td><td>商品を検索</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>商品を保存</td></tr>
-      <tr><td><kbd>1</kbd>〜<kbd>6</kbd></td><td>商品詳細タブを切替（基本/原材料/原価/チェック/履歴/承認）</td></tr>
+      <tr><td><kbd>1</kbd>〜<kbd>8</kbd></td><td>商品詳細タブを切替（基本/原材料/ラベル/規格書/原価/AI/履歴/承認）</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>戻る / サイドバーを閉じる</td></tr>
       <tr><td><kbd>?</kbd></td><td>ショートカット一覧を表示</td></tr>
     </table>
@@ -1040,7 +1072,11 @@ function render() {
     if (view === "saas") {
       if (saasView === "dashboard") pageHtml = dashboardHtml();
       else if (saasView === "products") pageHtml = productsListHtml();
-      else if (saasView === "product-detail") pageHtml = productDetailHtml();
+      else if (saasView === "dev-products") pageHtml = devProductsHtml();
+      else if (saasView === "product-detail") {
+        const _dp = products.find(x => x.id === productDetailId);
+        pageHtml = (_dp?.phase === "development") ? devDetailHtml() : productDetailHtml();
+      }
       else if (saasView === "spec-sheet-nav") pageHtml = specSheetHtml();
       else if (saasView === "ai-descriptions-nav") pageHtml = aiDescriptionsHtml();
       else if (saasView === "ai-consult-nav") pageHtml = aiConsultHtml();
@@ -1769,6 +1805,8 @@ function saveCurrent() {
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
   if (exists) saveHistory(p);
   products = exists ? products.map((x) => (x.id === p.id ? p : x)) : [p, ...products];
+  if (!exists) saveTimelineEvent(p.id, "registered", "🆕 登録", "", []);
+  if (exists) saveTimelineEvent(p.id, "label_edited", "🏷 ラベル編集・保存", "", []);
   saveProducts();
   p.ingredients.forEach((i) => { if (i.name?.trim()) saveIngMaster(i.name); });
   view = "edit";
@@ -2144,35 +2182,99 @@ function extendProductMaster(p) {
     approvalStatus: "none", assignedTo: "", approvalComment: "", approverName: "", approvalDate: "",
     productStatus: "draft",
     packaging: "", caseCount: "", productSize: "",
+    phase: "development",
+    releasedAt: null,
+    discontinuedAt: null,
+    discontinuedReason: null,
+    oemParentId: null,
+    oemLabel: null,
+    devProject: null,
+    recipeVersions: null,
+    adoptedRecipeVersionId: null,
+    trialBatches: null,
     ...p,
   };
 }
 (function runMigration() {
-  if (safeGet("fmcc-migrated-v2") === "1") return;
-  products = products.map(extendProductMaster);
-  saveProducts();
-  safeSet("fmcc-migrated-v1", "1");
-  safeSet("fmcc-migrated-v2", "1");
+  if (safeGet("fmcc-migrated-v2") !== "1") {
+    products = products.map(extendProductMaster);
+    saveProducts();
+    safeSet("fmcc-migrated-v1", "1");
+    safeSet("fmcc-migrated-v2", "1");
+  }
+  // v3: phaseフィールド追加・既存商品はすべてreleased
+  if (safeGet("fmcc-migrated-v3") !== "1") {
+    products = products.map(p => ({
+      ...p,
+      phase: p.phase || "released",
+      releasedAt: p.releasedAt || null,
+      discontinuedAt: p.discontinuedAt || null,
+      discontinuedReason: p.discontinuedReason || null,
+      oemParentId: p.oemParentId || null,
+      oemLabel: p.oemLabel || null,
+    }));
+    saveProducts();
+    safeSet("fmcc-migrated-v3", "1");
+  }
+  // v4: phase と productStatus の整合性修正
+  if (safeGet("fmcc-migrated-v4") !== "1") {
+    const devOnly = new Set(["draft","in_progress","review","approved"]);
+    const relOnly = new Set(["on_sale","discontinued"]);
+    products = products.map(p => {
+      if (p.phase === "released" && devOnly.has(p.productStatus)) {
+        return { ...p, productStatus: "on_sale" };
+      }
+      if (p.phase === "development" && relOnly.has(p.productStatus)) {
+        return { ...p, productStatus: "approved" };
+      }
+      return p;
+    });
+    saveProducts();
+    safeSet("fmcc-migrated-v4", "1");
+  }
+  // v5: 開発商品に recipeVersions / trialBatches / devProject を追加
+  if (safeGet("fmcc-migrated-v5") !== "1") {
+    products = products.map(p => {
+      if ((p.phase || "released") !== "development") return p;
+      if (p.recipeVersions && p.recipeVersions.length > 0) return p;
+      const v1id = uid();
+      return {
+        ...p,
+        recipeVersions: [{
+          id: v1id, versionNum: 1, label: "Ver.1（初期）",
+          ingredients: p.ingredients || [],
+          costMode: p.costMode || "direct",
+          directCost: p.directCost || "",
+          costItems: p.costItems || [],
+          note: "既存レシピから自動生成",
+          createdAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
+          createdBy: "", status: "adopted",
+        }],
+        adoptedRecipeVersionId: v1id,
+        trialBatches: p.trialBatches || [],
+        devProject: p.devProject || null,
+      };
+    });
+    saveProducts();
+    safeSet("fmcc-migrated-v5", "1");
+  }
 })();
 
 // ── ナビゲーション ────────────────────────────────────────────────────
 function sidebarHtml() {
-  const items = [
-    { id:"dashboard",           label:"ダッシュボード", ico:"🏠" },
-    { id:"products",            label:"商品管理",       ico:"📦" },
-    { id:"label-nav",           label:"ラベル作成",     ico:"🏷" },
-    { id:"spec-sheet-nav",      label:"商品規格書",     ico:"📋" },
-    { id:"ai-descriptions-nav", label:"AI説明文",      ico:"✨" },
-    { id:"ai-consult-nav",      label:"AI相談",        ico:"💬" },
-    { id:"shelf-scan",          label:"AI棚スキャン",  ico:"📷", beta:true },
-  ];
+  const _detailP = saasView === "product-detail" ? products.find(x => x.id === productDetailId) : null;
+  const active = _detailP ? (_detailP.phase === "development" ? "dev-products" : "products") : saasView;
+  const managedCount = products.filter(p => p.phase === "released" && p.productStatus !== "discontinued").length;
+  const devCount = products.filter(p => p.phase === "development").length;
   const settingItem = { id:"settings-nav", label:"設定", ico:"⚙️" };
-  const active = saasView;
-  const navLink = (it) => `<button class="nav-item${active===it.id?" active":""}" data-nav="${it.id}">
-    <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>${it.beta?'<span class="nav-beta">β</span>':""}
+  const navLink = (it, badge = "") => `<button class="nav-item${active===it.id?" active":""}" data-nav="${it.id}">
+    <span class="nav-ico">${it.ico}</span><span class="nav-lbl">${it.label}</span>${it.beta?'<span class="nav-beta">β</span>':""}${badge}
   </button>`;
   const reviewCount = products.filter(p => p.approvalStatus === "review").length;
-  const reviewBadge = reviewCount > 0 ? `<span class="nav-review-badge">${reviewCount}</span>` : "";
+  const sectionLabel = (label, cls = "") => `<div class="nav-section-label${cls ? " " + cls : ""}">${label}</div>`;
+  const readyToRelease     = products.filter(p => p.phase === "development" && p.productStatus === "approved").length;
+  const releaseBadge       = readyToRelease > 0 ? `<span class="nav-release-badge">🚀 ${readyToRelease}</span>` : "";
+  const reviewBadge        = reviewCount > 0 ? `<span class="nav-review-badge">${reviewCount}</span>` : "";
   const currentRole = teamMembers.find(m => m.name === currentUserName)?.role || "";
   const roleLabel = { admin: "管理者", editor: "編集者", reviewer: "確認者" }[currentRole] || "";
   const userChip = currentUserName
@@ -2187,10 +2289,15 @@ function sidebarHtml() {
       <button class="sidebar-close-btn" data-action="close-sidebar">✕</button>
     </div>
     <div class="nav-links">
-      ${items.map(navLink).join("")}
-      <button class="nav-item${active==="team-approval"?" active":""}" data-nav="team-approval">
-        <span class="nav-ico">👥</span><span class="nav-lbl">チーム・承認</span>${reviewBadge}
-      </button>
+      ${navLink({ id:"dashboard", label:"ホーム", ico:"🏠" })}
+      ${sectionLabel("🔬 開発ライン", "nav-section-dev")}
+      ${navLink({ id:"dev-products", label:"開発中" + (devCount > 0 ? ` (${devCount})` : ""), ico:"🧪" }, releaseBadge)}
+      ${navLink({ id:"team-approval", label:"承認待ち" + (reviewCount > 0 ? ` (${reviewCount})` : ""), ico:"👥" }, reviewBadge)}
+      ${sectionLabel("📦 管理ライン", "nav-section-mgmt")}
+      ${navLink({ id:"products", label:"発売中" + (managedCount > 0 ? ` (${managedCount})` : ""), ico:"📋" })}
+      ${sectionLabel("🤖 AI機能")}
+      ${navLink({ id:"ai-consult-nav", label:"AI相談", ico:"💬" })}
+      ${navLink({ id:"ai-descriptions-nav", label:"AI説明文", ico:"✨" })}
     </div>
     <div class="nav-footer">${userChip}${navLink(settingItem)}</div>
   </nav>
@@ -2510,6 +2617,450 @@ function imageUploadSectionHtml(p) {
 }
 
 // ── 商品詳細（マスター編集） ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+// FoodPilot Develop — 開発専用詳細ビュー
+// ══════════════════════════════════════════════════════════════════════
+function devDetailHtml() {
+  const p = products.find(x => x.id === productDetailId);
+  if (!p) return saasLayout("開発詳細", `<div class="empty-state"><p>商品が見つかりません。</p><button class="action" data-nav="dev-products">← 開発中商品</button></div>`);
+
+  const devProj   = p.devProject || {};
+  const versions  = p.recipeVersions || [];
+  const batches   = p.trialBatches  || [];
+  const adoptedVer = versions.find(v => v.id === p.adoptedRecipeVersionId) || versions.find(v => v.status === "adopted") || versions[0] || null;
+  const activeVer  = (activeRecipeVersionId ? versions.find(v => v.id === activeRecipeVersionId) : null) || adoptedVer;
+  const pDerived   = adoptedVer ? { ...p, ingredients: adoptedVer.ingredients || [], directCost: adoptedVer.directCost || p.directCost, costMode: adoptedVer.costMode || p.costMode, costItems: adoptedVer.costItems || p.costItems } : p;
+  const d          = derive(pDerived);
+  const costs      = calcCosts(pDerived);
+  const comp       = calcCompletion(p, d);
+  const compColor  = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+
+  // ── 優先度・フェーズ ──
+  const PRIORITY_MAP = { urgent:{ label:"🔥 緊急", cls:"urgent" }, high:{ label:"⚡ 高", cls:"high" }, medium:{ label:"📌 中", cls:"medium" }, low:{ label:"🟢 低", cls:"low" } };
+  const DEV_PHASES   = ["企画","試作","改善","最終調整","発売準備"];
+  const prioInfo     = PRIORITY_MAP[devProj.priority] || null;
+  const phaseIdx     = DEV_PHASES.indexOf(devProj.devPhase || "試作");
+
+  // ── タブ ──
+  const _tab = devDetailTab || "overview";
+  const tabs = [
+    { id:"overview",    label:"📋 概要" },
+    { id:"recipe",      label:`🧪 レシピ版 ${versions.length > 0 ? `(${versions.length})` : ""}` },
+    { id:"trial",       label:`📊 試作評価 ${batches.length > 0 ? `(${batches.length})` : ""}` },
+    { id:"cost",        label:"💰 原価シミュ" },
+    { id:"nutrition",   label:"🔬 栄養成分" },
+    { id:"approval",    label:`👥 承認${p.approvalStatus && p.approvalStatus !== "none" ? " ●" : ""}` },
+  ];
+  const tabNav = `<div class="dev-detail-tabs">${tabs.map(t => `<button class="dev-detail-tab${_tab===t.id?" active":""}" data-dev-tab="${t.id}">${t.label}</button>`).join("")}</div>`;
+
+  // ── ヘッダー ──
+  const phaseBarHtml = `<div class="devd-phase-bar">${DEV_PHASES.map((ph, i) => `<div class="devd-phase-step${i <= phaseIdx ? " done" : ""}${i === phaseIdx ? " current" : ""}">${ph}</div>${i < DEV_PHASES.length - 1 ? `<div class="devd-phase-arrow${i < phaseIdx ? " done" : ""}">›</div>` : ""}`).join("")}</div>`;
+
+  const headerHtml = `
+  <div class="devd-header">
+    <div class="devd-header-main">
+      <div>
+        <div class="devd-product-name">${escapeHtml(devProj.projectName || p.name || "（プロジェクト名未設定）")}</div>
+        <div class="devd-product-sub">${escapeHtml(p.name || "商品名未設定")}</div>
+      </div>
+      <div class="devd-header-meta">
+        ${prioInfo ? `<span class="devd-priority-chip devd-priority--${prioInfo.cls}">${prioInfo.label}</span>` : ""}
+        ${devProj.projectManager ? `<span class="devd-meta-chip">👤 ${escapeHtml(devProj.projectManager)}</span>` : ""}
+        ${devProj.targetReleaseDate ? `<span class="devd-meta-chip">🎯 ${escapeHtml(devProj.targetReleaseDate)}</span>` : ""}
+        <span class="devd-meta-chip devd-comp-chip" style="color:${compColor}">完成度 ${comp.pct}%</span>
+      </div>
+    </div>
+    ${phaseBarHtml}
+    <div class="devd-header-actions">
+      <button class="action primary" data-action="save-master">保存する</button>
+      <button class="action action--release${p.productStatus === "approved" ? " action--release--ready" : ""}" data-action="release-product" data-pid="${escapeHtml(p.id)}" title="発売済み商品として商品管理へ移行">🚀 発売する</button>
+      <button class="action" data-dup-goto="${escapeHtml(p.id)}">複製</button>
+      <button class="bread-link" data-nav="dev-products" style="margin-left:8px">← 開発一覧</button>
+    </div>
+  </div>`;
+
+  // ── タブコンテンツ ──
+  let tabContent = "";
+
+  // ① 概要タブ
+  if (_tab === "overview") {
+    const proj = devProj;
+    const priorityOpts = [["","優先度を選択"],["urgent","🔥 緊急"],["high","⚡ 高"],["medium","📌 中"],["low","🟢 低"]].map(([v,l]) => `<option value="${v}"${proj.priority===v?" selected":""}>${l}</option>`).join("");
+    const phaseOpts    = DEV_PHASES.map(ph => `<option value="${ph}"${(proj.devPhase||"試作")===ph?" selected":""}>${ph}</option>`).join("");
+    const tlEvents = loadTimeline(p.id);
+    const tlHtml = tlEvents.length
+      ? `<div class="devd-tl-list">${tlEvents.map(ev => `<div class="devd-tl-row"><span class="devd-tl-ico">${ev.icon||"📌"}</span><div class="devd-tl-body"><span class="devd-tl-lbl">${escapeHtml(ev.label)}</span><span class="devd-tl-date">${escapeHtml(ev.savedAt||"")} ${ev.savedBy && ev.savedBy!=="—" ? `· ${escapeHtml(ev.savedBy)}` : ""}</span>${ev.comment ? `<span class="devd-tl-cmt">${escapeHtml(ev.comment)}</span>` : ""}</div></div>`).join("")}</div>`
+      : `<p class="devd-empty">まだ記録がありません。ラベルを保存したり印刷したりすると自動記録されます。</p>`;
+    tabContent = `<div class="devd-two-col">
+      <div>
+        <h3 class="devd-section-hd">📋 プロジェクト情報</h3>
+        <div class="devd-form-grid">
+          <div class="devd-form-row">
+            <label class="devd-lbl">プロジェクト名</label>
+            <input class="master-input" data-dev-proj-field="projectName" value="${escapeHtml(proj.projectName||"")}" placeholder="例: 有機抹茶クッキー開発P">
+          </div>
+          <div class="devd-form-row">
+            <label class="devd-lbl">商品コンセプト・メモ</label>
+            <textarea class="master-input" data-dev-proj-field="projectNote" rows="3" placeholder="ターゲット・特徴・開発背景など">${escapeHtml(proj.projectNote||"")}</textarea>
+          </div>
+          <div class="devd-form-row-2">
+            <div>
+              <label class="devd-lbl">担当者</label>
+              <input class="master-input" data-dev-proj-field="projectManager" value="${escapeHtml(proj.projectManager||"")}" placeholder="田中花子">
+            </div>
+            <div>
+              <label class="devd-lbl">優先度</label>
+              <select class="master-input" data-dev-proj-field="priority">${priorityOpts}</select>
+            </div>
+          </div>
+          <div class="devd-form-row-2">
+            <div>
+              <label class="devd-lbl">開発フェーズ</label>
+              <select class="master-input" data-dev-proj-field="devPhase">${phaseOpts}</select>
+            </div>
+            <div>
+              <label class="devd-lbl">開始日</label>
+              <input class="master-input" type="date" data-dev-proj-field="startDate" value="${escapeHtml(proj.startDate||"")}">
+            </div>
+          </div>
+          <div class="devd-form-row-2">
+            <div>
+              <label class="devd-lbl">発売予定日</label>
+              <input class="master-input" type="date" data-dev-proj-field="targetReleaseDate" value="${escapeHtml(proj.targetReleaseDate||"")}">
+            </div>
+            <div>
+              <label class="devd-lbl">目標販売価格</label>
+              <input class="master-input" type="number" data-dev-proj-field="targetPrice" value="${escapeHtml(proj.targetPrice||"")}" placeholder="500">
+            </div>
+          </div>
+          <div class="devd-form-row-2">
+            <div>
+              <label class="devd-lbl">目標原価率 (%)</label>
+              <input class="master-input" type="number" data-dev-proj-field="targetCostRate" value="${escapeHtml(proj.targetCostRate||"")}" placeholder="30">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 class="devd-section-hd">📜 開発タイムライン</h3>
+        ${tlHtml}
+      </div>
+    </div>`;
+  }
+
+  // ② レシピ版タブ
+  else if (_tab === "recipe") {
+    const versionTabs = versions.length
+      ? `<div class="devd-ver-tabs">${versions.map(v => {
+          const isAdopted  = v.id === p.adoptedRecipeVersionId;
+          const isActive   = v.id === (activeVer?.id);
+          return `<button class="devd-ver-tab${isActive?" active":""}" data-set-active-version="${escapeHtml(v.id)}">
+            ${v.label || `Ver.${v.versionNum}`}
+            ${isAdopted ? `<span class="devd-ver-adopted">採用中</span>` : `<span class="devd-ver-status devd-ver-status--${v.status||"draft"}">${{draft:"下書き",testing:"試作中",rejected:"却下",adopted:"採用"}[v.status]||v.status}</span>`}
+          </button>`;
+        }).join("")}
+        <button class="devd-ver-tab devd-ver-tab--add" data-action="add-recipe-version" data-pid="${escapeHtml(p.id)}">＋ 新バージョン</button>
+      </div>`
+      : `<div class="devd-empty-ver"><p>レシピバージョンがありません。</p><button class="action primary" data-action="add-recipe-version" data-pid="${escapeHtml(p.id)}">＋ 最初のバージョンを作成</button></div>`;
+
+    let verDetailHtml = "";
+    if (activeVer) {
+      const verD = derive({ ...p, ingredients: activeVer.ingredients || [] });
+      const verC = calcCosts({ ...p, ingredients: activeVer.ingredients || [], directCost: activeVer.directCost || "", costMode: activeVer.costMode || "direct", costItems: activeVer.costItems || [] });
+      const isAdopted = activeVer.id === p.adoptedRecipeVersionId;
+      const ingHtml = (activeVer.ingredients || []).length
+        ? `<table class="report-table" style="font-size:13px"><thead><tr><th>原材料名</th><th>重量(g)</th></tr></thead><tbody>${(activeVer.ingredients).map(i => `<tr><td>${escapeHtml(i.name||"")}</td><td style="font-variant-numeric:tabular-nums">${escapeHtml(i.weight||"")}</td></tr>`).join("")}</tbody></table>`
+        : `<p class="devd-empty">原材料が未入力です。</p>`;
+      verDetailHtml = `
+        <div class="devd-ver-detail">
+          <div class="devd-ver-detail-hd">
+            <div>
+              <span class="devd-ver-name">${escapeHtml(activeVer.label || `Ver.${activeVer.versionNum}`)}</span>
+              ${activeVer.note ? `<span class="devd-ver-note">${escapeHtml(activeVer.note)}</span>` : ""}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              ${!isAdopted ? `<button class="action primary" style="font-size:12px" data-action="adopt-recipe-version" data-pid="${escapeHtml(p.id)}" data-vid="${escapeHtml(activeVer.id)}">✅ この版を採用する</button>` : `<span class="devd-adopted-label">✅ 採用中</span>`}
+              <button class="action" style="font-size:12px" data-action="dup-recipe-version" data-pid="${escapeHtml(p.id)}" data-vid="${escapeHtml(activeVer.id)}">コピーして改良</button>
+            </div>
+          </div>
+          <div class="devd-ver-body-grid">
+            <div>
+              <h3 class="devd-section-hd">原材料</h3>
+              ${ingHtml}
+              <button class="action" style="font-size:12px;margin-top:8px" data-label-from="${escapeHtml(p.id)}">✏️ ラベルエディタで編集</button>
+            </div>
+            <div>
+              <h3 class="devd-section-hd">この版の試算</h3>
+              <div class="devd-ver-stats">
+                <div class="devd-stat-item"><div class="devd-stat-val">${verC.totalCost > 0 ? `¥${Math.round(verC.totalCost).toLocaleString()}` : "—"}</div><div class="devd-stat-lbl">原価</div></div>
+                <div class="devd-stat-item"><div class="devd-stat-val ${verC.costRate !== null && verC.costRate > 40 ? "warn" : ""}">${verC.costRate !== null ? `${verC.costRate}%` : "—"}</div><div class="devd-stat-lbl">原価率</div></div>
+                <div class="devd-stat-item"><div class="devd-stat-val">${verD.nutrition.kcal > 0 ? `${verD.nutrition.kcal}` : "—"}</div><div class="devd-stat-lbl">kcal</div></div>
+                <div class="devd-stat-item"><div class="devd-stat-val">${(verD.allergens||[]).length > 0 ? `${verD.allergens.length}種` : "なし"}</div><div class="devd-stat-lbl">アレルゲン</div></div>
+              </div>
+              <h3 class="devd-section-hd" style="margin-top:14px">メモ</h3>
+              <textarea class="master-input" rows="3" data-ver-note="${escapeHtml(activeVer.id)}" data-pid="${escapeHtml(p.id)}">${escapeHtml(activeVer.note||"")}</textarea>
+              ${activeVer.createdAt ? `<p class="devd-ver-date">作成: ${escapeHtml(activeVer.createdAt)}${activeVer.createdBy ? ` · ${escapeHtml(activeVer.createdBy)}` : ""}</p>` : ""}
+            </div>
+          </div>
+        </div>`;
+    }
+    tabContent = `${versionTabs}${verDetailHtml}`;
+  }
+
+  // ③ 試作評価タブ
+  else if (_tab === "trial") {
+    const SCORE_ITEMS = [["taste","味"],["texture","食感"],["aroma","香り"],["appearance","見た目"],["cost","コスト"]];
+    const stars = (n) => n > 0 ? "★".repeat(Math.min(5,Math.round(n))) + "☆".repeat(Math.max(0,5-Math.round(n))) : "—";
+    const batchCards = batches.map((b, idx) => {
+      const verLabel = (versions.find(v => v.id === b.recipeVersionId)?.label) || "";
+      const overall = b.scores ? (Object.values(b.scores).reduce((s,v)=>s+(v||0),0)/Object.values(b.scores).length) : 0;
+      return `<div class="devd-batch-card">
+        <div class="devd-batch-hd">
+          <span class="devd-batch-num">試作 #${b.batchNum || idx+1}</span>
+          ${verLabel ? `<span class="devd-batch-ver">${escapeHtml(verLabel)}</span>` : ""}
+          <span class="devd-batch-date">${escapeHtml(b.date||"")}</span>
+          ${b.evaluator ? `<span class="devd-batch-who">👤 ${escapeHtml(b.evaluator)}</span>` : ""}
+        </div>
+        ${b.imageDataUrl ? `<img class="devd-batch-img" src="${b.imageDataUrl}" alt="試作品写真">` : ""}
+        <div class="devd-score-grid">
+          ${SCORE_ITEMS.map(([key,lbl]) => `<div class="devd-score-item"><span class="devd-score-lbl">${lbl}</span><span class="devd-score-stars">${stars(b.scores?.[key])}</span></div>`).join("")}
+          <div class="devd-score-item devd-score-overall"><span class="devd-score-lbl">総合</span><span class="devd-score-stars">${overall > 0 ? overall.toFixed(1) + " / 5.0" : "—"}</span></div>
+        </div>
+        ${b.comment ? `<p class="devd-batch-comment">${escapeHtml(b.comment)}</p>` : ""}
+        ${b.nextAction ? `<p class="devd-batch-next">→ ${escapeHtml(b.nextAction)}</p>` : ""}
+      </div>`;
+    }).join("");
+
+    const SCORE_ITEMS_FORM = [["taste","味"],["texture","食感"],["aroma","香り"],["appearance","見た目"],["cost","コスト"]];
+    const verOpts = versions.map(v => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.label||`Ver.${v.versionNum}`)}</option>`).join("");
+    const addForm = newTrialBatchOpen ? `
+      <div class="devd-add-batch-form">
+        <h3 class="devd-section-hd">試作 #${batches.length + 1} を記録</h3>
+        <div class="devd-form-row-2">
+          <div>
+            <label class="devd-lbl">日付</label>
+            <input class="master-input" type="date" id="tb-date" value="${new Date().toISOString().split("T")[0]}">
+          </div>
+          <div>
+            <label class="devd-lbl">評価者</label>
+            <input class="master-input" id="tb-evaluator" value="${escapeHtml(currentUserName||"")}">
+          </div>
+        </div>
+        <div class="devd-form-row">
+          <label class="devd-lbl">対象レシピ版</label>
+          <select class="master-input" id="tb-ver">${verOpts}</select>
+        </div>
+        <div class="devd-score-form-grid">
+          ${SCORE_ITEMS_FORM.map(([key,lbl]) => `<div class="devd-score-form-item">
+            <label class="devd-lbl">${lbl}</label>
+            <select class="master-input" id="tb-${key}">
+              <option value="">—</option>
+              ${[1,2,3,4,5].map(n => `<option value="${n}">${"★".repeat(n)} ${n}</option>`).join("")}
+            </select>
+          </div>`).join("")}
+        </div>
+        <div class="devd-form-row">
+          <label class="devd-lbl">コメント・所見</label>
+          <textarea class="master-input" id="tb-comment" rows="3" placeholder="味の印象、改善点など"></textarea>
+        </div>
+        <div class="devd-form-row">
+          <label class="devd-lbl">次のアクション</label>
+          <input class="master-input" id="tb-next" placeholder="例: 砂糖を20g増量してVer.3を試作">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="action primary" data-action="save-trial-batch" data-pid="${escapeHtml(p.id)}">保存する</button>
+          <button class="action" data-action="cancel-trial-batch">キャンセル</button>
+        </div>
+      </div>` : `<button class="action primary" data-action="open-trial-batch">＋ 試作記録を追加</button>`;
+
+    tabContent = `
+      <div class="devd-trial-header">
+        <h3 class="devd-section-hd">試作品評価履歴</h3>
+        ${!newTrialBatchOpen ? `<button class="action primary" data-action="open-trial-batch">＋ 試作記録を追加</button>` : ""}
+      </div>
+      ${newTrialBatchOpen ? addForm : ""}
+      ${batches.length ? `<div class="devd-batch-list">${batchCards}</div>` : `<p class="devd-empty">試作記録がまだありません。</p>`}`;
+  }
+
+  // ④ 原価シミュレーション タブ
+  else if (_tab === "cost") {
+    const targetRate = parseFloat(devProj.targetCostRate) || null;
+    const targetPrice = parseFloat(devProj.targetPrice) || null;
+    const rows = versions.map(v => {
+      const vc = calcCosts({ ...p, ingredients: v.ingredients||[], directCost: v.directCost||"", costMode: v.costMode||"direct", costItems: v.costItems||[] });
+      const isAdopted = v.id === p.adoptedRecipeVersionId;
+      const rateOk = targetRate !== null && vc.costRate !== null ? vc.costRate <= targetRate : null;
+      return `<tr class="${isAdopted ? "devd-cost-row--adopted" : ""}">
+        <td>${escapeHtml(v.label||`Ver.${v.versionNum}`)}${isAdopted ? ` <span class="devd-ver-adopted">採用中</span>` : ""}</td>
+        <td style="font-variant-numeric:tabular-nums">${vc.totalCost > 0 ? `¥${Math.round(vc.totalCost).toLocaleString()}` : "—"}</td>
+        <td style="font-variant-numeric:tabular-nums;color:${rateOk===false?"#dc2626":rateOk===true?"#16a34a":"inherit"}">${vc.costRate !== null ? `${vc.costRate}%` : "—"}</td>
+        <td style="font-variant-numeric:tabular-nums">${vc.profitRate !== null ? `${vc.profitRate}%` : "—"}</td>
+        <td>${rateOk === true ? "✅" : rateOk === false ? `⚠️ +${(vc.costRate - targetRate).toFixed(1)}%` : "—"}</td>
+      </tr>`;
+    }).join("");
+    const targetRow = (targetRate || targetPrice)
+      ? `<div class="devd-target-row">
+          ${targetPrice ? `<span class="devd-target-chip">🎯 目標価格: ¥${targetPrice.toLocaleString()}</span>` : ""}
+          ${targetRate  ? `<span class="devd-target-chip">🎯 目標原価率: ${targetRate}%</span>` : ""}
+        </div>` : `<p class="devd-empty-sm">概要タブで目標価格・目標原価率を設定すると比較できます。</p>`;
+    tabContent = `
+      <h3 class="devd-section-hd">📊 版別 原価比較</h3>
+      ${targetRow}
+      <div class="table-wrap">
+        <table class="report-table">
+          <thead><tr><th>バージョン</th><th>原価</th><th>原価率</th><th>粗利率</th><th>目標比較</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="5" class="devd-empty">バージョンがありません</td></tr>`}</tbody>
+        </table>
+      </div>
+      <p class="devd-note">※ 原価率・粗利率は販売価格が設定されている場合に算出されます。</p>`;
+  }
+
+  // ⑤ 栄養成分タブ
+  else if (_tab === "nutrition") {
+    const nutrRows = versions.map(v => {
+      const vd = derive({ ...p, ingredients: v.ingredients || [] });
+      const n = vd.nutrition;
+      const isAdopted = v.id === p.adoptedRecipeVersionId;
+      return `<tr class="${isAdopted ? "devd-cost-row--adopted" : ""}">
+        <td>${escapeHtml(v.label||`Ver.${v.versionNum}`)}${isAdopted ? ` <span class="devd-ver-adopted">採用中</span>` : ""}</td>
+        <td style="font-variant-numeric:tabular-nums">${n.kcal||"—"}</td>
+        <td style="font-variant-numeric:tabular-nums">${n.protein||"—"}</td>
+        <td style="font-variant-numeric:tabular-nums">${n.fat||"—"}</td>
+        <td style="font-variant-numeric:tabular-nums">${n.carbs||"—"}</td>
+        <td style="font-variant-numeric:tabular-nums">${n.salt||"—"}</td>
+        <td>${(vd.allergens||[]).length ? vd.allergens.join("・") : "なし"}</td>
+      </tr>`;
+    }).join("");
+    tabContent = `
+      <h3 class="devd-section-hd">🔬 版別 栄養成分比較（100g当たり）</h3>
+      <div class="table-wrap">
+        <table class="report-table">
+          <thead><tr><th>バージョン</th><th>kcal</th><th>たんぱく質(g)</th><th>脂質(g)</th><th>炭水化物(g)</th><th>食塩相当量(g)</th><th>アレルゲン</th></tr></thead>
+          <tbody>${nutrRows || `<tr><td colspan="7" class="devd-empty">バージョンがありません</td></tr>`}</tbody>
+        </table>
+      </div>
+      <p class="devd-note">※ 原材料の重量(g)が入力されている場合のみ自動計算されます。</p>
+      <h3 class="devd-section-hd" style="margin-top:20px">🏷 採用版のラベルプレビュー</h3>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+        <div>${basicLabelHtml(pDerived, d)}</div>
+        <div>${nutritionLabelHtml(d)}</div>
+      </div>`;
+  }
+
+  // ⑥ 承認タブ
+  else if (_tab === "approval") {
+    tabContent = approvalTabHtml(p);
+  }
+
+  return saasLayout(`${escapeHtml(devProj.projectName || p.name || "開発プロジェクト")} — 開発詳細`, `
+    ${headerHtml}
+    ${tabNav}
+    <div class="devd-tab-body">${tabContent}</div>
+  `);
+}
+
+function karteTabHtml(p, d) {
+  const comp = calcCompletion(p, d);
+  const compColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+
+  const recentEvents = loadTimeline(p.id).slice(0, 5);
+  const recentTlHtml = recentEvents.length
+    ? recentEvents.map(ev => `
+        <div class="karte-tl-row">
+          <span class="karte-tl-ico">${ev.icon || "📌"}</span>
+          <div class="karte-tl-body">
+            <span class="karte-tl-lbl">${escapeHtml(ev.label)}</span>
+            <span class="karte-tl-date">${escapeHtml(ev.savedAt || "")}</span>
+          </div>
+        </div>`).join("")
+    : `<p class="karte-empty">まだイベントはありません</p>`;
+
+  const allergens = d.allergens || [];
+  const allergenHtml = allergens.length
+    ? allergens.map(a => `<span class="karte-chip karte-chip--allergen">${escapeHtml(a)}</span>`).join("")
+    : `<span class="karte-none">なし（または未入力）</span>`;
+
+  const nutr = d.nutrition;
+  const nutrRows = nutr && nutr.kcal > 0
+    ? `<div class="karte-nutr-grid">
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.kcal}</span><span class="karte-nutr-lbl">kcal</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.protein}g</span><span class="karte-nutr-lbl">たんぱく質</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.fat}g</span><span class="karte-nutr-lbl">脂質</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.carbs}g</span><span class="karte-nutr-lbl">炭水化物</span></div>
+        <div class="karte-nutr-item"><span class="karte-nutr-val">${nutr.salt}g</span><span class="karte-nutr-lbl">食塩相当量</span></div>
+      </div>`
+    : `<span class="karte-none">原材料の重量を入力すると自動計算されます</span>`;
+
+  const apMap = { review: { txt:"👥 承認待ち", cls:"review" }, approved: { txt:"✅ 承認済み", cls:"ok" }, rejected: { txt:"↩ 差し戻し", cls:"ng" } };
+  const apInfo = apMap[p.approvalStatus];
+  const approvalHtml = apInfo
+    ? `<span class="karte-chip karte-chip--ap-${apInfo.cls}">${apInfo.txt}</span>`
+    : `<span class="karte-none">未申請</span>`;
+
+  const CHECK_ITEMS = ["名称","内容量","賞味期限","保存方法","製造者名","製造者住所","原材料名"];
+  const checklistHtml = CHECK_ITEMS.map(lbl => {
+    const missing = comp.missing.includes(lbl);
+    return `<div class="karte-check-item${missing ? " karte-check-item--ng" : " karte-check-item--ok"}">
+      <span>${missing ? "⚠️" : "✅"}</span>
+      <span class="karte-check-lbl">${escapeHtml(lbl)}</span>
+    </div>`;
+  }).join("");
+
+  return `<div class="karte-layout">
+    <div class="karte-col karte-col--left">
+      <div class="karte-panel karte-panel--preview">
+        <div class="karte-panel-hd">🏷 ラベルプレビュー</div>
+        <div class="karte-label-wrap">${basicLabelHtml(p, d)}</div>
+        <div style="margin-top:8px">${nutritionLabelHtml(d)}</div>
+        <div class="karte-label-actions">
+          <button class="action primary" style="font-size:12px" data-label-from="${escapeHtml(p.id)}">✏️ ラベル編集</button>
+          <button class="action" style="font-size:12px" data-action="open-print-preview">🖨 印刷</button>
+        </div>
+      </div>
+      <div class="karte-panel">
+        <div class="karte-panel-hd">📜 最近の記録</div>
+        <div class="karte-tl-list">${recentTlHtml}</div>
+        <button class="karte-link" data-detail-tab="history">すべての履歴を見る →</button>
+      </div>
+    </div>
+    <div class="karte-col karte-col--right">
+      <div class="karte-panel karte-panel--comp">
+        <div class="karte-comp-hd">
+          <span class="karte-panel-hd" style="margin-bottom:0">完成度</span>
+          <span class="karte-comp-pct" style="color:${compColor}">${comp.pct}%</span>
+        </div>
+        <div class="karte-comp-bar"><div class="karte-comp-bar-fill" style="width:${comp.pct}%;background:${compColor}"></div></div>
+        <div class="karte-check-grid">${checklistHtml}</div>
+      </div>
+      <div class="karte-panel">
+        <div class="karte-panel-hd">🥜 アレルゲン</div>
+        <div class="karte-chips-row">${allergenHtml}</div>
+        <button class="karte-link" data-detail-tab="ingredients">原材料を編集 →</button>
+      </div>
+      <div class="karte-panel">
+        <div class="karte-panel-hd">🔬 栄養成分（100g当たり）</div>
+        ${nutrRows}
+      </div>
+      <div class="karte-panel">
+        <div class="karte-panel-hd">👥 承認ステータス</div>
+        <div>${approvalHtml}</div>
+        ${p.phase === "development" && p.productStatus === "approved" && p.approvalStatus === "approved"
+          ? `<div style="margin-top:8px"><button class="action primary" style="font-size:12px" data-action="release-product" data-pid="${escapeHtml(p.id)}">🚀 発売する</button></div>`
+          : ""}
+        <button class="karte-link" data-detail-tab="approval">チーム承認を管理する →</button>
+      </div>
+      <div class="karte-panel">
+        <div class="karte-panel-hd">🤖 AIアクション</div>
+        <div class="karte-ai-actions">
+          <button class="action" style="font-size:12px" data-detail-tab="ai">✅ 表示チェック</button>
+          <button class="action" style="font-size:12px" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談</button>
+          <button class="action" style="font-size:12px" data-ai-from="${escapeHtml(p.id)}">✨ AI説明文</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function productDetailHtml() {
   const p = products.find(x=>x.id===productDetailId) || (editId==="new"?draft:null);
   if (!p) return saasLayout("商品詳細", `<p>商品が見つかりません。<button class="action" data-nav="products">一覧へ戻る</button></p>`);
@@ -2519,10 +3070,21 @@ function productDetailHtml() {
   const catOpts = ["", ...PRODUCT_CATEGORIES].map(c=>`<option value="${escapeHtml(c)}"${p.category===c?" selected":""}>${c||"カテゴリを選択"}</option>`).join("");
   const statusOpts = [["active","公開中"],["draft","下書き"],["inactive","非公開"]].map(([v,l])=>`<option value="${v}"${p.publishStatus===v?" selected":""}>${l}</option>`).join("");
 
-  const tab = productDetailTab || "basic";
+  const tab = productDetailTab || "karte";
   const comp = calcCompletion(p, d);
   const isMissing = (label) => comp.missing.includes(label);
   const compColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+  const curStatusId = p.productStatus || ((p.phase || "released") === "development" ? "draft" : "on_sale");
+  const statusInfo = PRODUCT_STATUSES.find(s => s.id === curStatusId) || PRODUCT_STATUSES[0];
+  const summaryStrip = `<div class="detail-summary-strip">
+    <span class="dss-item">
+      <span class="dss-label">ステータス</span>
+      <span class="dss-chip" style="background:${statusInfo.bg};color:${statusInfo.color};border:1.5px solid ${statusInfo.color}40">${statusInfo.label}</span>
+    </span>
+    ${p.specResponsible ? `<span class="dss-item"><span class="dss-label">担当者</span><span class="dss-value">${escapeHtml(p.specResponsible)}</span></span>` : ""}
+    ${(p.phase === "released" && p.releasedAt) ? `<span class="dss-item"><span class="dss-label">発売日</span><span class="dss-value">${escapeHtml(p.releasedAt)}</span></span>` : ""}
+    <span class="dss-item"><span class="dss-label">更新日</span><span class="dss-value">${escapeHtml(p.updatedAt||"—")}</span></span>
+  </div>`;
   const completionBanner = `<div class="detail-comp-banner">
     <div class="dcb-bar-wrap"><div class="dcb-bar-fill" style="width:${comp.pct}%;background:${compColor}"></div></div>
     <span class="dcb-pct" style="color:${compColor}">${comp.pct}%</span>
@@ -2532,37 +3094,46 @@ function productDetailHtml() {
   </div>`;
   // 未入力項目をタブへマッピングしてバッジ数を計算
   const TAB_FIELDS = {
+    karte: [],
     basic:       ["名称","内容量","賞味期限","保存方法","製造者名","製造者住所"],
     ingredients: ["原材料名"],
-    cost:        [],
-    check:       [],
-    history:     [],
-    approval:    [],
+    cost: [], label: [], spec: [], ai: [], history: [], approval: [],
   };
   const tabBadge = (id) => {
     const n = (TAB_FIELDS[id]||[]).filter(f => comp.missing.includes(f)).length;
     return n > 0 ? `<span class="tab-badge">${n}</span>` : "";
   };
-  const histCount = loadHistory(p.id).length;
+  const tlCount = loadTimeline(p.id).length + loadHistory(p.id).length;
   const approvalDot = p.approvalStatus && p.approvalStatus !== "none" ? ` <span class="tab-approval-dot ${p.approvalStatus}"></span>` : "";
+  // "check" → "ai" にリダイレクト（旧タブ名との後方互換）
+  const _tab = (tab === "check") ? "ai" : tab;
   const tabs = [
+    { id:"karte",       label:"📋 カルテ" },
     { id:"basic",       label:"基本情報" },
     { id:"ingredients", label:"原材料" },
-    { id:"cost",        label:"原価" },
-    { id:"check",       label:"表示チェック" },
-    { id:"history",     label:`📋 履歴${histCount>0?` (${histCount})`:""}` },
+    { id:"label",       label:"🏷 ラベル" },
+    { id:"spec",        label:"📄 規格書" },
+    { id:"cost",        label:"💴 原価" },
+    { id:"ai",          label:"🤖 AI・チェック" },
+    { id:"history",     label:`📜 履歴${tlCount>0?` (${tlCount})`:""}` },
     { id:"approval",    label:`👥 承認${approvalDot}` },
   ];
-  const tabNav = `${completionBanner}<div class="detail-tabs">${tabs.map(t=>`<button class="detail-tab${tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div>`;
+  const tabNav = `${completionBanner}<div class="detail-tabs">${tabs.map(t=>`<button class="detail-tab${_tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div>`;
 
   // ── タブコンテンツ ──
   let tabContent = "";
-  if (tab === "basic") {
+  if (_tab === "karte") {
+    tabContent = karteTabHtml(p, d);
+  } else if (_tab === "basic") {
+    const phaseStatuses = (p.phase || "released") === "development"
+      ? PRODUCT_STATUSES.filter(s => !["on_sale","discontinued"].includes(s.id))
+      : PRODUCT_STATUSES.filter(s => ["on_sale","discontinued"].includes(s.id));
+    const curStatus = p.productStatus || ((p.phase || "released") === "development" ? "draft" : "on_sale");
     const pipelineHtml = `<div class="pipeline-selector">
       <span class="pipeline-selector-lbl">ステータス</span>
       <div class="pipeline-steps">
-        ${PRODUCT_STATUSES.map(s => `
-          <button class="pipeline-step${(p.productStatus||"draft")===s.id?" active":""}" data-set-pipeline-status="${s.id}" style="${(p.productStatus||"draft")===s.id?`background:${s.bg};color:${s.color};border-color:${s.color}`:""}">
+        ${phaseStatuses.map(s => `
+          <button class="pipeline-step${curStatus===s.id?" active":""}" data-set-pipeline-status="${s.id}" style="${curStatus===s.id?`background:${s.bg};color:${s.color};border-color:${s.color}`:""}">
             ${s.label}
           </button>`).join(`<span class="pipeline-arrow">›</span>`)}
       </div>
@@ -2614,7 +3185,10 @@ function productDetailHtml() {
         </div>
         <div class="detail-section">
           <h3 class="detail-section-title">販売・管理情報</h3>
-          <label class="field"><span>公開ステータス</span><select data-master-field="publishStatus">${statusOpts}</select></label>
+          ${p.phase === "released" ? `<label class="field"><span>公開ステータス</span><select data-master-field="publishStatus">${statusOpts}</select></label>` : ""}
+          ${p.phase === "released" ? `<div class="field"><span>発売日 <span class="field-opt">自動設定</span></span><input value="${escapeHtml(p.releasedAt||"未設定")}" readonly style="background:var(--bg-secondary,#f8fafc);color:var(--text-secondary,#64748b);cursor:default"><p class="field-hint">「🚀 発売する」で自動入力されます。</p></div>` : ""}
+          ${p.productStatus === "discontinued" ? `<div class="field"><span>終売日 <span class="field-opt">自動設定</span></span><input value="${escapeHtml(p.discontinuedAt||"未設定")}" readonly style="background:var(--bg-secondary,#f8fafc);color:var(--text-secondary,#64748b);cursor:default"></div>` : ""}
+          ${p.productStatus === "discontinued" ? `<label class="field full"><span>終売理由</span><input data-master-field="discontinuedReason" value="${escapeHtml(p.discontinuedReason||"")}" placeholder="例：後継品発売のため"></label>` : ""}
           <div class="field"><span class="field-label">販売チャネル</span><div class="check-group">${channelChks}</div></div>
           <label class="field full"><span>メモ</span><textarea data-master-field="memo" rows="3">${escapeHtml(p.memo||"")}</textarea></label>
         </div>
@@ -2665,40 +3239,174 @@ function productDetailHtml() {
         </div>
       </div>
       </div>`;
-  } else if (tab === "ingredients") {
+  } else if (_tab === "ingredients") {
     tabContent = masterIngredientsTabHtml(p, d, isMissing);
-  } else if (tab === "cost") {
+  } else if (_tab === "label") {
+    // ラベル作成タブ — 編集画面に遷移して戻れるようにする
+    tabContent = `<div class="detail-section">
+      <h3 class="detail-section-title">🏷 ラベル作成・印刷</h3>
+      <p class="notice" style="margin-bottom:16px">この商品の食品表示ラベルを作成・印刷できます。</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+        <button class="action primary" data-label-from="${escapeHtml(p.id)}">✏️ ラベルを編集する</button>
+      </div>
+      <div class="karte-label-preview">
+        <div class="mlp-header">🏷 現在のラベルプレビュー</div>
+        <div class="mlp-label-wrap" style="margin-top:10px">${basicLabelHtml(p, d)}</div>
+        <div class="mlp-nutrition-wrap" style="margin-top:10px">${nutritionLabelHtml(d)}</div>
+      </div>
+    </div>`;
+  } else if (_tab === "spec") {
+    tabContent = `<div class="detail-section">
+      <h3 class="detail-section-title">📄 商品規格書</h3>
+      <p class="notice" style="margin-bottom:16px">この商品の規格書（A4）を生成・PDF印刷できます。規格書バージョン: <strong>v${escapeHtml(p.specVersion||"1")}</strong></p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+        <button class="action primary" data-spec-from="${escapeHtml(p.id)}">📋 規格書を開く</button>
+        <button class="action" data-action="karte-spec-version-up" data-pid="${escapeHtml(p.id)}">📈 バージョンアップ (v${escapeHtml(p.specVersion||"1")} → v${parseInt(p.specVersion||"1")+1})</button>
+      </div>
+      <div class="detail-grid">
+        <div class="field-grid">
+          <label class="field"><span>版数（Rev）</span><input data-master-field="specVersion" value="${escapeHtml(p.specVersion||"1")}" placeholder="例：1"></label>
+          <label class="field"><span>担当者</span><input data-master-field="specResponsible" value="${escapeHtml(p.specResponsible||"")}" placeholder="例：田中 太郎"></label>
+          <label class="field"><span>荷姿</span><input data-master-field="packaging" value="${escapeHtml(p.packaging||"")}" placeholder="例：段ボール箱"></label>
+          <label class="field"><span>ケース入数</span><input data-master-field="caseCount" value="${escapeHtml(p.caseCount||"")}" placeholder="例：12個"></label>
+          <label class="field full"><span>製品サイズ</span><input data-master-field="productSize" value="${escapeHtml(p.productSize||"")}" placeholder="例：W120×D80×H40mm / 150g"></label>
+        </div>
+      </div>
+    </div>`;
+  } else if (_tab === "cost") {
     tabContent = costEditorHtml(p);
-  } else if (tab === "history") {
-    const hist = loadHistory(p.id);
-    if (!hist.length) {
-      tabContent = `<div class="detail-section"><p class="notice">変更履歴がありません。「保存する」のたびに最大5件まで自動記録されます。</p></div>`;
-    } else {
-      const histRows = hist.map((h, i) => {
-        const diff = calcHistoryDiff(h.snapshot, p);
-        return `<div class="history-detail-row">
-          <div class="history-detail-meta">
-            <span class="history-date">${escapeHtml(h.savedAt)}</span>
-            ${h.savedBy && h.savedBy !== "—" ? `<span class="history-user-chip">👤 ${escapeHtml(h.savedBy)}</span>` : ""}
-            ${diff.length
-              ? `<span class="history-diff-chip">変更: <strong>${diff.map(l=>escapeHtml(l)).join("・")}</strong></span>`
-              : `<span class="history-diff-chip history-diff-same">現在と同じ内容</span>`}
-          </div>
-          <button class="action" data-restore-history="${i}" data-history-pid="${escapeHtml(p.id)}">この時点に戻す</button>
-        </div>`;
-      }).join("");
-      tabContent = `<div class="detail-section">
-        <h3 class="detail-section-title">変更履歴（最大5件）</h3>
-        <p class="notice" style="margin-bottom:12px">「この時点に戻す」を押すと現在の内容が上書きされます。</p>
-        <div class="history-detail-list">${histRows}</div>
-      </div>`;
-    }
-  } else if (tab === "check") {
+  } else if (_tab === "ai") {
     const issues = checkFoodLabel(p, d);
     const errorCount = issues.filter(i=>i.level==="error").length;
     const warnCount  = issues.filter(i=>i.level==="warn").length;
     const infoCount  = issues.filter(i=>i.level==="info").length;
-    // コンプライアンススコア（必須エラー1件=-15点、警告1件=-5点、最低0点）
+    const compScore  = Math.max(0, 100 - errorCount * 15 - warnCount * 5);
+    const scoreColor = compScore >= 90 ? "#16a34a" : compScore >= 70 ? "#ca8a04" : "#dc2626";
+    const scoreBg    = compScore >= 90 ? "#f0fdf4" : compScore >= 70 ? "#fefce8" : "#fef2f2";
+    const scoreBorder= compScore >= 90 ? "#bbf7d0" : compScore >= 70 ? "#fde68a" : "#fca5a5";
+    const scoreLabel = compScore >= 90 ? "適合" : compScore >= 70 ? "要確認" : "要修正";
+    const { changes: autoFixChanges } = normalizeLabelText(p);
+    const canAutoFix = autoFixChanges.length > 0;
+    const LEGAL_REFS = {
+      "name":"食品表示基準 第3条第1項（別表第1第1号）","ingredients":"食品表示基準 第3条第1項（第7号）",
+      "volume":"食品表示基準 第3条第1項（第1号）","bestBefore":"食品表示基準 第3条第1項（第9・10号）",
+      "storage":"食品表示基準 第3条第1項（第11号）","manufacturerName":"食品表示基準 第3条第1項（第12号）",
+      "manufacturerAddress":"食品表示基準 第3条第1項（第12号）","janCode":"JISコード X 0502",
+    };
+    const issueHtml = issues.length ? issues.map(i => {
+      const icon = i.level==="error" ? "🔴" : i.level==="warn" ? "🟡" : "🔵";
+      const fixEntry = i.field ? CHECK_FIX_MAP[i.field] : null;
+      const fixBtn = fixEntry ? `<button class="check-fix-btn" data-check-fix="${escapeHtml(i.field)}">修正する →</button>` : "";
+      const legalRef = i.field && LEGAL_REFS[i.field] ? `<span class="check-legal-ref">📋 ${escapeHtml(LEGAL_REFS[i.field])}</span>` : "";
+      return `<div class="check-issue check-issue-${i.level}">
+        <div class="check-issue-top"><span class="check-issue-msg">${icon} ${escapeHtml(i.msg)}</span>${fixBtn}</div>
+        ${legalRef}
+      </div>`;
+    }).join("") : "";
+    tabContent = `
+      <div class="detail-section">
+        <h3 class="detail-section-title">✅ 食品表示基準チェック</h3>
+        <div class="check-score-card" style="background:${scoreBg};border:1.5px solid ${scoreBorder}">
+          <div class="csc-left">
+            <div class="csc-score" style="color:${scoreColor}">${compScore}<span class="csc-unit">点</span></div>
+            <div class="csc-label" style="color:${scoreColor}">${scoreLabel}</div>
+          </div>
+          <div class="csc-right">
+            <div class="csc-bar-track"><div class="csc-bar-fill" style="width:${compScore}%;background:${scoreColor}"></div></div>
+            <div class="csc-counts">
+              ${errorCount > 0 ? `<span class="csc-err">🔴 必須エラー ${errorCount}件</span>` : ""}
+              ${warnCount  > 0 ? `<span class="csc-warn">🟡 警告 ${warnCount}件</span>` : ""}
+              ${infoCount  > 0 ? `<span class="csc-info">🔵 参考 ${infoCount}件</span>` : ""}
+              ${errorCount === 0 && warnCount === 0 ? `<span class="csc-ok">✅ 問題なし</span>` : ""}
+            </div>
+            ${canAutoFix ? `<button class="action" style="margin-top:8px;font-size:12px" data-action="master-auto-fix">✨ 自動整形（${autoFixChanges.length}件）</button>` : ""}
+          </div>
+        </div>
+        <div class="check-issues">${issueHtml || '<p class="notice" style="margin-top:12px">✅ 問題は見つかりませんでした。</p>'}</div>
+        <p class="notice" style="margin-top:8px">※ 食品表示基準（令和元年改正対応）に基づく参考情報です。最終確認は専門家にご相談ください。</p>
+      </div>
+      <div class="detail-section" style="margin-top:16px">
+        <h3 class="detail-section-title">🤖 AI機能</h3>
+        <div class="ai-karte-panel">
+          <div class="ai-panel-block">
+            <h4>✦ AI説明文生成</h4>
+            <p class="field-hint">楽天・Amazon・Yahoo・Instagram向けの商品説明文をAIが自動生成します。</p>
+            <button class="action primary" data-ai-from="${escapeHtml(p.id)}">✦ AI説明文を開く</button>
+          </div>
+          <div class="ai-panel-block">
+            <h4>💬 AI商品相談</h4>
+            <p class="field-hint">商品改善・食品表示・ネーミングについてAIに相談できます。</p>
+            <button class="action" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談を開く</button>
+          </div>
+        </div>
+      </div>`;
+  } else if (_tab === "history") {
+    const hist = loadHistory(p.id);
+    const tl   = loadTimeline(p.id);
+    // タイムラインイベントと変更履歴スナップショットをマージして時系列表示
+    const tlItems = tl.map(ev => ({
+      type: "event",
+      icon: ev.icon || "📌",
+      label: ev.label,
+      savedAt: ev.savedAt,
+      savedBy: ev.savedBy,
+      comment: ev.comment,
+      changedFields: ev.changedFields || [],
+    }));
+    const snapItems = hist.map((h, i) => ({
+      type: "snap",
+      icon: "💾",
+      label: "保存",
+      savedAt: h.savedAt,
+      savedBy: h.savedBy,
+      diff: calcHistoryDiff(h.snapshot, p),
+      restoreIdx: i,
+      pid: p.id,
+    }));
+    const allItems = [...tlItems, ...snapItems].sort((a, b) =>
+      (b.savedAt || "").localeCompare(a.savedAt || "")
+    );
+
+    if (!allItems.length) {
+      tabContent = `<div class="detail-section"><p class="notice">変更履歴がありません。「保存する」のたびに自動記録されます。</p></div>`;
+    } else {
+      const tlRows = allItems.map(item => {
+        if (item.type === "event") {
+          return `<div class="tl-row">
+            <div class="tl-dot-col"><span class="tl-icon-dot">${item.icon}</span></div>
+            <div class="tl-content">
+              <div class="tl-meta"><span class="tl-label-main">${escapeHtml(item.label)}</span>
+                <span class="tl-date">${escapeHtml(item.savedAt)}</span>
+                ${item.savedBy && item.savedBy !== "—" ? `<span class="tl-user">👤 ${escapeHtml(item.savedBy)}</span>` : ""}
+              </div>
+              ${item.comment ? `<div class="tl-comment">${escapeHtml(item.comment)}</div>` : ""}
+              ${item.changedFields.length ? `<div class="tl-fields">変更: ${item.changedFields.map(f=>`<span class="tl-field-chip">${escapeHtml(f)}</span>`).join("")}</div>` : ""}
+            </div>
+          </div>`;
+        } else {
+          return `<div class="tl-row">
+            <div class="tl-dot-col"><span class="tl-icon-dot">💾</span></div>
+            <div class="tl-content">
+              <div class="tl-meta"><span class="tl-label-main">保存</span>
+                <span class="tl-date">${escapeHtml(item.savedAt)}</span>
+                ${item.savedBy && item.savedBy !== "—" ? `<span class="tl-user">👤 ${escapeHtml(item.savedBy)}</span>` : ""}
+                <button class="action" style="font-size:11px;padding:2px 8px;margin-left:8px" data-restore-history="${item.restoreIdx}" data-history-pid="${escapeHtml(item.pid)}">↩ 戻す</button>
+              </div>
+              ${item.diff.length ? `<div class="tl-fields">変更: ${item.diff.map(f=>`<span class="tl-field-chip">${escapeHtml(f)}</span>`).join("")}</div>` : `<div class="tl-comment muted">変更なし</div>`}
+            </div>
+          </div>`;
+        }
+      }).join("");
+      tabContent = `<div class="detail-section">
+        <h3 class="detail-section-title">📜 タイムライン・変更履歴</h3>
+        <div class="tl-list">${tlRows}</div>
+      </div>`;
+    }
+  } else if (false && tab === "check") { // 統合済み → _tab === "ai" で処理
+    const issues = checkFoodLabel(p, d);
+    const errorCount = issues.filter(i=>i.level==="error").length;
+    const warnCount  = issues.filter(i=>i.level==="warn").length;
+    const infoCount  = issues.filter(i=>i.level==="info").length;
     const compScore  = Math.max(0, 100 - errorCount * 15 - warnCount * 5);
     const scoreColor = compScore >= 90 ? "#16a34a" : compScore >= 70 ? "#ca8a04" : "#dc2626";
     const scoreBg    = compScore >= 90 ? "#f0fdf4" : compScore >= 70 ? "#fefce8" : "#fef2f2";
@@ -2750,16 +3458,24 @@ function productDetailHtml() {
         <div class="check-issues">${issueHtml || '<p class="notice" style="margin-top:12px">✅ 問題は見つかりませんでした。すべての必須項目が入力されています。</p>'}</div>
         <p class="notice" style="margin-top:16px">※ このチェックは食品表示基準（令和元年改正対応）に基づく参考情報です。最終確認は専門家にご相談ください。</p>
       </div>`;
-  } else if (tab === "approval") {
+  } else if (_tab === "approval") {
     tabContent = approvalTabHtml(p);
   }
 
   // 前後移動ナビゲーション
   const sortedForNav = [...products].sort((a,b) => {
-    if (masterSort === "name") return (a.name||"").localeCompare(b.name||"", "ja");
+    if (masterSort === "name") return (a.internalName||a.name||"").localeCompare(b.internalName||b.name||"", "ja");
     if (masterSort === "completion") { const da=derive(a),db=derive(b); return calcCompletion(b,db).pct-calcCompletion(a,da).pct; }
+    if (masterSort === "expiryDate") {
+      if (!a.expiryDate && !b.expiryDate) return 0;
+      if (!a.expiryDate) return 1; if (!b.expiryDate) return -1;
+      return a.expiryDate.localeCompare(b.expiryDate);
+    }
+    if (masterSort === "releasedAt") return new Date(b.releasedAt||0) - new Date(a.releasedAt||0);
     return (b.updatedAt||"").localeCompare(a.updatedAt||"");
   }).filter(x => {
+    if (x.phase !== (p.phase || "released")) return false;
+    if (masterSearch && !(x.internalName||"").includes(masterSearch) && !(x.name||"").includes(masterSearch) && !(x.code||"").includes(masterSearch) && !(x.category||"").includes(masterSearch)) return false;
     if (masterPipelineFilter && x.productStatus !== masterPipelineFilter) return false;
     if (masterCategoryFilter && x.category !== masterCategoryFilter) return false;
     return true;
@@ -2771,9 +3487,12 @@ function productDetailHtml() {
 
   return saasLayout(`${escapeHtml(p.name||"新規商品")} – 商品詳細`, `
     <div class="detail-breadcrumb">
-      <button class="bread-link" data-nav="products">← 商品管理</button>
+      ${p.phase === "development"
+        ? `<button class="bread-link" data-nav="dev-products">← 開発中商品</button>`
+        : `<button class="bread-link" data-nav="products">← 商品管理</button>`}
       <span class="bread-sep">›</span>
       <span class="bread-current">${escapeHtml(p.name||"新規商品")}</span>
+      <span class="phase-chip phase-chip--${p.phase === "development" ? "dev" : "released"}">${p.phase === "development" ? "🔬 開発中" : p.productStatus === "discontinued" ? "⬛ 終売" : "✅ 発売中"}</span>
       ${sortedForNav.length > 1 ? `<div class="detail-nav-arrows">
         <button class="detail-nav-btn" aria-label="${prevProd?`前の商品: ${escapeHtml(prevProd.name||"前の商品")}`:"前の商品（なし）"}" ${prevProd?`data-nav-product-detail="${escapeHtml(prevProd.id)}" title="${escapeHtml(prevProd.name||"前の商品")}"`:`disabled`}>◀</button>
         <span class="detail-nav-pos">${escapeHtml(navPosLabel)}</span>
@@ -2783,13 +3502,13 @@ function productDetailHtml() {
     <div class="detail-header-actions">
       <span id="master-autosave-status" class="autosave-status${masterAutoSaveStatus==="saved"?" autosave-ok":masterAutoSaveStatus==="editing"?" autosave-editing":""}">${masterAutoSaveStatus==="saved"?"保存済み":masterAutoSaveStatus==="editing"?"編集中…":""}</span>
       <button class="action primary" data-action="save-master">保存する</button>
-      <button class="action" data-label-from="${escapeHtml(p.id)}">🏷 ラベル編集</button>
-      <button class="action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
-      <button class="action" data-ai-from="${escapeHtml(p.id)}">✦ AI説明文</button>
+      ${p.phase === "development" ? `<button class="action action--release${p.productStatus === "approved" ? " action--release--ready" : ""}" data-action="release-product" data-pid="${escapeHtml(p.id)}" title="${p.productStatus === "approved" ? "承認済み：発売できます" : "発売済み商品として商品管理へ移行"}">🚀 発売する</button>` : ""}
+      ${p.phase === "released" && p.productStatus !== "discontinued" ? `<button class="action action--discontinue" data-action="discontinue-product" data-pid="${escapeHtml(p.id)}" title="この商品を終売にする">🔴 終売にする</button>` : ""}
       <button class="action" data-dup-goto="${escapeHtml(p.id)}" title="この商品のコピーを作成して編集画面へ">複製</button>
     </div>
+    ${summaryStrip}
     ${tabNav}
-    <div class="kbd-hints kbd-hints--detail"><kbd>1</kbd>〜<kbd>6</kbd> タブ切替 &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>S</kbd> 保存 &nbsp;·&nbsp; <kbd>Esc</kbd> 一覧へ戻る</div>
+    <div class="kbd-hints kbd-hints--detail"><kbd>1</kbd>〜<kbd>8</kbd> タブ切替 &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>S</kbd> 保存 &nbsp;·&nbsp; <kbd>Esc</kbd> 一覧へ戻る</div>
     ${tabContent}
     <button class="fab-save" data-action="save-master">保存する</button>
   `);
@@ -3861,10 +4580,9 @@ async function runAiLabelCheck() {
 // ══ AI商品登録メニュー ══════════════════════════════════════════════════
 
 const REGISTER_MENU = [
-  { id: "photo",    icon: "📷", label: "写真から登録",        desc: "商品写真・裏面・パッケージをAIで解析して自動登録", badge: "おすすめ" },
-  { id: "template", icon: "📋", label: "テンプレートから作成", desc: "カテゴリ別の初期設定を適用して素早く登録" },
-  { id: "spec",     icon: "📄", label: "規格書から登録",      desc: "PDF・Excel・Word の規格書をAIが解析して登録" },
-  { id: "manual",   icon: "✏️", label: "手入力",             desc: "従来どおり手入力で商品登録" },
+  { id: "photo",  icon: "📷", label: "写真から登録",   desc: "商品写真・裏面・パッケージをAIで解析して自動登録", badge: "おすすめ" },
+  { id: "spec",   icon: "📄", label: "規格書から登録", desc: "PDF・Excel・Word の規格書をAIが解析して登録" },
+  { id: "manual", icon: "✏️", label: "手動で登録",    desc: "手入力で商品情報を登録" },
 ];
 
 // ── テンプレート選択ページ ────────────────────────────────────────────
@@ -3894,7 +4612,7 @@ function templateSelectHtml() {
     <div class="tpl-section-label">既存商品をコピーして開始</div>
     <div class="tpl-copy-list">
       ${recentForTpl.map(p => {
-        const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"draft"))||PRODUCT_STATUSES[0];
+        const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||((p.phase||"released")==="development"?"draft":"on_sale")))||PRODUCT_STATUSES[0];
         return `<button class="tpl-copy-item" data-copy-from="${escapeHtml(p.id)}">
           ${p.imageDataUrl ? `<img class="tpl-copy-thumb" src="${p.imageDataUrl}" alt="" onerror="this.onerror=null;this.outerHTML='<span class=\\'tpl-copy-thumb-ph\\'>📦</span>'">` : `<span class="tpl-copy-thumb-ph">📦</span>`}
           <div class="tpl-copy-info">
@@ -4791,6 +5509,18 @@ async function activateTrialCode() {
   const code = inp?.value?.trim();
   if (!code) { showStatus("モニターコードを入力してください"); return; }
   const btn = document.getElementById("trial-activate-btn");
+
+  // ローカル認証コード（モニター・テスター向け）
+  const LOCAL_CODES = ["0000", "FOODPILOT", "MONITOR2026"];
+  if (LOCAL_CODES.includes(code.toUpperCase())) {
+    currentPlan = "trial";
+    safeSet("food-label-plan", "trial");
+    safeSet("food-label-license-key", code);
+    showStatus("✓ モニタープランが有効になりました！（全機能無制限）", { duration: 5000 });
+    render();
+    return;
+  }
+
   if (btn) { btn.disabled = true; btn.textContent = "確認中..."; }
   try {
     const res = await fetch("/api/activate", {
@@ -4810,7 +5540,7 @@ async function activateTrialCode() {
       if (btn) { btn.disabled = false; btn.textContent = "参加する"; }
     }
   } catch {
-    showStatus("通信エラーが発生しました。", { duration: 5000 });
+    showStatus("コードが正しくありません。", { duration: 5000 });
     if (btn) { btn.disabled = false; btn.textContent = "参加する"; }
   }
 }

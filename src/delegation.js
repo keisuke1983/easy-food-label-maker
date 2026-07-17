@@ -1073,7 +1073,7 @@ function setupDelegation() {
       saveProducts(); render(); return;
     }
 
-    // [data-check-fix] — チェックタブの「修正する →」ジャンプ
+    // [data-check-fix] — チェックタブの「フィールドへ移動 →」ジャンプ
     const checkFixEl = t.closest("[data-check-fix]");
     if (checkFixEl) {
       const field = checkFixEl.dataset.checkFix;
@@ -1086,6 +1086,42 @@ function setupDelegation() {
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           el.focus();
+          el.classList.add("field-highlight");
+          setTimeout(() => el.classList.remove("field-highlight"), 2000);
+        }
+      });
+      return;
+    }
+
+    // [data-ps-field][data-ps-value] — ⑨ 能動型AI提案「適用」ボタン
+    const psApplyEl = t.closest("[data-ps-field][data-ps-value]");
+    if (psApplyEl) {
+      const field = psApplyEl.dataset.psField;
+      const value = psApplyEl.dataset.psValue;
+      const p = products.find(x => x.id === productDetailId);
+      if (!p || !field) return;
+      const oldVal = p[field];
+      p[field] = value;
+      saveTimelineEvent(p.id, "field_changed", `💡 AI提案を適用（${field}）`, "",
+        [field], { [field]: { from: oldVal, to: value } });
+      saveProducts();
+      showStatus(`✓ ${field} を更新しました`);
+      render();
+      return;
+    }
+
+    // [data-ps-field] (navigate only, no data-ps-value) — 提案「移動 →」ボタン
+    const psNavEl = t.closest(".ps-nav-btn[data-ps-field]");
+    if (psNavEl) {
+      const field = psNavEl.dataset.psField;
+      const tab   = psNavEl.dataset.detailTab;
+      if (tab) productDetailTab = tab;
+      render();
+      if (field) requestAnimationFrame(() => {
+        const el = document.querySelector(field);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (el.focus) el.focus();
           el.classList.add("field-highlight");
           setTimeout(() => el.classList.remove("field-highlight"), 2000);
         }

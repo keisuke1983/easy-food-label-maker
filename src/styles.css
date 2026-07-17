@@ -4140,3 +4140,26 @@ div.db2-kpi-card { cursor: default; }
 }
 .no-img-banner-ico { font-size: 22px; flex-shrink: 0; }
 
+/* ── ⑨ 能動型AI提案 (ps-*) ── */
+.ps-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; background: #f1f5f9; color: #475569; border-radius: 99px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
+.ps-badge--alert { background: #fee2e2; color: #b91c1c; }
+.ps-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.ps-item { border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; background: #fafafa; }
+.ps-item-hd { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ps-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ps-dot--high { background: #ef4444; }
+.ps-dot--med  { background: #f59e0b; }
+.ps-dot--low  { background: #3b82f6; }
+.ps-ico { font-size: 15px; }
+.ps-title { font-size: 13px; font-weight: 600; color: var(--text-base, #1e293b); flex: 1; }
+.ps-apply-btn { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 6px; border: 1.5px solid #2563eb; background: #eff6ff; color: #2563eb; cursor: pointer; white-space: nowrap; }
+.ps-apply-btn:hover { background: #2563eb; color: #fff; }
+.ps-nav-btn { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 6px; border: 1.5px solid #94a3b8; background: transparent; color: #475569; cursor: pointer; white-space: nowrap; }
+.ps-nav-btn:hover { border-color: #2563eb; color: #2563eb; }
+.ps-desc { font-size: 12px; color: #64748b; margin: 6px 0 0; line-height: 1.6; }
+.ps-fix-box { font-size: 12px; margin-top: 8px; padding: 7px 10px; background: #f0fdf4; border-left: 3px solid #16a34a; border-radius: 4px; color: #15803d; line-height: 1.5; }
+.ps-empty { font-size: 13px; color: #94a3b8; text-align: center; padding: 16px 0; }
+
+/* ── ⑩ チェック fix テキスト ── */
+.check-issue-fix { font-size: 12px; margin-top: 6px; padding: 6px 10px; background: #eff6ff; border-left: 3px solid #2563eb; border-radius: 4px; color: #1d4ed8; line-height: 1.5; }
+

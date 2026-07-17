@@ -386,32 +386,63 @@ function productDetailHtml() {
     const errorCount = issues.filter(i=>i.level==="error").length;
     const warnCount  = issues.filter(i=>i.level==="warn").length;
     const infoCount  = issues.filter(i=>i.level==="info").length;
-    const compScore  = Math.max(0, 100 - errorCount * 15 - warnCount * 5);
+    const compScore  = Math.max(0, 100 - errorCount * 15 - warnCount * 5 - infoCount);
     const scoreColor = compScore >= 90 ? "#16a34a" : compScore >= 70 ? "#ca8a04" : "#dc2626";
     const scoreBg    = compScore >= 90 ? "#f0fdf4" : compScore >= 70 ? "#fefce8" : "#fef2f2";
     const scoreBorder= compScore >= 90 ? "#bbf7d0" : compScore >= 70 ? "#fde68a" : "#fca5a5";
     const scoreLabel = compScore >= 90 ? "適合" : compScore >= 70 ? "要確認" : "要修正";
     const { changes: autoFixChanges } = normalizeLabelText(p);
     const canAutoFix = autoFixChanges.length > 0;
-    const LEGAL_REFS = {
-      "name":"食品表示基準 第3条第1項（別表第1第1号）","ingredients":"食品表示基準 第3条第1項（第7号）",
-      "volume":"食品表示基準 第3条第1項（第1号）","bestBefore":"食品表示基準 第3条第1項（第9・10号）",
-      "storage":"食品表示基準 第3条第1項（第11号）","manufacturerName":"食品表示基準 第3条第1項（第12号）",
-      "manufacturerAddress":"食品表示基準 第3条第1項（第12号）","janCode":"JISコード X 0502",
-    };
+
+    // ── ⑩ 強化チェック：fix テキストを各 issue に表示 ──
     const issueHtml = issues.length ? issues.map(i => {
       const icon = i.level==="error" ? "🔴" : i.level==="warn" ? "🟡" : "🔵";
       const fixEntry = i.field ? CHECK_FIX_MAP[i.field] : null;
-      const fixBtn = fixEntry ? `<button class="check-fix-btn" data-check-fix="${escapeHtml(i.field)}">修正する →</button>` : "";
-      const legalRef = i.field && LEGAL_REFS[i.field] ? `<span class="check-legal-ref">📋 ${escapeHtml(LEGAL_REFS[i.field])}</span>` : "";
+      const fixBtn = fixEntry ? `<button class="check-fix-btn" data-check-fix="${escapeHtml(i.field)}">フィールドへ移動 →</button>` : "";
       return `<div class="check-issue check-issue-${i.level}">
-        <div class="check-issue-top"><span class="check-issue-msg">${icon} ${escapeHtml(i.msg)}</span>${fixBtn}</div>
-        ${legalRef}
+        <div class="check-issue-top">
+          <span class="check-issue-msg">${icon} ${escapeHtml(i.msg)}</span>${fixBtn}
+        </div>
+        ${i.fix ? `<div class="check-issue-fix">💡 修正案: ${escapeHtml(i.fix)}</div>` : ""}
       </div>`;
     }).join("") : "";
+
+    // ── ⑨ 能動型AI提案パネル ──
+    const suggestions = generateProactiveSuggestions(p, d);
+    const highSugs = suggestions.filter(s=>s.priority==="high");
+    const otherSugs = suggestions.filter(s=>s.priority!=="high");
+    const sugHtml = suggestions.length ? suggestions.map(s => {
+      let actionBtn = "";
+      if (s.fixAction) {
+        if (s.fixAction.type === "field-fix") {
+          actionBtn = `<button class="ps-apply-btn" data-ps-field="${escapeHtml(s.fixAction.field)}" data-ps-value="${escapeHtml(s.fixAction.value)}" title="クリックで適用">✓ 適用</button>`;
+        } else if (s.fixAction.type === "action") {
+          actionBtn = `<button class="ps-apply-btn" data-action="${escapeHtml(s.fixAction.action)}">${escapeHtml(s.fixAction.label)}</button>`;
+        } else if (s.fixAction.type === "navigate") {
+          actionBtn = `<button class="ps-nav-btn" data-detail-tab="${escapeHtml(s.fixAction.tab)}" data-ps-field="${escapeHtml(s.fixAction.field||"")}">移動 →</button>`;
+        }
+      }
+      const priorityDot = s.priority==="high" ? "ps-dot--high" : s.priority==="medium" ? "ps-dot--med" : "ps-dot--low";
+      return `<div class="ps-item">
+        <div class="ps-item-hd">
+          <span class="ps-dot ${priorityDot}"></span>
+          <span class="ps-ico">${s.icon}</span>
+          <span class="ps-title">${escapeHtml(s.title)}</span>
+          ${actionBtn}
+        </div>
+        <p class="ps-desc">${escapeHtml(s.desc)}</p>
+        ${s.fix ? `<div class="ps-fix-box">→ ${escapeHtml(s.fix)}</div>` : ""}
+      </div>`;
+    }).join("") : `<p class="ps-empty">現時点で改善提案はありません。表示基準チェックをご確認ください。</p>`;
+
     tabContent = `
       <div class="detail-section">
-        <h3 class="detail-section-title">✅ 食品表示基準チェック</h3>
+        <h3 class="detail-section-title">💡 AIの改善提案 <span class="ps-badge${highSugs.length ? " ps-badge--alert" : ""}">${suggestions.length}件</span></h3>
+        <div class="ps-list">${sugHtml}</div>
+      </div>
+
+      <div class="detail-section" style="margin-top:16px">
+        <h3 class="detail-section-title">✅ 食品表示基準チェック <span style="font-size:11px;font-weight:400;color:#64748b">（令和5年改正対応）</span></h3>
         <div class="check-score-card" style="background:${scoreBg};border:1.5px solid ${scoreBorder}">
           <div class="csc-left">
             <div class="csc-score" style="color:${scoreColor}">${compScore}<span class="csc-unit">点</span></div>
@@ -429,8 +460,9 @@ function productDetailHtml() {
           </div>
         </div>
         <div class="check-issues">${issueHtml || '<p class="notice" style="margin-top:12px">✅ 問題は見つかりませんでした。</p>'}</div>
-        <p class="notice" style="margin-top:8px">※ 食品表示基準（令和元年改正対応）に基づく参考情報です。最終確認は専門家にご相談ください。</p>
+        <p class="notice" style="margin-top:8px">※ 食品表示基準（令和5年改正・くるみ義務化対応）に基づく参考情報です。最終確認は専門家にご相談ください。</p>
       </div>
+
       <div class="detail-section" style="margin-top:16px">
         <h3 class="detail-section-title">🤖 AI機能</h3>
         <div class="ai-karte-panel">
@@ -734,107 +766,322 @@ function approvalTabHtml(p) {
 // ── ⑦ 食品表示法チェック ─────────────────────────────────────────────
 function checkFoodLabel(p, d) {
   const issues = [];
-  const err  = (msg, field) => issues.push({ level: "error", msg, field });
-  const warn = (msg, field) => issues.push({ level: "warn",  msg, field });
-  const info = (msg)        => issues.push({ level: "info",  msg });
+  const err  = (msg, field, fix) => issues.push({ level: "error", msg, field, fix });
+  const warn = (msg, field, fix) => issues.push({ level: "warn",  msg, field, fix });
+  const info = (msg, field, fix) => issues.push({ level: "info",  msg, field, fix });
 
-  // 必須項目（食品表示基準 第3条）
-  if (!p.name?.trim())                                          err("「名称」は必須項目です（食品表示基準 第3条）", "name");
-  if (!(p.ingredients||[]).some(i=>i.name?.trim()))             err("「原材料名」は必須項目です", "ingredients");
-  if (!p.volume?.trim())                                        err("「内容量」は必須項目です", "volume");
-  if (!p.bestBefore?.trim())                                    err("「賞味期限」または「消費期限」は必須項目です", "bestBefore");
-  if (!d.storage?.trim())                                       err("「保存方法」は必須項目です", "storage");
-  if (!p.manufacturerName?.trim())                              err("「製造者名」は必須項目です（名称・住所・電話番号）", "manufacturerName");
-  if (!p.manufacturerAddress?.trim())                           err("「製造者住所」は必須項目です", "manufacturerAddress");
+  // ── 必須項目（食品表示基準 第3条）──
+  if (!p.name?.trim())
+    err("「名称」は必須項目です（食品表示基準 第3条第1項 第1号）", "name",
+        "商品の一般的名称を入力してください（例：「ショートケーキ」「しょうゆ味スナック菓子」）");
+  if (!(p.ingredients||[]).some(i=>i.name?.trim()))
+    err("「原材料名」は必須項目です（食品表示基準 第3条第1項 第7号）", "ingredients",
+        "原材料タブで原材料を1件以上登録してください");
+  if (!p.volume?.trim())
+    err("「内容量」は必須項目です（計量法・食品表示基準 第3条第1項 第8号）", "volume",
+        "「150g」「500mL」「6個入り（300g）」のように数値と単位を明記してください");
+  if (!p.bestBefore?.trim())
+    err("「賞味期限」または「消費期限」は必須項目です（食品表示基準 第3条第1項 第9・10号）", "bestBefore",
+        "「賞味期限 2026.10.01」または「製造日より90日」の形式で入力してください");
+  if (!d.storage?.trim())
+    err("「保存方法」は必須項目です（食品表示基準 第3条第1項 第11号）", "storage",
+        "「直射日光・高温多湿を避け、常温で保存してください」または「10℃以下で保存してください」");
+  if (!p.manufacturerName?.trim())
+    err("「製造者名」は必須項目です（食品表示基準 第3条第1項 第12号）", "manufacturerName",
+        "法人名と事業者種別（製造者・加工者・販売者）を明記してください");
+  if (!p.manufacturerAddress?.trim())
+    err("「製造者住所」は必須項目です（食品表示基準 第3条第1項 第12号）", "manufacturerAddress",
+        "都道府県から番地まで入力してください（例：東京都渋谷区〇〇1-2-3）");
 
-  // アレルゲン
   const ings = (p.ingredients||[]).filter(i=>i.name?.trim());
+
+  // ── アレルゲン28品目チェック（令和5年改正：くるみ義務化） ──
+  const MANDATORY_ALLERGENS = ["えび","かに","小麦","そば","卵","乳","落花生","くるみ"];
+  const ingNamesAll = ings.map(i=>i.name||"").join("　");
   if (ings.length && !d.allergens.length && p.allergensMode !== "manual") {
-    info("アレルゲンが検出されていません。原材料名を確認してください。");
+    info("アレルゲンが自動検出されていません。原材料名が正確かご確認ください。",
+         null,
+         "原材料名をカタカナ・ひらがなで登録すると自動検出精度が上がります（例：「小麦粉」「卵」「えび」）");
+  }
+  // くるみ特別チェック（2023年9月1日義務化）
+  if (ingNamesAll.includes("くるみ") || ingNamesAll.includes("クルミ") || ingNamesAll.includes("胡桃")) {
+    const labelStr = d.ingLabel || "";
+    const hasKurumiLabel = labelStr.includes("くるみ") || labelStr.includes("（くるみを含む）") || labelStr.includes("（クルミを含む）");
+    if (!hasKurumiLabel) {
+      warn("くるみは令和5年9月1日より特定原材料（義務表示）に追加されました。ラベルへのくるみ表示を確認してください（食品表示基準 別表第3）",
+           "ingredients",
+           "原材料名に「くるみ」または括弧書きで「（くるみを含む）」を追加してください");
+    }
   }
 
-  // 添加物区分「／」
+  // ── 添加物区分「／」 ──
   const hasAdditives = ings.some(i=>isAdditive(i.name));
   const hasFoods     = ings.some(i=>!isAdditive(i.name));
   if (hasAdditives && hasFoods && d.ingLabel && !d.ingLabel.includes("／")) {
-    warn("食品原材料と添加物は「／」で区切る必要があります（食品表示基準 第3条）");
+    warn("食品原材料と食品添加物は「／」で区切る必要があります（食品表示基準 第3条第1項 第7号）",
+         "ingredients",
+         "食品原材料をすべて列挙した後に「／」を入れ、続けて添加物を表示してください（例：小麦粉、砂糖、バター／膨張剤）");
   }
 
-  // 内容量の形式
-  if (p.volume && !/\d/.test(p.volume)) {
-    warn("内容量に数値が含まれていません。「100g」「500ml」「6個入り」等の形式で入力してください", "volume");
+  // ── 内容量の形式 ──
+  if (p.volume?.trim() && !/\d/.test(p.volume)) {
+    warn("内容量に数値が含まれていません（計量法 第12条）", "volume",
+         "「100g」「500mL」「1個（50g）」のように数値と単位を明記してください");
+  }
+  // 単位の正規化チェック（mL大文字義務）
+  if (p.volume?.trim() && /\d\s*ml(?!\s*[以上下])/.test(p.volume)) {
+    warn("液体の単位は「ml」ではなく「mL」（大文字L）が正式表記です（JIS Z 8000-1）", "volume",
+         p.volume.replace(/(\d\s*)ml/g, "$1mL"));
   }
 
-  // JANコード桁数
-  if (p.janCode?.trim() && ![8,13].includes(p.janCode.trim().length)) {
-    warn(`JANコードは8桁または13桁です（現在 ${p.janCode.trim().length} 桁）`, "janCode");
+  // ── JANコード桁数 ──
+  if (p.janCode?.trim() && ![8,13].includes(p.janCode.trim().replace(/\D/g,"").length)) {
+    warn(`JANコードは8桁または13桁です（現在 ${p.janCode.trim().replace(/\D/g,"").length} 桁）（JIS X 0502）`, "janCode",
+         "JANコードの桁数を確認してください（EAN-8は8桁、EAN-13は13桁）");
   }
 
-  // 栄養成分の重量未入力
+  // ── 栄養成分の重量未入力 ──
   const hasWeights = ings.some(i=>parseFloat(i.weight)>0);
   if (ings.length && !hasWeights && p.nutritionMode !== "manual") {
-    info("原材料の重量(g)を入力すると栄養成分が自動計算されます");
+    info("原材料の重量(g)を入力すると栄養成分が自動計算されます", null,
+         "原材料タブの各行に重量(g)を入力してください（合計が商品の内容量になるよう設定）");
   }
 
-  // 賞味期限の形式チェック
+  // ── 賞味期限の形式チェック ──
   const bb = p.bestBefore?.trim();
-  if (bb && !/^(\d{4}[.\/\-年]|\d{2}[.\/\-年]|製造日より)/.test(bb)) {
-    warn("賞味期限の形式を確認してください（例：2026/10/01、製造日より90日）", "bestBefore");
+  if (bb && !/^(\d{4}[.\/\-年]|\d{2}[.\/\-年]|製造日より|製造日から|別途)/.test(bb)) {
+    warn("賞味期限の形式を確認してください（食品表示基準 第3条第1項 第9号）", "bestBefore",
+         "「2026/10/01」「2026年10月」「製造日より90日」のいずれかの形式を推奨します");
+  }
+  // 年月日のみ（年月表記の確認）
+  if (bb && /^\d{4}[.\/\-年]\d{1,2}[.\/\-月]?\d{2,}/.test(bb)) {
+    // 日付まで入っている場合、3ヶ月超の商品は年月だけでも可
+    info("3ヶ月を超える長期保存品は「年月」のみの表示も認められます（食品表示基準 第3条第1項 第9号ただし書き）");
   }
 
-  // 原材料の配合順チェック（重量が3件以上入力されている場合のみ判定）
+  // ── 原材料の配合順チェック ──
   const ingsWithWeight = ings.filter(i => parseFloat(i.weight) > 0);
   if (ingsWithWeight.length >= 3) {
     const weights = ingsWithWeight.map(i => parseFloat(i.weight));
     const isDescending = weights.every((w, idx) => idx === 0 || weights[idx - 1] >= w);
     if (!isDescending) {
-      warn("原材料名は配合量の多い順に表示する義務があります（食品表示基準 第3条）。原材料タブの「重量順に並べ直す」で修正してください");
+      warn("原材料名は配合量の多い順（重量降順）に表示する義務があります（食品表示基準 第3条第1項 第7号）",
+           "ingredients",
+           "原材料タブの「重量順に並べ直す」ボタンをクリックすると自動修正できます");
     }
   }
 
-  // 名称と食品添加物の混在チェック（名称に「添加物」「保存料」等が含まれていないか）
+  // ── 名称に添加物が混在していないかチェック ──
   const additiveKeywordsInName = ["添加物","保存料","着色料","甘味料","香料","酸化防止剤"].filter(k => (p.name||"").includes(k));
   if (additiveKeywordsInName.length) {
-    warn(`「名称」フィールドに添加物名（${additiveKeywordsInName.join("・")}）が含まれています。名称は商品の一般的名称を入力し、添加物は原材料タブで登録してください`);
+    warn(`「名称」フィールドに添加物名（${additiveKeywordsInName.join("・")}）が含まれています（食品表示基準 第3条第1項 第1号）`,
+         "name",
+         "名称は商品の一般的名称のみを入力し、添加物は原材料タブで別途登録してください");
   }
 
-  // 原産地チェック（農産物・畜産物・水産物が主原料と推定される場合）
+  // ── 原産地チェック ──
   if (!p.originCountry?.trim()) {
     const originKeywords = ["牛肉","豚肉","鶏肉","羊肉","馬肉","魚","鮭","マグロ","エビ","カニ","イカ","タコ","米","小麦","大豆","野菜","果物","りんご","みかん","いちご","ぶどう","トマト","キャベツ","にんじん","じゃがいも","さつまいも"];
-    const ingNames = ings.map(i=>i.name||"").join("・");
-    const needsOrigin = originKeywords.some(k => ingNames.includes(k));
+    const needsOrigin = originKeywords.some(k => ingNamesAll.includes(k));
     if (needsOrigin) {
-      info("農産物・畜産物・水産物が主原料に含まれる可能性があります。「原産地」の表示が義務付けられている場合があります（食品表示基準 第3条の2）。基本情報タブの「原産地」欄をご確認ください");
+      info("農産物・畜産物・水産物が主原料に含まれる可能性があります（食品表示基準 第3条の2）", null,
+           "「原産地」欄に主な原材料の産地を入力してください（例：国産、北海道産、アメリカ産）");
     }
   }
 
-  // 栄養成分の整合性チェック（4・9・4ルール）
+  // ── 栄養成分の整合性チェック（4・9・4ルール） ──
   const nutr = d.nutrition;
   const nKcal    = parseFloat(nutr.kcal)    || 0;
   const nProtein = parseFloat(nutr.protein) || 0;
   const nFat     = parseFloat(nutr.fat)     || 0;
   const nCarbs   = parseFloat(nutr.carbs)   || 0;
+  const nSalt    = parseFloat(nutr.salt)    || 0;
   if (nKcal > 0 || nProtein > 0 || nFat > 0 || nCarbs > 0) {
     const nutrUnit = p.nutritionUnit || "100g当たり";
     if (nutrUnit === "100g当たり" && (nProtein + nFat + nCarbs) > 100) {
-      warn(`栄養成分の合計（たんぱく質 ${nProtein}g＋脂質 ${nFat}g＋炭水化物 ${nCarbs}g＝${(nProtein+nFat+nCarbs).toFixed(1)}g）が100gを超えています。表示単位「${nutrUnit}」に対して数値が不正の可能性があります`);
+      warn(`栄養成分の合計（たんぱく質${nProtein}g＋脂質${nFat}g＋炭水化物${nCarbs}g＝${(nProtein+nFat+nCarbs).toFixed(1)}g）が100gを超えています`,
+           null,
+           "表示単位「100g当たり」に対して値が不正な可能性があります。各値を見直すか、表示単位を変更してください");
     }
     const calcKcal = Math.round(nProtein * 4 + nFat * 9 + nCarbs * 4);
     if (nKcal > 0 && calcKcal > 0 && Math.abs(nKcal - calcKcal) > Math.max(50, nKcal * 0.3)) {
-      info(`エネルギー ${nKcal}kcal と三大栄養素から算出した値（約 ${calcKcal}kcal）に差があります（4・9・4ルール）。栄養成分が正確かご確認ください`);
+      warn(`エネルギー ${nKcal}kcal と三大栄養素から算出した値（約 ${calcKcal}kcal）に大きな差があります（4・9・4ルール）`,
+           null,
+           `計算式: たんぱく質×4 + 脂質×9 + 炭水化物×4 = ${calcKcal}kcal。実測値と乖離が大きい場合は栄養分析機関での再測定を検討してください`);
+    }
+    // 食塩相当量の範囲チェック（100g中で10g以上は稀）
+    if (nSalt > 10 && nutrUnit === "100g当たり") {
+      warn(`食塩相当量 ${nSalt}g（100g当たり）は一般的な食品の範囲を超えています`,
+           null,
+           "食塩相当量＝ナトリウム(mg) × 2.54 ÷ 1000 で計算されます。ナトリウム量から再計算してください");
     }
   }
 
-  // アレルゲン括弧書きガイダンス
+  // ── アレルゲン括弧書きガイダンス ──
   if (d.allergens.length > 0 && d.ingLabel) {
-    const ingStr = d.ingLabel;
-    const hasBracket = d.allergens.some(a => ingStr.includes(`（${a}`) || ingStr.includes(`(${a}`));
+    const hasBracket = d.allergens.some(a => (d.ingLabel||"").includes(`（${a}`) || (d.ingLabel||"").includes(`(${a}`));
     if (!hasBracket) {
-      info(`アレルゲン（${d.allergens.join("・")}）を原材料名の中に括弧書きで表示する方法もあります（例：小麦粉（小麦を含む））。現在は別行表示のみです`);
+      info(`アレルゲン（${d.allergens.join("・")}）を原材料名中に括弧書きする方法もあります`, null,
+           `例：「小麦粉（小麦を含む）」「マヨネーズ（卵・大豆を含む）」のように当該原材料の直後に括弧書きで表示`);
     }
+  }
+
+  // ── 機能性表示食品・特定保健用食品キーワード検出 ──
+  const funcKeywords = ["機能性表示食品","届出番号","機能性関与成分","特定保健用食品","トクホ","許可番号"];
+  const hasFuncClaim = funcKeywords.some(k => (p.name||"").includes(k) || (d.ingLabel||"").includes(k) || (p.productNote||"").includes(k));
+  if (hasFuncClaim) {
+    warn("機能性表示食品または特定保健用食品の可能性があります。通常の食品表示基準とは別に、消費者庁への届出・許可が必要です",
+         null,
+         "消費者庁「機能性表示食品の届出等に関するガイドライン」を確認の上、適切な届出手続きを行ってください");
+  }
+
+  // ── 「無添加」「ノーアディティブ」等の強調表示チェック ──
+  const strongClaimKeywords = ["無添加","保存料不使用","着色料不使用","ゼロカロリー","カロリーゼロ","糖類ゼロ","無糖","ノンシュガー","低糖","低カロリー","ダイエット"];
+  const strongClaims = strongClaimKeywords.filter(k =>
+    (p.name||"").includes(k) || (p.productNote||"").includes(k)
+  );
+  if (strongClaims.length) {
+    info(`強調表示（${strongClaims.join("・")}）が含まれています。消費者庁「食品表示基準Q&A」および「栄養強調表示のガイドライン」の要件を確認してください`, null,
+         `「ゼロカロリー」は100mL当たり5kcal未満、「糖類ゼロ」は100g当たり0.5g未満が要件です（食品表示基準 第7条）`);
+  }
+
+  // ── 保存方法の具体性チェック ──
+  const storage = d.storage?.trim() || "";
+  if (storage && storage.length < 8) {
+    info("保存方法の記載が短すぎます。温度条件や環境条件を具体的に記載することを推奨します", "storage",
+         "例：「直射日光・高温多湿を避け常温で保存」「10℃以下で保存」「-18℃以下で保存（冷凍）」");
+  }
+  if (storage && !/\d|常温|冷蔵|冷凍|涼しい|乾燥/.test(storage)) {
+    info("保存方法に温度帯や環境条件の記載を追加することを推奨します", "storage",
+         "例：「10℃以下で保存してください」「直射日光・高温多湿を避け、冷暗所で保存してください」");
   }
 
   return issues;
+}
+
+// ── ⑨ 能動型AI提案エンジン ──────────────────────────────────────────────
+function generateProactiveSuggestions(p, d) {
+  const suggestions = [];
+  const add = (priority, icon, title, desc, fix, fixAction) =>
+    suggestions.push({ priority, icon, title, desc, fix, fixAction });
+
+  // 賞味期限の表記改善提案
+  const bb = (p.bestBefore || "").trim();
+  if (bb) {
+    if (/^\d{1,2}[ヶヵ]?ヶ?月/.test(bb)) {
+      const months = parseInt(bb);
+      if (!isNaN(months)) {
+        add("high", "📅", "賞味期限の表記を法定形式に変更",
+          `現在「${bb}」は相対的な期間表記です。食品表示基準では「年月日」または「製造日より〇日」形式が求められます。`,
+          `製造日より${months * 30}日`,
+          { type: "field-fix", field: "bestBefore", value: `製造日より${months * 30}日` });
+      }
+    }
+    if (/^\d{4}年\d{1,2}月\d{1,2}日$/.test(bb)) {
+      const slash = bb.replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/, "$1/$2/$3");
+      add("low", "📅", "賞味期限の表記形式を簡素化できます",
+        `「${bb}」は一般的ですが、JIS X 0301では「${slash}」や「${slash.slice(2)}」もよく使われます。`,
+        slash,
+        { type: "field-fix", field: "bestBefore", value: slash });
+    }
+  }
+
+  // 保存方法のテンプレート提案
+  const storage = (d.storage || "").trim();
+  if (!storage) {
+    const category = (p.category || "").toLowerCase();
+    let storageSuggestion = "直射日光・高温多湿を避け、常温で保存してください。";
+    if (category.includes("冷蔵") || category.includes("チルド") || (p.ingredients||[]).some(i=>(i.name||"").includes("生"))) {
+      storageSuggestion = "10℃以下で保存してください。";
+    } else if (category.includes("冷凍") || category.includes("アイス")) {
+      storageSuggestion = "-18℃以下で保存してください（冷凍保存）。";
+    }
+    add("high", "🌡️", "保存方法のテンプレートを適用",
+      "保存方法が未入力です。カテゴリから推定した標準的な表記を提案します。",
+      storageSuggestion,
+      { type: "field-fix", field: "storage", value: storageSuggestion });
+  } else if (storage && !/[℃°C]|常温|冷暗/.test(storage) && storage.length < 20) {
+    add("medium", "🌡️", "保存方法をより具体的に記載することを提案",
+      `現在「${storage}」と入力されています。温度帯を明記するとより適切な表示になります。`,
+      `${storage}（直射日光・高温多湿を避け保存）`,
+      null);
+  }
+
+  // 原材料配合順の自動整列提案
+  const ingsWithWeight = (p.ingredients||[]).filter(i=>i.name?.trim() && parseFloat(i.weight)>0);
+  if (ingsWithWeight.length >= 3) {
+    const weights = ingsWithWeight.map(i=>parseFloat(i.weight));
+    const isDesc = weights.every((w,i)=>i===0||weights[i-1]>=w);
+    if (!isDesc) {
+      add("high", "📊", "原材料を重量降順に並べ直すことを提案",
+        "現在の原材料は重量降順になっていません。食品表示基準では配合量の多い順に表示する義務があります。",
+        "「原材料タブ → 重量順に並べ直す」ボタンで自動修正できます",
+        { type: "action", action: "sort-by-weight", label: "今すぐ並べ直す" });
+    }
+  }
+
+  // アレルゲン括弧書き提案
+  const allergens = d.allergens || [];
+  const ingLabel  = d.ingLabel  || "";
+  if (allergens.length > 0 && ingLabel && !allergens.some(a=>ingLabel.includes(`（${a}`) || ingLabel.includes(`(${a}`))) {
+    const firstAllergenIng = (p.ingredients||[]).find(i=>
+      allergens.some(a=>(i.name||"").includes(a))
+    );
+    if (firstAllergenIng) {
+      const a = allergens[0];
+      add("medium", "🥜", "アレルゲンの括弧書き表示を提案",
+        `アレルゲン（${allergens.join("・")}）が別行表示のみになっています。原材料名中に括弧書きで表示する方法も認められており、消費者が確認しやすくなります。`,
+        `${firstAllergenIng.name}（${allergens.filter(a=>(firstAllergenIng.name||"").includes(a)).join("・")||a}を含む）のように括弧書きを追加`,
+        null);
+    }
+  }
+
+  // 内容量のmL表記提案
+  const vol = (p.volume || "").trim();
+  if (vol && /\d\s*ml(?!\s*[以上下])/i.test(vol) && !/mL/.test(vol)) {
+    const fixedVol = vol.replace(/(\d\s*)ml/gi, (_, n) => `${n}mL`);
+    add("low", "💧", "内容量の単位を正式表記に変更",
+      `「ml」は非推奨です。JIS Z 8000-1では「mL」（大文字L）が正式表記です。`,
+      fixedVol,
+      { type: "field-fix", field: "volume", value: fixedVol });
+  }
+
+  // 目標原価率超過の価格提案
+  const costs = calcCosts(p);
+  const targetRate = parseFloat(p.targetCostRate || "") || null;
+  if (targetRate && costs.totalCost > 0 && costs.costRate !== null && costs.costRate > targetRate) {
+    const neededPrice = Math.ceil(costs.totalCost / (targetRate / 100));
+    const diff = (costs.costRate - targetRate).toFixed(1);
+    add("medium", "💰", "目標原価率を達成する販売価格を提案",
+      `現在の原価率 ${costs.costRate}% は目標 ${targetRate}% を ${diff}% 超過しています。`,
+      `販売価格を ¥${neededPrice.toLocaleString()} 以上に設定すると目標原価率（${targetRate}%）を達成できます`,
+      { type: "field-fix", field: "price", value: String(neededPrice) });
+  }
+
+  // 商品画像未登録
+  if (!p.imageDataUrl) {
+    add("low", "📷", "商品画像を登録することを提案",
+      "商品画像が未登録です。画像を登録すると規格書・ラベルデザインの品質が向上し、バイヤーへの訴求力が上がります。",
+      "「基本情報タブ → 商品画像」からJPEG/PNG/WebP（最大5MB）をアップロードできます",
+      { type: "navigate", tab: "basic", field: "#image-drop-zone" });
+  }
+
+  // 原産地未設定（主な農畜水産物原料を含む場合）
+  if (!p.originCountry?.trim()) {
+    const originKeywords = ["牛肉","豚肉","鶏肉","魚","鮭","エビ","カニ","米","小麦","大豆","りんご","みかん","いちご","トマト","キャベツ","にんじん","じゃがいも"];
+    const ingNames = (p.ingredients||[]).map(i=>i.name||"").join("");
+    const matched = originKeywords.find(k=>ingNames.includes(k));
+    if (matched) {
+      add("medium", "🌏", "原産地の表示を追加することを提案",
+        `原材料に「${matched}」が含まれています。農産物・畜産物・水産物が主原料の場合、原産地表示が義務付けられています（食品表示基準 第3条の2）。`,
+        "基本情報タブの「原産地」欄に産地を入力してください（例：国産、北海道産）",
+        { type: "navigate", tab: "basic", field: "[data-master-field='originCountry']" });
+    }
+  }
+
+  // 優先度順にソート
+  const order = { high: 0, medium: 1, low: 2 };
+  return suggestions.sort((a,b) => order[a.priority] - order[b.priority]);
 }
 
 function releaseReadinessHtml(p, d) {

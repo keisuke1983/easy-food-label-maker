@@ -168,29 +168,37 @@ function dashboardHtml() {
 
   // ── 担当者別 今日やること ──
   const _personTasks = {};
+  const _addTask = (person, task) => {
+    const key = person || "（担当者未設定）";
+    if (!_personTasks[key]) _personTasks[key] = [];
+    // 同商品×同ラベルの重複排除（Set的に）
+    if (!_personTasks[key].some(x => x.pid === task.pid && x.label === task.label))
+      _personTasks[key].push(task);
+  };
   products.forEach(p => {
     const person = p.specResponsible?.trim() || "";
-    if (!person) return;
-    const tasks = [];
+    const pname = p.internalName || p.name || "名称未入力";
     if (p.approvalStatus === "review")
-      tasks.push({ icon:"👥", label:"承認待ち", cls:"urgent", priority:1, pid:p.id, pname:p.internalName||p.name });
+      _addTask(person, { icon:"👥", label:"承認待ち",    cls:"urgent", priority:1, pid:p.id, pname });
     if (p.phase === "development" && p.productStatus === "approved")
-      tasks.push({ icon:"🚀", label:"発売準備完了", cls:"ready", priority:1, pid:p.id, pname:p.internalName||p.name });
+      _addTask(person, { icon:"🚀", label:"発売準備完了", cls:"ready",  priority:1, pid:p.id, pname });
     if (p.expiryDate && p.expiryDate < todayIso)
-      tasks.push({ icon:"🚨", label:"賞味期限切れ", cls:"urgent", priority:1, pid:p.id, pname:p.internalName||p.name });
+      _addTask(person, { icon:"🚨", label:"賞味期限切れ", cls:"urgent", priority:1, pid:p.id, pname });
     if (p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso)
-      tasks.push({ icon:"⏰", label:"期限まで30日以内", cls:"warn", priority:2, pid:p.id, pname:p.internalName||p.name });
+      _addTask(person, { icon:"⏰", label:"期限まで30日以内", cls:"warn", priority:2, pid:p.id, pname });
+    if (!(p.ingredients||[]).some(i=>i.name?.trim()) && (p.phase||"released")==="released")
+      _addTask(person, { icon:"⚠️", label:"原材料未入力", cls:"urgent", priority:2, pid:p.id, pname });
     const da = derivedAll.find(x => x.p.id === p.id);
     if (da && (p.phase || "released") === "released") {
       const comp = cachedCompletion(p, da.d);
       if (comp.missing.length && comp.pct < 60)
-        tasks.push({ icon:"📝", label:`未入力: ${comp.missing.slice(0,2).join("・")}`, cls:"warn", priority:3, pid:p.id, pname:p.internalName||p.name });
-    }
-    if (!(p.ingredients||[]).some(i=>i.name?.trim()) && (p.phase||"released")==="released")
-      tasks.push({ icon:"⚠️", label:"原材料未入力", cls:"urgent", priority:2, pid:p.id, pname:p.internalName||p.name });
-    if (tasks.length) {
-      if (!_personTasks[person]) _personTasks[person] = [];
-      tasks.forEach(t => { if (!_personTasks[person].find(x=>x.pid===t.pid&&x.label===t.label)) _personTasks[person].push(t); });
+        _addTask(person, { icon:"📝", label:`未入力: ${comp.missing.slice(0,2).join("・")}`, cls:"warn", priority:3, pid:p.id, pname });
+      // 食品表示法エラーをToDoに追加（checkFoodLabel が利用可能な場合）
+      if (typeof checkFoodLabel === "function") {
+        const issues = checkFoodLabel(p, da.d).filter(i => i.level === "error");
+        if (issues.length)
+          _addTask(person, { icon:"🚫", label:`表示エラー ${issues.length}件`, cls:"urgent", priority:2, pid:p.id, pname });
+      }
     }
   });
   const _personEntries = Object.entries(_personTasks).sort((a,b) => {
@@ -459,12 +467,14 @@ function dashboardHtml() {
       : `<div class="recent-prod-thumb-ph">📦</div>`;
     const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || ((p.phase||"released") === "development" ? "draft" : "on_sale"))) || PRODUCT_STATUSES[0];
     const updStr = (p.updatedAt||"").substring(0, 10);
-    const health = typeof calcProductHealth === "function" && rd ? calcProductHealth(p, rd.d) : null;
-    const healthBadgeColor = health ? health.color : null;
+    // 健康バッジ: 軽量版（完成度 % を色付きバッジとして表示、calcProductHealthは呼ばない）
+    const badgeColor = pctColor;
+    const urgentTask = _personTasks[p.specResponsible?.trim()]?.find(t=>t.pid===p.id&&t.priority===1);
     return `<button class="recent-prod-card" data-nav-product-detail="${escapeHtml(p.id)}">
       <div class="recent-prod-thumb-wrap">
         ${thumb}
-        ${health ? `<span class="recent-prod-health" style="background:${healthBadgeColor}" title="商品健康スコア ${health.total}点">${health.total}</span>` : ""}
+        <span class="recent-prod-health" style="background:${badgeColor}" title="完成度 ${comp.pct}%">${comp.pct}</span>
+        ${urgentTask ? `<span class="recent-prod-urgent-dot" title="${escapeHtml(urgentTask.label)}"></span>` : ""}
       </div>
       <div class="recent-prod-info">
         <div class="recent-prod-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</div>

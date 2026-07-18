@@ -3145,10 +3145,9 @@ kbd {
 /* KPI行 */
 .db2-kpi-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 10px;
 }
-@media (max-width: 900px) { .db2-kpi-row { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 560px) { .db2-kpi-row { grid-template-columns: repeat(2, 1fr); } }
 .db2-kpi-card {
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
@@ -4302,7 +4301,14 @@ div.db2-kpi-card { cursor: default; }
 .db2-person-more { font-size: 11px; color: var(--text-sub, #64748b); padding: 6px 14px; text-align: center; background: var(--bg-sub, #f8fafc); }
 
 /* ── ダッシュボード: 最近の作業カード — 健康スコアバッジ ─────────────── */
-.recent-prod-thumb-wrap { position: relative; flex-shrink: 0; }
+.recent-prod-thumb-wrap {
+  position: relative; flex-shrink: 0;
+  width: 60px; height: 60px;
+}
+.recent-prod-thumb-wrap .recent-prod-thumb,
+.recent-prod-thumb-wrap .recent-prod-thumb-ph {
+  width: 60px; height: 60px;
+}
 .recent-prod-health {
   position: absolute; bottom: -4px; right: -4px;
   font-size: 10px; font-weight: 800; color: #fff;
@@ -4311,6 +4317,11 @@ div.db2-kpi-card { cursor: default; }
   border: 2px solid var(--card, #fff);
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+.recent-prod-urgent-dot {
+  position: absolute; top: -3px; right: -3px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #dc2626; border: 2px solid var(--card, #fff);
 }
 
 /* ── KPIバー: アンバー色 ────────────────────────────────────────────── */

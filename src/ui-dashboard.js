@@ -158,6 +158,75 @@ function dashboardHtml() {
   const expiringSoonCount = rel.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso).length;
   const stg = getStorageInfo();
 
+  // ── コスト統計（KPI + 統計パネル で共用）──
+  const relDerivedAll  = derivedAll.filter(({p}) => (p.phase || "released") === "released");
+  const withCostEarly  = relDerivedAll.filter(({c}) => c.totalCost > 0);
+  const _allCostRates  = withCostEarly.filter(({c}) => c.costRate !== null).map(({c}) => c.costRate);
+  const _allProfitRates = withCostEarly.filter(({c}) => c.profitRate !== null).map(({c}) => c.profitRate);
+  const avgCostRate    = _allCostRates.length   ? Math.round(_allCostRates.reduce((s,r)=>s+r,0)/_allCostRates.length)   : null;
+  const avgProfitRate  = _allProfitRates.length ? Math.round(_allProfitRates.reduce((s,r)=>s+r,0)/_allProfitRates.length) : null;
+
+  // ── 担当者別 今日やること ──
+  const _personTasks = {};
+  products.forEach(p => {
+    const person = p.specResponsible?.trim() || "";
+    if (!person) return;
+    const tasks = [];
+    if (p.approvalStatus === "review")
+      tasks.push({ icon:"👥", label:"承認待ち", cls:"urgent", priority:1, pid:p.id, pname:p.internalName||p.name });
+    if (p.phase === "development" && p.productStatus === "approved")
+      tasks.push({ icon:"🚀", label:"発売準備完了", cls:"ready", priority:1, pid:p.id, pname:p.internalName||p.name });
+    if (p.expiryDate && p.expiryDate < todayIso)
+      tasks.push({ icon:"🚨", label:"賞味期限切れ", cls:"urgent", priority:1, pid:p.id, pname:p.internalName||p.name });
+    if (p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso)
+      tasks.push({ icon:"⏰", label:"期限まで30日以内", cls:"warn", priority:2, pid:p.id, pname:p.internalName||p.name });
+    const da = derivedAll.find(x => x.p.id === p.id);
+    if (da && (p.phase || "released") === "released") {
+      const comp = cachedCompletion(p, da.d);
+      if (comp.missing.length && comp.pct < 60)
+        tasks.push({ icon:"📝", label:`未入力: ${comp.missing.slice(0,2).join("・")}`, cls:"warn", priority:3, pid:p.id, pname:p.internalName||p.name });
+    }
+    if (!(p.ingredients||[]).some(i=>i.name?.trim()) && (p.phase||"released")==="released")
+      tasks.push({ icon:"⚠️", label:"原材料未入力", cls:"urgent", priority:2, pid:p.id, pname:p.internalName||p.name });
+    if (tasks.length) {
+      if (!_personTasks[person]) _personTasks[person] = [];
+      tasks.forEach(t => { if (!_personTasks[person].find(x=>x.pid===t.pid&&x.label===t.label)) _personTasks[person].push(t); });
+    }
+  });
+  const _personEntries = Object.entries(_personTasks).sort((a,b) => {
+    const ap = Math.min(...a[1].map(t=>t.priority));
+    const bp = Math.min(...b[1].map(t=>t.priority));
+    return ap - bp;
+  });
+  const totalPersonTasks = _personEntries.reduce((s,[,t])=>s+t.length,0);
+  const personTodoHtml = _personEntries.length ? `
+  <div class="db2-section-wrap db2-person-section">
+    <div class="db2-section-hd">📋 担当者別 今日やること <span class="db2-section-hd-sub">${totalPersonTasks}件の対応が必要</span></div>
+    <div class="db2-person-grid">
+      ${_personEntries.map(([name, tasks]) => {
+        const sorted = [...tasks].sort((a,b)=>a.priority-b.priority).slice(0, 6);
+        const hasUrgent = sorted.some(t => t.priority === 1);
+        return `<div class="db2-person-card${hasUrgent?" db2-person-card--urgent":""}">
+          <div class="db2-person-hd">
+            <span class="db2-person-name">👤 ${escapeHtml(name)}</span>
+            <span class="db2-person-badge${hasUrgent?" db2-person-badge--urgent":""}">${tasks.length}件</span>
+          </div>
+          <div class="db2-person-tasks">
+            ${sorted.map(t => `<button class="db2-person-task db2-person-task--${t.cls||"info"}" data-nav-product-detail="${escapeHtml(t.pid)}">
+              <span class="db2-person-task-icon">${t.icon}</span>
+              <div class="db2-person-task-body">
+                <span class="db2-person-task-pname">${escapeHtml(t.pname||"名称未入力")}</span>
+                <span class="db2-person-task-label">${escapeHtml(t.label)}</span>
+              </div>
+              <span class="db2-person-task-arrow">›</span>
+            </button>`).join("")}
+            ${tasks.length > 6 ? `<div class="db2-person-more">他 ${tasks.length-6} 件</div>` : ""}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>` : "";
+
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   const todayStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日（${weekdays[now.getDay()]}）`;
 
@@ -223,6 +292,14 @@ function dashboardHtml() {
         <div class="db2-kpi-val">${suggestions.length}</div>
         <div class="db2-kpi-lbl">✦ AI提案</div>
       </div>
+      ${avgCostRate !== null ? `<div class="db2-kpi-card ${avgCostRate > 40 ? "db2-kpi-red" : avgCostRate > 30 ? "db2-kpi-amber" : "db2-kpi-green"}">
+        <div class="db2-kpi-val">${avgCostRate}%</div>
+        <div class="db2-kpi-lbl">📊 平均原価率</div>
+      </div>` : ""}
+      ${avgProfitRate !== null ? `<div class="db2-kpi-card db2-kpi-green">
+        <div class="db2-kpi-val">${avgProfitRate}%</div>
+        <div class="db2-kpi-lbl">💹 平均粗利率</div>
+      </div>` : ""}
     </div>
   </div>`;
 
@@ -382,8 +459,13 @@ function dashboardHtml() {
       : `<div class="recent-prod-thumb-ph">📦</div>`;
     const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || ((p.phase||"released") === "development" ? "draft" : "on_sale"))) || PRODUCT_STATUSES[0];
     const updStr = (p.updatedAt||"").substring(0, 10);
+    const health = typeof calcProductHealth === "function" && rd ? calcProductHealth(p, rd.d) : null;
+    const healthBadgeColor = health ? health.color : null;
     return `<button class="recent-prod-card" data-nav-product-detail="${escapeHtml(p.id)}">
-      ${thumb}
+      <div class="recent-prod-thumb-wrap">
+        ${thumb}
+        ${health ? `<span class="recent-prod-health" style="background:${healthBadgeColor}" title="商品健康スコア ${health.total}点">${health.total}</span>` : ""}
+      </div>
       <div class="recent-prod-info">
         <div class="recent-prod-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</div>
         <div class="recent-prod-meta">
@@ -392,7 +474,7 @@ function dashboardHtml() {
         </div>
         <div class="recent-prod-bar"><div class="recent-prod-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
         <div class="db2-recent-foot">
-          <span class="recent-prod-pct" style="color:${pctColor}">${comp.pct}%</span>
+          <span class="recent-prod-pct" style="color:${pctColor}">${comp.pct}%完成</span>
           ${updStr ? `<span class="db2-recent-date">${updStr}</span>` : ""}
         </div>
       </div>
@@ -444,7 +526,6 @@ function dashboardHtml() {
   // 統計パネル（右カラム）
   // ─────────────────────────────────────────────────
   const total = products.length;
-  const relDerivedAll = derivedAll.filter(({p}) => (p.phase || "released") === "released");
   const compDist = relDerivedAll.reduce((acc,{p,d}) => {
     const pct = cachedCompletion(p,d).pct;
     if (pct===100) acc.done++; else if (pct>=60) acc.near++; else if (pct>=30) acc.low++; else acc.veryLow++;
@@ -481,12 +562,11 @@ function dashboardHtml() {
     </div>
   </div>` : "";
 
-  const withCost = relDerivedAll.filter(({c})=>c.totalCost>0);
+  const withCost = withCostEarly;
   const costHtml = withCost.length ? (() => {
-    const rates   = withCost.filter(({c})=>c.costRate!==null).map(({c})=>c.costRate);
-    const avgRate = rates.length ? Math.round(rates.reduce((s,r)=>s+r,0)/rates.length) : null;
     const best    = [...withCost].filter(({c})=>c.profitRate!==null).sort((a,b)=>(b.c.profitRate||0)-(a.c.profitRate||0))[0];
     const worst   = [...withCost].filter(({c})=>c.costRate!==null&&c.costRate>40).sort((a,b)=>(b.c.costRate||0)-(a.c.costRate||0))[0];
+    const avgRate = avgCostRate;
     return `<div class="dash-panel">
       <div class="dash-panel-hd">💰 原価サマリー</div>
       <div class="dash-cost-grid">
@@ -659,6 +739,7 @@ function dashboardHtml() {
     ${alertBits}
     ${headerHtml}
     ${urgentHtml}
+    ${personTodoHtml}
     ${devProjectsHtml}
     ${recentHtml}
     ${activityFeedHtml}

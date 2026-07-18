@@ -99,3 +99,6 @@ let activeRecipeVersionId = null; // null = 採用版
 let newTrialBatchOpen = false;
 let recipeCompareMode = false; // レシピ版比較モード
 let recipeCompareIds = []; // 比較対象バージョンID（最大4件）
+
+// ── タイムラインフィルター ──────────────────────────────────────────────
+let timelineFilter = "all"; // "all"|"label"|"cost"|"ai"|"released"|"field"|"approval"

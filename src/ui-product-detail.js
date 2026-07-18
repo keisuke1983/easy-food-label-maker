@@ -1,54 +1,92 @@
 function karteTabHtml(p, d) {
-  const comp      = calcCompletion(p, d);
-  const costs     = calcCosts(p);
-  const compColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
+  const comp       = calcCompletion(p, d);
+  const costs      = calcCosts(p);
+  const health     = calcProductHealth(p, d);
   const isReleased = (p.phase || "released") === "released";
+  const compColor  = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
 
-  // ── タイムライン ──
-  const tlEvents = loadTimeline(p.id).slice(0, 8);
-  const tlHtml = tlEvents.length
-    ? `<div class="karte-tl-list">${tlEvents.map(ev => `
-        <div class="karte-tl-row">
-          <span class="karte-tl-ico">${ev.icon || "📌"}</span>
-          <div class="karte-tl-body">
-            <span class="karte-tl-lbl">${escapeHtml(ev.label)}</span>
-            <span class="karte-tl-date">${escapeHtml(ev.savedAt || "")}${ev.savedBy && ev.savedBy !== "—" ? ` · ${escapeHtml(ev.savedBy)}` : ""}</span>
-            ${ev.comment ? `<span class="karte-tl-cmt">${escapeHtml(ev.comment)}</span>` : ""}
-          </div>
-        </div>`).join("")}</div>
-      <button class="karte-link" data-detail-tab="history">すべての履歴を見る →</button>`
-    : `<p class="karte-empty">まだイベントはありません。ラベルを保存すると自動記録されます。</p>`;
+  // ── ヒーローヘッダー ──
+  const thumb = p.imageDataUrl
+    ? `<img class="kh-thumb" src="${p.imageDataUrl}" alt="商品画像" onerror="this.onerror=null;this.style.display='none'">`
+    : `<button class="kh-thumb kh-thumb--empty" data-open-and-jump="${escapeHtml(p.id)}:商品画像" title="クリックして画像を追加">📷<span style="font-size:9px;display:block;margin-top:2px">画像追加</span></button>`;
 
-  // ── 完成度チェック ──
-  const CHECK_ITEMS = ["名称","内容量","賞味期限","保存方法","製造者名","製造者住所","原材料名"];
-  const checklistHtml = CHECK_ITEMS.map(lbl => {
-    const missing = comp.missing.includes(lbl);
-    return `<div class="karte-check-item${missing ? " karte-check-item--ng" : " karte-check-item--ok"}">
-      <span>${missing ? "⚠️" : "✅"}</span>
-      <span class="karte-check-lbl">${escapeHtml(lbl)}</span>
+  const psInfo = typeof PRODUCT_STATUSES !== "undefined"
+    ? (PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"on_sale"))||PRODUCT_STATUSES[0])
+    : null;
+  const statusChip = psInfo
+    ? `<span class="kh-status-chip" style="color:${psInfo.color};background:${psInfo.bg};border:1px solid ${psInfo.color}40">${psInfo.label}</span>`
+    : "";
+
+  const starsHtml = "★".repeat(health.stars) + "☆".repeat(5 - health.stars);
+
+  const heroHtml = `<div class="kh-hero">
+    ${thumb}
+    <div class="kh-hero-body">
+      <div class="kh-name">${escapeHtml(p.internalName || p.name || "（名称未設定）")}</div>
+      ${p.internalName && p.name ? `<div class="kh-sub">${escapeHtml(p.name)}</div>` : ""}
+      <div class="kh-meta-row">
+        ${p.category ? `<span class="kh-tag">${escapeHtml(p.category)}</span>` : ""}
+        ${statusChip}
+        ${p.specResponsible ? `<span class="kh-tag kh-tag--user">👤 ${escapeHtml(p.specResponsible)}</span>` : ""}
+        ${isReleased && p.releasedAt ? `<span class="kh-tag">🚀 ${escapeHtml(p.releasedAt)}</span>` : ""}
+        ${p.updatedAt ? `<span class="kh-tag kh-tag--dim">更新 ${escapeHtml(p.updatedAt)}</span>` : ""}
+      </div>
+      ${p.productMemo?.trim() ? `<p class="kh-memo">${escapeHtml(p.productMemo)}</p>` : `<p class="kh-memo kh-memo--empty">商品概要が未記入です <button class="kh-memo-link" data-open-and-jump="${escapeHtml(p.id)}:商品概要">追加する →</button></p>`}
+    </div>
+    <div class="kh-health-mini">
+      <div class="kh-health-score" style="color:${health.color}">${health.total}</div>
+      <div class="kh-health-stars" style="color:${health.color}">${starsHtml}</div>
+      <div class="kh-health-label" style="color:${health.color}">${health.gradeLabel}</div>
+    </div>
+  </div>`;
+
+  // ── 商品健康診断 ──
+  const healthSectionsHtml = health.sections.map(sec => {
+    const pct = Math.round(sec.score / sec.max * 100);
+    const secColor = pct >= 90 ? "#16a34a" : pct >= 60 ? "#2563eb" : pct >= 40 ? "#ca8a04" : "#dc2626";
+    return `<div class="kh-diag-sec">
+      <div class="kh-diag-sec-hd">
+        <span>${sec.icon} ${escapeHtml(sec.label)}</span>
+        <span style="font-weight:700;color:${secColor}">${sec.score}<span style="font-weight:400;font-size:10px;color:#94a3b8">/${sec.max}</span></span>
+      </div>
+      <div class="kh-diag-bar"><div class="kh-diag-bar-fill" style="width:${pct}%;background:${secColor}"></div></div>
+      ${sec.issues.length ? `<div class="kh-diag-issues">${sec.issues.map(i=>`<span class="kh-diag-issue">⚠ ${escapeHtml(i)}</span>`).join("")}</div>` : ""}
     </div>`;
   }).join("");
 
-  // ── 原価サマリー ──
-  const costOk  = costs.costRate !== null && costs.costRate <= 35;
-  const costWarn = costs.costRate !== null && costs.costRate > 40;
-  const costColor = costWarn ? "#dc2626" : costOk ? "#16a34a" : "inherit";
-  const costHtml = `
-    <div class="karte-cost-grid">
-      <div class="karte-cost-item">
-        <div class="karte-cost-val">${costs.totalCost > 0 ? `¥${Math.round(costs.totalCost).toLocaleString()}` : "—"}</div>
-        <div class="karte-cost-lbl">原価</div>
-      </div>
-      <div class="karte-cost-item">
-        <div class="karte-cost-val" style="color:${costColor}">${costs.costRate !== null ? `${costs.costRate}%` : "—"}</div>
-        <div class="karte-cost-lbl">原価率</div>
-      </div>
-      <div class="karte-cost-item">
-        <div class="karte-cost-val">${costs.profitRate !== null ? `${costs.profitRate}%` : "—"}</div>
-        <div class="karte-cost-lbl">粗利率</div>
+  const healthPanel = `<div class="kh-diag-panel" style="border-color:${health.borderColor};background:${health.bg}">
+    <div class="kh-diag-hd">
+      <span style="font-weight:700;font-size:13px">🩺 商品健康診断</span>
+      <div class="kh-diag-score-wrap">
+        <span class="kh-diag-total" style="color:${health.color}">${health.total}</span>
+        <span class="kh-diag-grade" style="color:${health.color}">${health.gradeLabel}</span>
+        <span class="kh-diag-stars" style="color:${health.color}">${starsHtml}</span>
       </div>
     </div>
-    <button class="karte-link" data-detail-tab="cost">原価を詳しく見る →</button>`;
+    <div class="kh-diag-secs">${healthSectionsHtml}</div>
+    ${health.total < 90 ? `<button class="karte-link" data-detail-tab="ai" style="margin-top:6px">💡 AIの改善提案を見る →</button>` : `<p style="font-size:12px;color:#16a34a;margin-top:8px">✅ すべての項目が優秀な状態です</p>`}
+  </div>`;
+
+  // ── タイムライン（最新6件）──
+  const tlEvents = loadTimeline(p.id).slice(0, 6);
+  const tlHtml = tlEvents.length
+    ? `<div class="karte-tl-list">${tlEvents.map(ev => {
+        const dotColor = (typeof TIMELINE_EVENT_COLORS !== "undefined" && TIMELINE_EVENT_COLORS[ev.eventType]) || "#94a3b8";
+        return `<div class="karte-tl-row">
+          <span class="karte-tl-ico" style="background:${dotColor}">${ev.icon || "📌"}</span>
+          <div class="karte-tl-body">
+            <span class="karte-tl-lbl">${escapeHtml(ev.label)}</span>
+            <span class="karte-tl-date">${escapeHtml(ev.savedAt || "")}${ev.savedBy && ev.savedBy !== "—" ? ` · ${escapeHtml(ev.savedBy)}` : ""}</span>
+          </div>
+        </div>`;
+      }).join("")}</div>
+      <button class="karte-link" data-detail-tab="history">すべての履歴を見る →</button>`
+    : `<p class="karte-empty">まだイベントはありません。</p>`;
+
+  // ── 原価サマリー ──
+  const costOk   = costs.costRate !== null && costs.costRate <= 35;
+  const costWarn = costs.costRate !== null && costs.costRate > 40;
+  const costColor = costWarn ? "#dc2626" : costOk ? "#16a34a" : "inherit";
 
   // ── 栄養成分 ──
   const nutr = d.nutrition;
@@ -68,101 +106,139 @@ function karteTabHtml(p, d) {
     ? allergens.map(a => `<span class="karte-chip karte-chip--allergen">${escapeHtml(a)}</span>`).join("")
     : `<span class="karte-none">なし（または未入力）</span>`;
 
-  // ── 承認 ──
-  const apMap = { review:{ txt:"👥 承認待ち", cls:"review" }, approved:{ txt:"✅ 承認済み", cls:"ok" }, rejected:{ txt:"↩ 差し戻し", cls:"ng" } };
+  // ── 承認チップ ──
+  const apMap = { review:{txt:"👥 承認待ち",cls:"review"}, approved:{txt:"✅ 承認済み",cls:"ok"}, rejected:{txt:"↩ 差し戻し",cls:"ng"} };
   const apInfo = apMap[p.approvalStatus];
   const approvalChip = apInfo ? `<span class="karte-chip karte-chip--ap-${apInfo.cls}">${apInfo.txt}</span>` : `<span class="karte-none">未申請</span>`;
 
-  // ── 商品基本情報 ──
+  // ── 基本情報行 ──
   const infoRows = [
     ["商品名", p.name],
+    ["品番", p.code],
     ["内容量", p.volume],
     ["賞味期限", p.bestBefore],
     ["保存方法", p.storage],
     ["カテゴリ", p.category],
-    isReleased ? ["発売日", p.releasedAt] : ["担当者", p.specResponsible],
+    ["JANコード", p.janCode],
+    ["原産地", p.originCountry],
+    isReleased ? ["発売日", p.releasedAt] : ["開発担当", p.specResponsible],
   ].filter(([, v]) => v).map(([lbl, val]) =>
     `<div class="karte-info-row"><span class="karte-info-lbl">${lbl}</span><span class="karte-info-val">${escapeHtml(val)}</span></div>`
   ).join("");
 
-  return `<div class="karte-layout">
+  // ── 関連商品 ──
+  const relatedIds = p.relatedProductIds || [];
+  const relatedProds = typeof products !== "undefined"
+    ? relatedIds.map(id => products.find(x=>x.id===id)).filter(Boolean)
+    : [];
+  const relatedHtml = relatedProds.length
+    ? relatedProds.map(rp => `<button class="karte-related-btn" data-nav-product-detail="${escapeHtml(rp.id)}">
+        ${rp.imageDataUrl ? `<img class="karte-related-thumb" src="${rp.imageDataUrl}" alt="">` : `<span class="karte-related-ph">📦</span>`}
+        <span class="karte-related-name">${escapeHtml(rp.internalName||rp.name||"名称未設定")}</span>
+      </button>`).join("")
+    : "";
 
-    <!-- 左列: ラベル + アクション -->
-    <div class="karte-col karte-col--left">
-      <div class="karte-panel karte-panel--preview">
-        <div class="karte-panel-hd">🏷 ラベルプレビュー</div>
-        <div class="karte-label-wrap">${basicLabelHtml(p, d)}</div>
-        <div style="margin-top:8px">${nutritionLabelHtml(d)}</div>
-      </div>
-      <div class="karte-panel">
-        <div class="karte-panel-hd">⚡ クイックアクション</div>
-        <div class="karte-quick-actions">
-          <button class="karte-qa-btn" data-label-from="${escapeHtml(p.id)}">✏️ ラベル編集</button>
-          <button class="karte-qa-btn" data-action="open-print-preview">🖨 印刷・PDF</button>
-          <button class="karte-qa-btn" data-spec-from="${escapeHtml(p.id)}">📄 規格書</button>
-          <button class="karte-qa-btn" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談</button>
-          <button class="karte-qa-btn" data-ai-from="${escapeHtml(p.id)}">✨ AI説明文</button>
-          <button class="karte-qa-btn" data-detail-tab="ai">🔍 表示チェック</button>
+  return `<div class="karte-layout2">
+
+    <!-- ヒーローバー -->
+    ${heroHtml}
+
+    <!-- 健康診断（全幅） -->
+    ${healthPanel}
+
+    <!-- 2カラム本体 -->
+    <div class="karte-cols">
+      <!-- 左列 -->
+      <div class="karte-col karte-col--left">
+        <div class="karte-panel karte-panel--preview">
+          <div class="karte-panel-hd">🏷 ラベルプレビュー</div>
+          <div class="karte-label-wrap">${basicLabelHtml(p, d)}</div>
+          <div style="margin-top:8px">${nutritionLabelHtml(d)}</div>
+        </div>
+        <div class="karte-panel">
+          <div class="karte-panel-hd">⚡ クイックアクション</div>
+          <div class="karte-quick-actions">
+            <button class="karte-qa-btn" data-label-from="${escapeHtml(p.id)}">✏️ ラベル編集</button>
+            <button class="karte-qa-btn" data-action="open-print-preview">🖨 印刷・PDF</button>
+            <button class="karte-qa-btn" data-spec-from="${escapeHtml(p.id)}">📄 規格書</button>
+            <button class="karte-qa-btn" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談</button>
+            <button class="karte-qa-btn" data-ai-from="${escapeHtml(p.id)}">✨ AI説明文</button>
+            <button class="karte-qa-btn" data-detail-tab="ai">🔍 AIレビュー</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- 右列: 情報パネル群 -->
-    <div class="karte-col karte-col--right">
+      <!-- 右列 -->
+      <div class="karte-col karte-col--right">
 
-      <!-- 商品基本情報 -->
-      ${infoRows ? `<div class="karte-panel">
-        <div class="karte-panel-hd">ℹ️ 商品情報</div>
-        <div class="karte-info-list">${infoRows}</div>
-        <button class="karte-link" data-detail-tab="basic">詳細を編集 →</button>
-      </div>` : ""}
+        <!-- 基本情報 -->
+        ${infoRows ? `<div class="karte-panel">
+          <div class="karte-panel-hd">ℹ️ 基本情報</div>
+          <div class="karte-info-list">${infoRows}</div>
+          <button class="karte-link" data-detail-tab="basic">詳細を編集 →</button>
+        </div>` : ""}
 
-      <!-- 完成度 -->
-      <div class="karte-panel karte-panel--comp">
-        <div class="karte-comp-hd">
-          <span class="karte-panel-hd" style="margin-bottom:0">📋 完成度</span>
-          <span class="karte-comp-pct" style="color:${compColor}">${comp.pct}%</span>
+        <!-- 原価サマリー -->
+        <div class="karte-panel">
+          <div class="karte-panel-hd">💰 原価・利益</div>
+          <div class="karte-cost-grid">
+            <div class="karte-cost-item">
+              <div class="karte-cost-val">${costs.totalCost > 0 ? `¥${Math.round(costs.totalCost).toLocaleString()}` : "—"}</div>
+              <div class="karte-cost-lbl">原価</div>
+            </div>
+            <div class="karte-cost-item">
+              <div class="karte-cost-val">${costs.price > 0 ? `¥${Math.round(costs.price).toLocaleString()}` : "—"}</div>
+              <div class="karte-cost-lbl">販売価格</div>
+            </div>
+            <div class="karte-cost-item">
+              <div class="karte-cost-val" style="color:${costColor}">${costs.costRate !== null ? `${costs.costRate}%` : "—"}</div>
+              <div class="karte-cost-lbl">原価率</div>
+            </div>
+            <div class="karte-cost-item">
+              <div class="karte-cost-val">${costs.profitRate !== null ? `${costs.profitRate}%` : "—"}</div>
+              <div class="karte-cost-lbl">粗利率</div>
+            </div>
+          </div>
+          <button class="karte-link" data-detail-tab="cost">原価を詳しく見る →</button>
         </div>
-        <div class="karte-comp-bar"><div class="karte-comp-bar-fill" style="width:${comp.pct}%;background:${compColor}"></div></div>
-        <div class="karte-check-grid">${checklistHtml}</div>
-      </div>
 
-      <!-- 原価サマリー -->
-      <div class="karte-panel">
-        <div class="karte-panel-hd">💰 原価サマリー</div>
-        ${costHtml}
-      </div>
+        <!-- 栄養成分 -->
+        <div class="karte-panel">
+          <div class="karte-panel-hd">🔬 栄養成分</div>
+          ${nutrHtml}
+          <button class="karte-link" data-detail-tab="ingredients">原材料・栄養成分を編集 →</button>
+        </div>
 
-      <!-- タイムライン -->
-      <div class="karte-panel">
-        <div class="karte-panel-hd">📜 商品タイムライン</div>
-        ${tlHtml}
-      </div>
+        <!-- アレルゲン -->
+        <div class="karte-panel">
+          <div class="karte-panel-hd">🥜 アレルゲン</div>
+          <div class="karte-chips-row">${allergenHtml}</div>
+        </div>
 
-      <!-- アレルゲン -->
-      <div class="karte-panel">
-        <div class="karte-panel-hd">🥜 アレルゲン</div>
-        <div class="karte-chips-row">${allergenHtml}</div>
-        <button class="karte-link" data-detail-tab="ingredients">原材料を編集 →</button>
-      </div>
+        <!-- タイムライン -->
+        <div class="karte-panel">
+          <div class="karte-panel-hd">📜 最近の動き</div>
+          ${tlHtml}
+        </div>
 
-      <!-- 栄養成分 -->
-      <div class="karte-panel">
-        <div class="karte-panel-hd">🔬 栄養成分（100g当たり）</div>
-        ${nutrHtml}
-      </div>
+        <!-- 関連商品 -->
+        ${relatedHtml ? `<div class="karte-panel">
+          <div class="karte-panel-hd">🔗 関連商品</div>
+          <div class="karte-related-list">${relatedHtml}</div>
+        </div>` : ""}
 
-      <!-- 承認 + 発売準備チェック -->
-      <div class="karte-panel">
-        <div class="karte-panel-hd">👥 承認ステータス</div>
-        <div>${approvalChip}</div>
-        ${!isReleased ? releaseReadinessHtml(p, d) : ""}
-        ${p.productStatus === "approved" && p.approvalStatus === "approved"
-          ? `<div style="margin-top:8px"><button class="action primary" style="font-size:12px" data-action="release-product" data-pid="${escapeHtml(p.id)}">🚀 発売する</button></div>`
-          : ""}
-        <button class="karte-link" data-detail-tab="approval">チーム承認を管理する →</button>
-      </div>
+        <!-- 承認 + 発売準備チェック -->
+        <div class="karte-panel">
+          <div class="karte-panel-hd">👥 承認・発売</div>
+          <div>${approvalChip}</div>
+          ${!isReleased ? releaseReadinessHtml(p, d) : ""}
+          ${p.productStatus === "approved" && p.approvalStatus === "approved"
+            ? `<div style="margin-top:8px"><button class="action primary" style="font-size:12px" data-action="release-product" data-pid="${escapeHtml(p.id)}">🚀 発売する</button></div>`
+            : ""}
+          <button class="karte-link" data-detail-tab="approval">チーム承認を管理する →</button>
+        </div>
 
+      </div>
     </div>
   </div>`;
 }
@@ -296,7 +372,8 @@ function productDetailHtml() {
           ${p.productStatus === "discontinued" ? `<div class="field"><span>終売日 <span class="field-opt">自動設定</span></span><input value="${escapeHtml(p.discontinuedAt||"未設定")}" readonly style="background:var(--bg-secondary,#f8fafc);color:var(--text-secondary,#64748b);cursor:default"></div>` : ""}
           ${p.productStatus === "discontinued" ? `<label class="field full"><span>終売理由</span><input data-master-field="discontinuedReason" value="${escapeHtml(p.discontinuedReason||"")}" placeholder="例：後継品発売のため"></label>` : ""}
           <div class="field"><span class="field-label">販売チャネル</span><div class="check-group">${channelChks}</div></div>
-          <label class="field full"><span>メモ</span><textarea data-master-field="memo" rows="3">${escapeHtml(p.memo||"")}</textarea></label>
+          <label class="field full"><span>商品概要 <span class="field-opt">カルテ・検索に表示</span></span><textarea data-master-field="productMemo" rows="2" placeholder="例：糖質オフの機能性表示食品。小容量で携帯しやすいデザイン">${escapeHtml(p.productMemo||"")}</textarea></label>
+          <label class="field full"><span>メモ <span class="field-opt">社内用</span></span><textarea data-master-field="memo" rows="2">${escapeHtml(p.memo||"")}</textarea></label>
         </div>
         <div class="detail-section">
           <h3 class="detail-section-title">製造者情報</h3>
@@ -508,12 +585,38 @@ function productDetailHtml() {
       (b.savedAt || "").localeCompare(a.savedAt || "")
     );
 
-    if (!allItems.length) {
-      tabContent = `<div class="detail-section"><p class="notice">変更履歴がありません。フィールドを編集・保存すると自動記録されます。</p></div>`;
+    // フィルタリング
+    const TL_FILTERS = [
+      { id:"all",      label:"すべて" },
+      { id:"ai",       label:"🤖 AI" },
+      { id:"label",    label:"🏷 ラベル" },
+      { id:"cost",     label:"💰 原価" },
+      { id:"released", label:"🚀 発売" },
+      { id:"approval", label:"👥 承認" },
+      { id:"field",    label:"✏️ 変更" },
+    ];
+    const curFilter = typeof timelineFilter !== "undefined" ? timelineFilter : "all";
+    const filterChipsHtml = `<div class="tl2-filter-chips">${TL_FILTERS.map(f =>
+      `<button class="tl2-filter-chip${curFilter===f.id?" tl2-filter-chip--active":""}" data-tl-filter="${f.id}">${f.label}</button>`
+    ).join("")}</div>`;
+    const filteredItems = curFilter === "all" ? allItems : allItems.filter(item => {
+      const et = (item.eventType || "").toLowerCase();
+      const lbl = (item.label || "").toLowerCase();
+      if (curFilter === "ai")       return et.includes("ai") || lbl.includes("ai") || lbl.includes("提案") || lbl.includes("レビュー");
+      if (curFilter === "label")    return et.includes("label") || lbl.includes("ラベル") || lbl.includes("表示");
+      if (curFilter === "cost")     return et.includes("cost") || lbl.includes("原価");
+      if (curFilter === "released") return et.includes("release") || lbl.includes("発売");
+      if (curFilter === "approval") return et.includes("approval") || lbl.includes("承認") || lbl.includes("差し戻");
+      if (curFilter === "field")    return item.type === "snap" || (item.changedFields && item.changedFields.length > 0);
+      return true;
+    });
+
+    if (!filteredItems.length) {
+      tabContent = `<div class="detail-section">${filterChipsHtml}<p class="notice" style="margin-top:12px">${curFilter==="all"?"変更履歴がありません。フィールドを編集・保存すると自動記録されます。":"このカテゴリのイベントはありません。"}</p></div>`;
     } else {
       // 月でグループ化
       const groups = {};
-      allItems.forEach(item => {
+      filteredItems.forEach(item => {
         const dt = item.savedAt ? new Date(item.savedAt.replace(/\//g, "-")) : null;
         const key = dt && !isNaN(dt) ? `${dt.getFullYear()}年${dt.getMonth()+1}月` : "日時不明";
         if (!groups[key]) groups[key] = [];
@@ -591,6 +694,7 @@ function productDetailHtml() {
           <h3 class="detail-section-title" style="margin-bottom:0">📜 商品タイムライン</h3>
           <span class="tl2-summary">イベント ${totalEvents}件 / スナップショット ${totalSnaps}件</span>
         </div>
+        ${filterChipsHtml}
         <div class="tl2-groups">${groupsHtml}</div>
       </div>`;
     }

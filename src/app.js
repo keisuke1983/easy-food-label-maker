@@ -212,6 +212,7 @@ const DETAIL_JUMP_MAP = {
   "製造者住所": { tab: "basic",      field: "[data-master-field='manufacturerAddress']" },
   "原材料名":  { tab: "ingredients", field: "[data-master-ing-name='0']" },
   "商品画像":  { tab: "basic",       field: "#image-drop-zone" },
+  "商品概要":  { tab: "basic",       field: "[data-master-field='productMemo']" },
 };
 
 // チェックタブ "修正する →" ジャンプマップ（checkFoodLabel の field 名 → tab/selector）
@@ -1470,6 +1471,8 @@ function extendProductMaster(p) {
     code: "", category: "", price: "", imageDataUrl: "", internalName: "",
     originCountry: "",
     salesChannels: [], publishStatus: "active", memo: "",
+    productMemo: "",
+    relatedProductIds: [],
     createdAt: p.updatedAt || new Date().toLocaleDateString("ja-JP"),
     costMode: "direct",
     directCost: "", directCostTaxMode: "tax_included",
@@ -1693,6 +1696,76 @@ function costRateClass(costRate) {
 }
 // 後方互換エイリアス
 function marginClass(m) { return costRateClass(m); }
+
+// ── 商品健康診断スコア ──────────────────────────────────────────────────
+function calcProductHealth(p, d) {
+  const comp   = calcCompletion(p, d);
+  const costs  = calcCosts(p);
+  const tl     = loadTimeline(p.id);
+  const issues = checkFoodLabel ? checkFoodLabel(p, d) : [];
+  const sections = [];
+
+  // ① ラベル完成度 30点
+  const labelScore = Math.round(comp.pct * 0.3);
+  sections.push({
+    key: "label", label: "ラベル", icon: "🏷",
+    score: labelScore, max: 30,
+    issues: comp.missing.map(m => `「${m}」未入力`),
+  });
+
+  // ② 原価設定 20点
+  let costScore = 0;
+  const costIssues = [];
+  if (costs.totalCost > 0) costScore += 8; else costIssues.push("原価未入力");
+  if (costs.price > 0)     costScore += 6; else costIssues.push("販売価格未設定");
+  const targetRate = parseFloat(p.targetCostRate || "") || null;
+  if (targetRate && costs.costRate !== null) {
+    if (costs.costRate <= targetRate) costScore += 6;
+    else costIssues.push(`原価率 ${costs.costRate}% > 目標 ${targetRate}%`);
+  } else {
+    costScore += 6;
+  }
+  sections.push({ key:"cost", label:"原価", icon:"💰", score:costScore, max:20, issues:costIssues });
+
+  // ③ 商品情報充実度 20点
+  let infoScore = 0;
+  const infoIssues = [];
+  if (p.imageDataUrl)          infoScore += 6; else infoIssues.push("商品画像未登録");
+  if (p.productMemo?.trim())   infoScore += 4; else infoIssues.push("商品概要未記入");
+  if (p.janCode?.trim())       infoScore += 5; else infoIssues.push("JANコード未登録");
+  if (p.specResponsible?.trim()) infoScore += 5; else infoIssues.push("担当者未設定");
+  sections.push({ key:"info", label:"情報", icon:"ℹ️", score:infoScore, max:20, issues:infoIssues });
+
+  // ④ 食品表示適合 15点
+  const errCount  = issues.filter(i=>i.level==="error").length;
+  const warnCount = issues.filter(i=>i.level==="warn").length;
+  const checkScore = Math.max(0, 15 - errCount * 5 - warnCount * 2);
+  const checkIssues = errCount > 0 ? [`表示エラー ${errCount}件`] : warnCount > 0 ? [`表示警告 ${warnCount}件`] : [];
+  sections.push({ key:"check", label:"表示法", icon:"✅", score:checkScore, max:15, issues:checkIssues });
+
+  // ⑤ 鮮度・AI活用 15点
+  let freshnessScore = 0;
+  const freshnessIssues = [];
+  const now = new Date();
+  const lastDate = p.updatedAt ? new Date(p.updatedAt.replace(/\//g,"-")) : null;
+  const daysSince = lastDate && !isNaN(lastDate) ? Math.floor((now - lastDate) / 864e5) : 999;
+  if (daysSince <= 30) freshnessScore += 7;
+  else if (daysSince <= 90) { freshnessScore += 4; freshnessIssues.push(`最終更新 ${daysSince}日前`); }
+  else freshnessIssues.push(`最終更新 ${daysSince}日前（要確認）`);
+
+  const hasAiEvent = tl.some(e => (e.eventType||"").includes("ai") || (e.label||"").includes("AI") || (e.label||"").includes("提案"));
+  if (hasAiEvent) freshnessScore += 8;
+  else freshnessIssues.push("AIレビュー未実施");
+  sections.push({ key:"freshness", label:"AI活用", icon:"🤖", score:freshnessScore, max:15, issues:freshnessIssues });
+
+  const total  = sections.reduce((s,sec) => s + sec.score, 0);
+  const stars  = total >= 90 ? 5 : total >= 75 ? 4 : total >= 60 ? 3 : total >= 40 ? 2 : 1;
+  const gradeLabel = total >= 90 ? "優秀" : total >= 75 ? "良好" : total >= 60 ? "要改善" : total >= 40 ? "不足" : "要対応";
+  const color  = total >= 90 ? "#16a34a" : total >= 75 ? "#2563eb" : total >= 60 ? "#ca8a04" : "#dc2626";
+  const bg     = total >= 90 ? "#f0fdf4" : total >= 75 ? "#eff6ff" : total >= 60 ? "#fefce8" : "#fef2f2";
+  const borderColor = total >= 90 ? "#bbf7d0" : total >= 75 ? "#bfdbfe" : total >= 60 ? "#fde68a" : "#fca5a5";
+  return { total, sections, stars, gradeLabel, color, bg, borderColor };
+}
 
 // ── 原材料タブ（インライン編集）────────────────────────────────────────
 function masterIngredientsTabHtml(p, d, isMissing) {

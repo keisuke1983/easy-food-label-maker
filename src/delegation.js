@@ -743,6 +743,10 @@ function setupDelegation() {
     const tcEl = t.closest("[data-target-choice]");
     if (tcEl) { printTarget=tcEl.dataset.targetChoice; render(); return; }
 
+    // [data-tl-filter] — タイムラインフィルターチップ
+    const tlFilterEl = t.closest("[data-tl-filter]");
+    if (tlFilterEl) { timelineFilter = tlFilterEl.dataset.tlFilter || "all"; render(); return; }
+
     // [data-restore-history]
     const rhEl = t.closest("[data-restore-history]");
     if (rhEl) { const hist=loadHistory(rhEl.dataset.historyPid); const idx=Number(rhEl.dataset.restoreHistory); if(!hist[idx])return; showModal({message:`${hist[idx].savedAt} の状態に戻しますか？`,confirmLabel:"復元",cancelLabel:"キャンセル",onConfirm:()=>{const r={...hist[idx].snapshot};products=products.map(x=>x.id===r.id?r:x);saveProducts();render();showStatus("復元しました");}}); return; }

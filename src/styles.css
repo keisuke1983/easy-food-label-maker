@@ -1168,6 +1168,44 @@ button:disabled {
   }
 }
 
+/* ── 初回登録ウィザード ── */
+.wz-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.65); z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.wz-card { background: #fff; border-radius: 20px; width: 100%; max-width: 520px; box-shadow: 0 24px 64px rgba(0,0,0,0.22); overflow: hidden; }
+.wz-steps { display: flex; align-items: center; padding: 20px 28px 0; gap: 0; }
+.wz-step { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
+.wz-step-icon { width: 36px; height: 36px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2px solid #e2e8f0; transition: all .2s; }
+.wz-step.active .wz-step-icon { background: #2563eb; border-color: #2563eb; font-size: 18px; }
+.wz-step.done .wz-step-icon { background: #16a34a; border-color: #16a34a; }
+.wz-step-label { font-size: 11px; color: #94a3b8; font-weight: 600; }
+.wz-step.active .wz-step-label { color: #2563eb; }
+.wz-step.done .wz-step-label { color: #16a34a; }
+.wz-step-line { flex: 1; height: 2px; background: #e2e8f0; margin: 0 6px; margin-bottom: 16px; }
+.wz-body { padding: 24px 28px 28px; }
+.wz-title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0 0 8px; }
+.wz-desc { font-size: 14px; color: #64748b; margin: 0 0 20px; line-height: 1.6; }
+.wz-form { display: flex; flex-direction: column; }
+.wz-lbl { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+.wz-req { color: #ef4444; font-size: 11px; font-weight: 700; margin-left: 4px; }
+.wz-hint { color: #94a3b8; font-size: 11px; font-weight: 400; margin-left: 4px; }
+.wz-input { border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 10px 14px; font-size: 14px; width: 100%; box-sizing: border-box; font-family: inherit; outline: none; transition: border-color .15s; }
+.wz-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+.wz-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; gap: 10px; }
+.wz-skip { background: none; border: none; color: #94a3b8; font-size: 13px; cursor: pointer; padding: 0; }
+.wz-skip:hover { color: #64748b; }
+.wz-back { background: #f1f5f9 !important; color: #374151 !important; border: none !important; }
+.wz-next { min-width: 140px; }
+.wz-done-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.wz-done-item { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 14px; font-size: 13.5px; color: #166534; font-weight: 500; }
+.wz-next-tips { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+.wz-tip { font-size: 13px; color: #64748b; padding: 6px 0; border-left: 3px solid #fbbf24; padding-left: 12px; }
+@media (prefers-color-scheme: dark) {
+  .wz-card { background: #1e293b; }
+  .wz-title { color: #f1f5f9; }
+  .wz-input { background: #0f172a; border-color: #334155; color: #f1f5f9; }
+  .wz-lbl { color: #cbd5e1; }
+  .wz-done-item { background: #052e16; border-color: #166534; color: #86efac; }
+}
+
 /* ── チュートリアルオーバーレイ ── */
 .tutorial-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000;
@@ -1312,6 +1350,10 @@ button:disabled {
 .master-card:hover { box-shadow: 0 4px 12px rgba(37,99,235,.12); border-color: #93c5fd; }
 .master-card--discontinued { opacity: 0.55; background: #f8fafc; }
 .master-card--discontinued:hover { box-shadow: 0 1px 4px rgba(0,0,0,.08); border-color: #cbd5e1; }
+.master-card--warning { background: linear-gradient(160deg, #fffbeb 0%, #fff 55%); border-top: 3px solid #f59e0b; }
+.master-card--warning:hover { border-color: #f59e0b; box-shadow: 0 4px 12px rgba(245,158,11,.18); }
+.master-card--critical { background: linear-gradient(160deg, #fef2f2 0%, #fff 55%); border-top: 3px solid #ef4444; }
+.master-card--critical:hover { border-color: #ef4444; box-shadow: 0 4px 12px rgba(239,68,68,.18); }
 .master-row--discontinued td { opacity: 0.55; }
 .master-row--discontinued .mt-name { text-decoration: line-through; color: #94a3b8; }
 .master-card:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
@@ -2895,6 +2937,10 @@ kbd {
 .row-check { width: 15px; height: 15px; cursor: pointer; }
 .master-row--selected { background: #eff6ff !important; }
 .master-row--selected:hover { background: #dbeafe !important; }
+.master-row--warning { background: #fffbeb; }
+.master-row--warning:hover { background: #fef3c7 !important; }
+.master-row--critical { background: #fef2f2; }
+.master-row--critical:hover { background: #fee2e2 !important; }
 /* ソート可能ヘッダー */
 .mt-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .mt-sortable:hover { background: var(--bg-alt); }
@@ -5461,6 +5507,13 @@ body.fp-demo-active [class*='spec-body'] {
 .rm-ph-price { font-weight: 700; font-variant-numeric: tabular-nums; }
 .rm-ph-note { color: var(--muted, #64748b); font-size: 12px; }
 .rm-affected-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rm-impact-preview { margin-top: 12px; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+.rm-impact-hd { font-size: 11.5px; font-weight: 600; color: #64748b; margin-bottom: 8px; }
+.rm-impact-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; }
+.rm-impact-row:last-child { border-bottom: none; }
+.rm-impact-name { color: #334155; }
+.rm-impact-rate { font-size: 12px; }
+.rm-impact-more { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 .rm-affected-chip {
   padding: 3px 10px; border-radius: 12px;
   background: var(--bg-alt, #f1f5f9); font-size: 12px;

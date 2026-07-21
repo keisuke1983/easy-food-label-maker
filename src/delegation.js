@@ -74,9 +74,138 @@ function fetchAiBriefingNow(forceRefresh) {
   });
 }
 
+// ── 原材料スキャン ────────────────────────────────────────────────────────
+const RM_SCAN_STEPS_COUNT = 5;
+
+async function handleRmFile(file, mode) {
+  rmScanPreview = "";
+  rmScanError = "";
+  rmScanStep = 0;
+  const isPhoto = mode === "scan-photo";
+
+  // プレビュー生成（画像のみ）
+  if (file.type.startsWith("image/")) {
+    try {
+      rmScanPreview = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = e => res(e.target.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+    } catch(_) {}
+  }
+
+  // ステップアニメーション開始
+  rmScanStep = 1;
+  render();
+  const ticker = setInterval(() => {
+    const bar = document.getElementById("rm-scan-bar");
+    if (bar) {
+      const cur = parseInt(bar.style.width) || 0;
+      if (cur < 85) bar.style.width = (cur + 3) + "%";
+    }
+  }, 400);
+
+  try {
+    if (isPhoto || file.type.startsWith("image/")) {
+      // 画像 → Vision API
+      const base64 = rmScanPreview || await new Promise((res, rej) => {
+        const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(file);
+      });
+      const resp = await fetch("/api/ai-rm-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, mode: "raw-material" }),
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(j.error || `サーバーエラー（HTTP ${resp.status}）`);
+      }
+      rmScanDraft = await resp.json();
+    } else {
+      // テキスト系ファイル（PDF/TXT/CSV）
+      const text = await extractTextFromRmFile(file);
+      if (!text) throw new Error("ファイルからテキストを読み取れませんでした。\nPDF・テキスト形式の規格書をお使いください。");
+      rmScanDraft = parseRmSpecText(text);
+    }
+    clearInterval(ticker);
+    rmScanStep = 2;
+    render();
+  } catch(e) {
+    clearInterval(ticker);
+    rmScanError = e.message || "読み取りに失敗しました。別のファイルを試すか手動登録をお使いください。";
+    rmScanStep = -1;
+    render();
+  }
+}
+
+async function extractTextFromRmFile(file) {
+  if (file.type === "text/plain" || file.name.endsWith(".txt") || file.name.endsWith(".csv")) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result || "");
+      r.onerror = rej;
+      r.readAsText(file, "utf-8");
+    });
+  }
+  // PDF: テキスト抽出を試みる（ブラウザは直接無理なのでサーバー経由）
+  try {
+    const fd = new FormData(); fd.append("file", file);
+    const resp = await fetch("/api/extract-text", { method: "POST", body: fd });
+    if (!resp.ok) return "";
+    const j = await resp.json();
+    return j.text || "";
+  } catch { return ""; }
+}
+
+function parseRmSpecText(text) {
+  const get = (re) => { const m = text.match(re); return m ? m[1].trim() : ""; };
+  const name     = get(/商品名[　\s：:]+([^\n]+)/) || get(/原料名[　\s：:]+([^\n]+)/) || get(/品名[　\s：:]+([^\n]+)/);
+  const maker    = get(/製造者[　\s：:]+([^\n（(〒]+)/) || get(/メーカー[　\s：:]+([^\n]+)/);
+  const supplier = get(/販売者[　\s：:]+([^\n（(〒]+)/) || get(/仕入先[　\s：:]+([^\n]+)/);
+  const spec     = get(/規格[　\s：:]+([^\n]+)/) || get(/品質規格[　\s：:]+([^\n]+)/);
+
+  const amountRaw = get(/内容量[　\s：:]+([^\n]+)/);
+  let contentAmount = "", contentUnit = "kg";
+  const amM = amountRaw.match(/([\d.]+)\s*(kg|g|ml|L|個|袋)/i);
+  if (amM) { contentAmount = amM[1]; contentUnit = amM[2]; }
+
+  const priceRaw = get(/仕入価格[　\s：:]+([^\n]+)/) || get(/単価[　\s：:]+([^\n]+)/);
+  const priceM   = priceRaw.replace(/[,，￥¥]/g, "").match(/[\d.]+/);
+  const purchasePrice = priceM ? priceM[0] : "";
+
+  const kcal    = get(/エネルギー[　\s]*([\d.]+)/) || get(/熱量[　\s]*([\d.]+)/);
+  const protein = get(/たんぱく質[　\s]*([\d.]+)/);
+  const fat     = get(/脂質[　\s]*([\d.]+)/);
+  const carbs   = get(/炭水化物[　\s]*([\d.]+)/);
+  const salt    = get(/食塩相当量[　\s]*([\d.]+)/) || get(/ナトリウム[　\s]*([\d.]+)/);
+
+  const allergyLine = get(/アレルゲン[　\s：:]+([^\n\/]+)/) || get(/アレルギー[　\s：:]+([^\n\/]+)/) || get(/含む[　\s：:]+([^\n]+)/);
+  const KNOWN = ["えび","かに","小麦","そば","卵","乳","落花生","くるみ","アーモンド","あわび","いか","いくら","オレンジ","カシューナッツ","キウイ","牛肉","ごま","さけ","さば","大豆","鶏肉","バナナ","豚肉","まつたけ","もも","やまいも","りんご","ゼラチン","ピーナッツ"];
+  const allergens = KNOWN.filter(a => allergyLine.includes(a) || text.includes(a));
+
+  return { name, maker, supplier, spec, contentAmount, contentUnit, purchasePrice,
+    nutrition: { kcal, protein, fat, carbs, salt }, allergens };
+}
+
 // ── ⑨ イベントデリゲーション（起動時1回のみ登録） ───────────────────────
 function setupDelegation() {
   let masterSearchTimer, savedSearchTimer;
+
+  // デモモード中：クリック・スクロール・キーボード操作をすべてブロック
+  document.addEventListener("click", e => {
+    if (!demoMode || demoEndScreen) return;
+    if (!e.target.closest('[data-action^="demo"], .dp-bottom, .demo-topbar-v2')) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
+  document.addEventListener("wheel",     e => { if (demoMode && !demoEndScreen) { e.preventDefault(); e.stopPropagation(); } }, { passive:false, capture:true });
+  document.addEventListener("touchmove", e => { if (demoMode && !demoEndScreen) { e.preventDefault(); e.stopPropagation(); } }, { passive:false, capture:true });
+  document.addEventListener("keydown",   e => {
+    if (!demoMode || demoEndScreen) return;
+    if (["ArrowUp","ArrowDown","PageUp","PageDown"," ","Home","End"].includes(e.key)) e.preventDefault();
+  }, { capture:true });
 
   // ── クリック ──
   document.addEventListener("click", e => {
@@ -103,10 +232,39 @@ function setupDelegation() {
           }
           view = "saas"; render(); return;
         }
-        case "demo-start": startDemo(); return;
-        case "demo-next": if (demoStep >= DEMO_STEPS.length) { endDemo(); } else { demoStep++; applyDemoStep(); render(); } return;
-        case "demo-prev": if (demoStep > 1) { demoStep--; applyDemoStep(); render(); } return;
+        case "demo-start": saasView = "demo-select"; view = "saas"; render(); return;
+        case "demo-start-with-modules": {
+          const rawMods = ael.dataset.modules;
+          demoType = ael.dataset.demoType || "manage";
+          try { setModules(JSON.parse(rawMods)); } catch { setModules(["manage"]); }
+          startDemo();
+          return;
+        }
+        case "demo-next": {
+          const _steps = currentDemoSteps();
+          demoAnimPlayed = false;
+          if (demoStep >= _steps.length) { _demoGen++; _demoCleanup(); demoEndScreen = true; render(); }
+          else { demoStep++; applyDemoStep(); render(); setTimeout(demoPresAnimateStep, 450); }
+          return;
+        }
+        case "demo-prev":
+          if (demoStep > 1) { demoAnimPlayed = false; demoStep--; applyDemoStep(); render(); setTimeout(demoPresAnimateStep, 450); }
+          return;
         case "demo-end": endDemo(); return;
+        case "demo-contact": window.open("mailto:info@foodpilot.jp?subject=FoodPilot導入のご相談&body=デモを拝見し、導入について詳しく伺いたいと思います。", "_blank"); return;
+        case "demo-restart": {
+          _demoCleanup();
+          products = products.filter(p => !p._isDemo);
+          try { localStorage.setItem("food-label-products-static", JSON.stringify(products)); } catch {}
+          demoMode = false;
+          demoEndScreen = false;
+          demoStep = 1;
+          demoProductId = null;
+          saasView = "demo-select";
+          view = "saas";
+          render();
+          return;
+        }
         case "retry-photo-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
         case "retry-spec-reg": aiRegError = ""; aiRegAnalysisStep = -1; render(); return;
 
@@ -128,6 +286,32 @@ function setupDelegation() {
         case "shelf-scan-qty-minus": {
           const idx = Number(ael.dataset.idx);
           if (!isNaN(idx) && shelfScanItems[idx]) { shelfScanItems[idx].quantity = Math.max(0, shelfScanItems[idx].quantity - 1); render(); } return;
+        }
+
+        // タイムラインイベント削除
+        case "delete-timeline-event": {
+          const pid = ael.dataset.pid;
+          const idx = Number(ael.dataset.tlIdx);
+          if (!pid || isNaN(idx)) return;
+          const key = `food-label-timeline-${pid}`;
+          const events = JSON.parse(safeGet(key) || "[]");
+          if (!events[idx]) return;
+          events.splice(idx, 1);
+          safeSet(key, JSON.stringify(events));
+          showStatus("メモを削除しました");
+          render();
+          return;
+        }
+
+        // タイムラインメモ
+        case "add-timeline-memo": {
+          const pid = ael.dataset.pid;
+          const memoEl = document.getElementById("tl-memo-text");
+          const memo = memoEl?.value?.trim();
+          if (!memo) { showStatus("メモを入力してください"); memoEl?.focus(); return; }
+          saveTimelineEvent(pid, "comment", "💬 メモ", memo, []);
+          if (memoEl) memoEl.value = "";
+          showStatus("メモを追加しました"); render(); return;
         }
 
         // チーム・承認
@@ -168,6 +352,51 @@ function setupDelegation() {
           saveTimelineEvent(p.id, "rejected", `↩ 差し戻し`, p.approvalComment, ["approvalStatus"]);
           saveProducts(); showStatus(`「${p.name||"商品"}」を差し戻しました`); render(); return;
         }
+        case "quick-approve": {
+          const pid = t.closest("[data-action]")?.dataset.pid; if (!pid) return;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          p.approvalStatus = "approved"; p.approverName = currentUserName || "（不明）";
+          p.approvalDate = new Date().toLocaleDateString("ja-JP"); p.updatedAt = p.approvalDate;
+          saveTimelineEvent(p.id, "approved", "✅ 承認（クイック）", "", ["approvalStatus"]);
+          saveProducts(); showStatus(`「${p.name||"商品"}」を承認しました`); render(); return;
+        }
+        case "quick-reject": {
+          const pid = t.closest("[data-action]")?.dataset.pid; if (!pid) return;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          showModal({
+            message: `「${p.name||"商品"}」を差し戻しますか？\n理由を入力してください（任意）。`,
+            confirmLabel: "↩ 差し戻す",
+            cancelLabel: "キャンセル",
+            hasInput: true,
+            inputPlaceholder: "差し戻し理由（例：アレルゲン表示の修正が必要）",
+            onConfirm: (reason) => {
+              p.approvalStatus = "rejected"; p.approverName = currentUserName || "（不明）";
+              p.approvalDate = new Date().toLocaleDateString("ja-JP"); p.approvalComment = reason || ""; p.updatedAt = p.approvalDate;
+              saveTimelineEvent(p.id, "rejected", "↩ 差し戻し（クイック）", reason || "", ["approvalStatus"]);
+              saveProducts(); showStatus(`「${p.name||"商品"}」を差し戻しました`); render();
+            },
+          });
+          return;
+        }
+        case "approve-all": {
+          const reviewProds = products.filter(px => px.approvalStatus === "review");
+          if (!reviewProds.length) return;
+          showModal({
+            message: `確認待ちの${reviewProds.length}件をすべて承認しますか？`,
+            confirmLabel: "✅ すべて承認する",
+            cancelLabel: "キャンセル",
+            onConfirm: () => {
+              const today = new Date().toLocaleDateString("ja-JP");
+              reviewProds.forEach(px => {
+                px.approvalStatus = "approved"; px.approverName = currentUserName || "（不明）";
+                px.approvalDate = today; px.updatedAt = today;
+                saveTimelineEvent(px.id, "approved", "✅ 一括承認", "", ["approvalStatus"]);
+              });
+              saveProducts(); showStatus(`${reviewProds.length}件をすべて承認しました`); render();
+            },
+          });
+          return;
+        }
         case "cancel-approval": {
           const pid = ael.dataset.pid;
           const p = products.find(x => x.id === pid); if (!p) return;
@@ -201,6 +430,7 @@ function setupDelegation() {
           showStatus(currentUserName ? `「${currentUserName}」として使用中` : "ユーザー選択を解除しました"); render(); return;
         }
         case "toggle-sidebar": sidebarOpen = !sidebarOpen; render(); return;
+        case "toggle-health-panel": healthPanelOpen = !healthPanelOpen; render(); return;
         case "close-sidebar": sidebarOpen = false; render(); return;
         case "confirm-print": {
           const printPid = (editId && editId !== "new") ? editId : productDetailId;
@@ -340,6 +570,8 @@ function setupDelegation() {
           const SCORE_KEYS = ["taste","texture","aroma","appearance","cost"];
           const scores = {};
           SCORE_KEYS.forEach(k => { const v = parseInt(getV(`tb-${k}`)); if (!isNaN(v) && v > 0) scores[k] = v; });
+          const canvas = document.getElementById("tb-image-preview-canvas");
+          const imageDataUrl = (canvas && canvas.style.display !== "none") ? canvas.toDataURL("image/jpeg", 0.7) : "";
           const batch = {
             id: uid(),
             batchNum: (p.trialBatches || []).length + 1,
@@ -349,12 +581,13 @@ function setupDelegation() {
             scores,
             comment: getV("tb-comment"),
             nextAction: getV("tb-next"),
+            imageDataUrl,
           };
           if (!p.trialBatches) p.trialBatches = [];
           p.trialBatches.push(batch);
           newTrialBatchOpen = false;
           const verLabel = (p.recipeVersions || []).find(v => v.id === batch.recipeVersionId)?.label || "";
-          saveTimelineEvent(p.id, "ai_consulted", `📊 試作 #${batch.batchNum} 記録${verLabel ? ` (${verLabel})` : ""}`, batch.comment || "", []);
+          saveTimelineEvent(p.id, "trial_batch", `📊 試作 #${batch.batchNum} 記録${verLabel ? ` (${verLabel})` : ""}`, batch.comment || "", []);
           saveProducts(); render();
           showStatus(`📊 試作 #${batch.batchNum} を記録しました`);
           return;
@@ -370,6 +603,8 @@ function setupDelegation() {
           if (comp.pct < 100) blockers.push(`ラベル未入力項目: ${comp.missing.join("・")}`);
           if (costs.totalCost === 0 || costs.price === 0) blockers.push("原価または販売価格が未設定");
           if (p.approvalStatus !== "approved") blockers.push("チーム承認が未完了");
+          const labelErrs = typeof checkFoodLabel === "function" ? checkFoodLabel(p, d).filter(i => i.level === "error") : [];
+          if (labelErrs.length) blockers.push(`食品表示エラー ${labelErrs.length}件（${labelErrs.slice(0,2).map(e=>e.msg).join("、")}${labelErrs.length>2?"…":""}）`);
           const blockerNote = blockers.length
             ? `\n\n⚠️ 未完了の必須項目:\n${blockers.map(b => `・${b}`).join("\n")}`
             : "";
@@ -417,6 +652,12 @@ function setupDelegation() {
           return;
         }
 
+        case "save-then-spec": {
+          const pid = ael.dataset.pid || productDetailId;
+          saveMaster();
+          specSheetId = pid; saasView = "spec-sheet-nav"; view = "saas";
+          safeSet("fmcc-view", saasView); render(); return;
+        }
         case "karte-spec-version-up": {
           const pid = ael.dataset.pid;
           const p = products.find(x => x.id === pid); if (!p) return;
@@ -475,11 +716,22 @@ function setupDelegation() {
         case "copy-ai-prompt": { const ta=document.getElementById("ai-prompt-text"); if(ta) navigator.clipboard?.writeText(ta.value).then(()=>showStatus("プロンプトをコピーしました")).catch(()=>{ta.select();document.execCommand("copy");showStatus("コピーしました");}); return; }
         case "download-image": downloadImageLabel(); return;
         case "batch-print": batchPrint(); return;
-        case "export-csv": exportCsv(); return;
+        case "export-csv": exportCsv(false); return;
+        case "export-csv-filtered": exportCsv(true); return;
+        case "export-allergen-csv": exportAllergenCsv(); return;
+        case "print-allergen-matrix": {
+          window.print();
+          return;
+        }
         case "export-json": exportJson(); return;
         case "save-mfr-tpl": { const nameEl=document.getElementById("mfr-tpl-name"); const label=nameEl?.value?.trim(); if(!label){showStatus("テンプレート名を入力してください");return;} const p=currentProduct(); mfrTemplates=[...mfrTemplates.filter(t=>t.label!==label),{label,name:p.manufacturerName,postal:p.manufacturerPostal,address:p.manufacturerAddress,phone:p.manufacturerPhone}]; safeSet("food-label-mfr-templates",JSON.stringify(mfrTemplates)); showStatus(`「${label}」を保存しました`); return; }
         case "del-mfr-tpl": { const sel=document.querySelector("[data-mfr-tpl-select]"); const idx=Number(sel?.value); if(isNaN(idx)||!mfrTemplates[idx])return; mfrTemplates.splice(idx,1); safeSet("food-label-mfr-templates",JSON.stringify(mfrTemplates)); render(); return; }
-        case "print-spec": doPrintSpec(); return;
+        case "print-spec": {
+          doPrintSpec();
+          const _sp = products.find(x => x.id === (typeof specSheetId !== "undefined" ? specSheetId : productDetailId));
+          if (_sp) saveTimelineEvent(_sp.id, "pdf_exported", "📄 規格書を出力", "", []);
+          return;
+        }
         case "copy-spec": { const area=document.getElementById("spec-print-area"); if(!area)return; const text=[...area.querySelectorAll("tr")].map(tr=>{const th=tr.querySelector("th")?.textContent?.trim()||"";const td=tr.querySelector("td")?.textContent?.trim()||"";return th&&td?`${th}：${td}`:""}).filter(Boolean).join("\n"); copyPlainText(text); return; }
         case "generate-ai-desc": case "regen-ai-desc": {
           const pid = aiDescId || (products.find(x => x.name?.trim())?.id);
@@ -513,6 +765,13 @@ function setupDelegation() {
           });
           return;
         }
+        case "copy-product-url": {
+          const _pid = t.dataset.pid || productDetailId;
+          if (!_pid) return;
+          const url = `${location.origin}${location.pathname}#product/${_pid}`;
+          navigator.clipboard?.writeText(url).then(() => showStatus("URLをコピーしました。チームに共有できます 🔗")).catch(() => { prompt("URLをコピーしてください:", url); });
+          return;
+        }
         case "copy-ai-desc": { const ta=document.getElementById("ai-desc-prompt"); if(ta) copyPlainText(ta.value); return; }
         case "copy-ai-result": { const ta=document.getElementById("ai-result-text"); if(ta){ta.select();copyPlainText(ta.value);showStatus("コピーしました");} return; }
         case "save-ai-result": { const ta=document.getElementById("ai-result-text"); if(!ta)return; const pid=aiDescId||(products.find(x=>x.name?.trim())?.id); if(!pid)return; aiEditText=ta.value; saveAiText(pid,aiDescChannel,ta.value); showStatus("保存しました"); render(); return; }
@@ -522,21 +781,84 @@ function setupDelegation() {
           const newStatus = sel?.value;
           if (!newStatus) { showStatus("ステータスを選択してください"); return; }
           const ps = PRODUCT_STATUSES.find(s => s.id === newStatus);
-          const today = new Date().toLocaleDateString("ja-JP");
+          const doBulkStatusChange = () => {
+            const today = new Date().toLocaleDateString("ja-JP");
+            let count = 0;
+            products = products.map(p => {
+              if (!masterSelected.has(p.id)) return p;
+              count++;
+              const updated = { ...p, productStatus: newStatus, updatedAt: today };
+              if (newStatus === "discontinued" && !updated.discontinuedAt) updated.discontinuedAt = today;
+              saveTimelineEvent(p.id, newStatus === "discontinued" ? "discontinued" : "status_changed",
+                newStatus === "discontinued" ? `🔴 ${ps?.label || "終売"}` : `✅ ${ps?.label || newStatus}に変更`, "一括変更", ["productStatus"]);
+              return updated;
+            });
+            saveProducts();
+            masterSelected.clear();
+            showStatus(`${count}件のステータスを「${ps?.label || newStatus}」に変更しました`);
+            render();
+          };
+          if (newStatus === "on_sale" && typeof checkFoodLabel === "function") {
+            const errProds = products.filter(p => masterSelected.has(p.id) && checkFoodLabel(p, derive(p)).some(i => i.level === "error"));
+            if (errProds.length) {
+              const names = errProds.slice(0, 3).map(p => `・${escapeHtml(p.internalName||p.name||"名称未入力")}`).join("\n");
+              const more = errProds.length > 3 ? `\n…他 ${errProds.length - 3} 件` : "";
+              showModal({
+                message: `⚠️ 食品表示エラーがある商品が ${errProds.length} 件含まれています\n\n${names}${more}\n\n法的リスクがあります。このまま「発売中」に一括変更しますか？`,
+                confirmLabel: "変更する",
+                cancelLabel: "キャンセル",
+                onConfirm: doBulkStatusChange,
+                onCancel: () => {},
+              });
+              return;
+            }
+          }
+          doBulkStatusChange();
+          return;
+        }
+        case "bulk-apply-responsible": {
+          const sel = document.getElementById("bulk-responsible-select");
+          const newResp = sel?.value;
+          if (!newResp) { showStatus("担当者を選択してください"); return; }
           let count = 0;
           products = products.map(p => {
             if (!masterSelected.has(p.id)) return p;
             count++;
-            const updated = { ...p, productStatus: newStatus, updatedAt: today };
-            if (newStatus === "discontinued" && !updated.discontinuedAt) updated.discontinuedAt = today;
-            saveTimelineEvent(p.id, newStatus === "discontinued" ? "discontinued" : "status_changed",
-              newStatus === "discontinued" ? `🔴 ${ps?.label || "終売"}` : `✅ ${ps?.label || newStatus}に変更`, "一括変更", ["productStatus"]);
-            return updated;
+            return { ...p, specResponsible: newResp, updatedAt: new Date().toLocaleDateString("ja-JP") };
           });
           saveProducts();
           masterSelected.clear();
-          showStatus(`${count}件のステータスを「${ps?.label || newStatus}」に変更しました`);
+          showStatus(`${count}件の担当者を「${newResp}」に変更しました`);
           render(); return;
+        }
+        case "bulk-apply-category": {
+          const sel = document.getElementById("bulk-category-select");
+          let newCat = sel?.value;
+          if (!newCat) { showStatus("カテゴリを選択してください"); return; }
+          const doApplyCategory = (cat) => {
+            let count = 0;
+            products = products.map(p => {
+              if (!masterSelected.has(p.id)) return p;
+              count++;
+              return { ...p, category: cat, updatedAt: new Date().toLocaleDateString("ja-JP") };
+            });
+            saveProducts();
+            masterSelected.clear();
+            showStatus(`${count}件のカテゴリを「${cat}」に変更しました`);
+            render();
+          };
+          if (newCat === "__new__") {
+            showModal({
+              message: "新しいカテゴリ名を入力してください",
+              confirmLabel: "適用する",
+              cancelLabel: "キャンセル",
+              hasInput: true,
+              inputPlaceholder: "例：有機食品、冷凍惣菜",
+              onConfirm: (val) => { const cat = (val || "").trim(); if (cat) doApplyCategory(cat); },
+            });
+            return;
+          }
+          doApplyCategory(newCat); return;
         }
         case "clear-bulk-select": {
           masterSelected.clear(); render(); return;
@@ -544,13 +866,20 @@ function setupDelegation() {
         case "bulk-delete": {
           const count = masterSelected.size;
           if (!count) return;
-          if (!confirm(`選択した ${count} 件の商品を削除しますか？\nこの操作は元に戻せません。`)) return;
-          masterSelected.forEach(id => { trackCloudDelete(id); imgDelete(id); safeDel(`food-label-history-${id}`); safeDel(`food-label-timeline-${id}`); });
-          products = products.filter(p => !masterSelected.has(p.id));
-          masterSelected.clear();
-          saveProducts();
-          showStatus(`${count}件の商品を削除しました`);
-          render(); return;
+          showModal({
+            message: `選択した ${count} 件の商品を削除しますか？\nこの操作は元に戻せません。`,
+            confirmLabel: "🗑️ 削除する",
+            cancelLabel: "キャンセル",
+            onConfirm: () => {
+              masterSelected.forEach(id => { trackCloudDelete(id); imgDelete(id); safeDel(`food-label-history-${id}`); safeDel(`food-label-timeline-${id}`); });
+              products = products.filter(p => !masterSelected.has(p.id));
+              masterSelected.clear();
+              saveProducts();
+              showStatus(`${count}件の商品を削除しました`);
+              render();
+            },
+          });
+          return;
         }
         case "save-as-template": {
           const pid = ael.dataset.pid;
@@ -570,7 +899,7 @@ function setupDelegation() {
           safeSet("fmcc-user-templates", JSON.stringify([newTpl, ...userTpls]));
           showStatus(`「${label}」をテンプレートとして保存しました`); return;
         }
-        case "remove-product-image": { const p=products.find(x=>x.id===productDetailId); if(!p)return; p.imageDataUrl=""; imgDelete(p.id); saveProducts(); render(); return; }
+        case "remove-product-image": { const p=products.find(x=>x.id===productDetailId); if(!p)return; p.imageDataUrl=""; imgDelete(p.id); saveTimelineEvent(p.id,"spec_updated","🗑 商品画像を削除","",["imageDataUrl"]); saveProducts(); render(); return; }
         case "add-cost-item": { const p=products.find(x=>x.id===productDetailId); if(!p)return; saveCostItems(); p.costItems=[...(p.costItems||[]),{id:uid(),name:"",amount:"",unit:"g",unitPrice:""}]; saveProducts(); render(); return; }
         case "add-additive-kw": { const inp=document.getElementById("additive-kw-input"); if(!inp)return; const kws=inp.value.split(/[、,，\s]+/).map(s=>s.trim()).filter(Boolean); if(!kws.length)return; userAdditiveKw=[...new Set([...userAdditiveKw,...kws])]; safeSet("food-label-additive-kw",JSON.stringify(userAdditiveKw)); render(); return; }
         case "save-company-info": {
@@ -602,11 +931,211 @@ function setupDelegation() {
           }); return;
         }
         case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("接続先アドレスと認証キーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("接続先アドレスは https:// で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("☁ クラウド接続を保存しました"); render(); return; }
-        case "disconnect-cloud": { if(!confirm("クラウド接続を解除しますか？\nデータはこのブラウザにはそのまま残ります。"))return; safeDel("fmcc-supabase-url"); safeDel("fmcc-supabase-key"); showStatus("クラウド接続を解除しました"); render(); return; }
+        case "disconnect-cloud": { showModal({ message: "クラウド接続を解除しますか？\nデータはこのブラウザにはそのまま残ります。", confirmLabel: "解除する", cancelLabel: "キャンセル", onConfirm: () => { safeDel("fmcc-supabase-url"); safeDel("fmcc-supabase-key"); showStatus("クラウド接続を解除しました"); render(); } }); return; }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
         case "stripe-checkout": { stripeCheckout(ael.dataset.plan); return; }
         case "activate-trial":  { activateTrialCode(); return; }
+
+        // ── 原材料マスタ CRUD ──────────────────────────────────────────
+        case "rm-new": {
+          rawMaterialEditId = "__new__";
+          rmNewStep = "select"; rmScanStep = 0; rmScanDraft = {}; rmScanError = ""; rmScanPreview = "";
+          saasView = "raw-materials"; view = "saas";
+          render(); return;
+        }
+        case "rm-new-manual": {
+          rawMaterialEditId = "__new__";
+          rmNewStep = "manual"; rmScanDraft = {};
+          render(); return;
+        }
+        case "rm-new-scan-photo": {
+          rawMaterialEditId = "__new__";
+          rmNewStep = "scan-photo"; rmScanStep = 0; rmScanError = ""; rmScanPreview = "";
+          render();
+          requestAnimationFrame(() => {
+            const drop = document.getElementById("rm-drop-zone");
+            const inp  = document.getElementById("rm-file-input");
+            if (drop && inp) {
+              drop.addEventListener("click", () => inp.click());
+              drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag-over"); });
+              drop.addEventListener("dragleave", () => drop.classList.remove("drag-over"));
+              drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("drag-over"); const f = e.dataTransfer.files[0]; if (f) handleRmFile(f, "scan-photo"); });
+              inp.addEventListener("change", () => { if (inp.files[0]) handleRmFile(inp.files[0], "scan-photo"); });
+            }
+          });
+          return;
+        }
+        case "rm-new-scan-spec": {
+          rawMaterialEditId = "__new__";
+          rmNewStep = "scan-spec"; rmScanStep = 0; rmScanError = ""; rmScanPreview = "";
+          render();
+          requestAnimationFrame(() => {
+            const drop = document.getElementById("rm-drop-zone");
+            const inp  = document.getElementById("rm-file-input");
+            if (drop && inp) {
+              drop.addEventListener("click", () => inp.click());
+              drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag-over"); });
+              drop.addEventListener("dragleave", () => drop.classList.remove("drag-over"));
+              drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("drag-over"); const f = e.dataTransfer.files[0]; if (f) handleRmFile(f, "scan-spec"); });
+              inp.addEventListener("change", () => { if (inp.files[0]) handleRmFile(inp.files[0], "scan-spec"); });
+            }
+          });
+          return;
+        }
+        case "rm-scan-retry": {
+          rmScanStep = 0; rmScanError = ""; rmScanPreview = "";
+          render(); return;
+        }
+        case "rm-scan-read": {
+          // ファイルが選択済みのとき再度 AI 解析を実行（handleRmFile を呼ぶ）
+          document.getElementById("rm-file-input")?.click();
+          return;
+        }
+        case "rm-scan-apply": {
+          rmNewStep = "manual"; // フォームへ
+          render(); return;
+        }
+        case "rm-edit": {
+          rawMaterialEditId = ael.dataset.rmid;
+          rmNewStep = "manual"; rmScanDraft = {};
+          saasView = "raw-materials"; view = "saas";
+          render(); return;
+        }
+        case "rm-back": {
+          rawMaterialEditId = null; rmScanStep = 0; rmScanDraft = {}; rmScanError = ""; rmScanPreview = "";
+          render(); return;
+        }
+        case "rm-save": {
+          const name = document.getElementById("rm-name")?.value.trim();
+          if (!name) { showStatus("原材料名を入力してください"); return; }
+          const isNew = rawMaterialEditId === "__new__";
+          const existing = isNew ? null : rawMaterials.find(r => r.id === rawMaterialEditId);
+          const oldPrice = existing ? String(existing.purchasePrice || "") : null;
+          const newPrice = document.getElementById("rm-purchasePrice")?.value.trim() || "";
+
+          const rm = isNew ? emptyRawMaterial() : { ...existing };
+          rm.name          = name;
+          rm.labelName     = document.getElementById("rm-labelName")?.value.trim() || "";
+          rm.maker         = document.getElementById("rm-maker")?.value.trim() || "";
+          rm.supplier      = document.getElementById("rm-supplier")?.value.trim() || "";
+          rm.spec          = document.getElementById("rm-spec")?.value.trim() || "";
+          rm.additiveType  = document.getElementById("rm-additiveType")?.value || "";
+          rm.contentAmount = document.getElementById("rm-contentAmount")?.value || "";
+          rm.contentUnit   = document.getElementById("rm-contentUnit")?.value || "kg";
+          rm.purchasePrice = newPrice;
+          rm.taxIncluded   = document.getElementById("rm-taxIncluded")?.checked || false;
+          rm.nutrition     = {
+            kcal:    document.getElementById("rm-nutr-kcal")?.value    || "",
+            protein: document.getElementById("rm-nutr-protein")?.value  || "",
+            fat:     document.getElementById("rm-nutr-fat")?.value      || "",
+            carbs:   document.getElementById("rm-nutr-carbs")?.value    || "",
+            salt:    document.getElementById("rm-nutr-salt")?.value     || "",
+          };
+          rm.allergens = [...document.querySelectorAll("[data-rm-allergen]:checked")].map(el => el.dataset.rmAllergen);
+          rm.updatedAt = new Date().toLocaleDateString("ja-JP");
+
+          // 価格変更履歴
+          if (!isNew && oldPrice !== null && newPrice && newPrice !== oldPrice) {
+            rm.priceHistory = [...(rm.priceHistory || []), { date: new Date().toLocaleDateString("ja-JP"), price: newPrice }];
+          }
+
+          if (isNew) {
+            rawMaterials = [rm, ...rawMaterials];
+          } else {
+            rawMaterials = rawMaterials.map(r => r.id === rm.id ? rm : r);
+          }
+          saveRawMaterials();
+          rawMaterialEditId = null;
+          showStatus(`✅ 「${rm.name}」を${isNew ? "登録" : "更新"}しました`);
+          render(); return;
+        }
+        case "rm-delete": {
+          const rmid = ael.dataset.rmid;
+          const rm = rawMaterials.find(r => r.id === rmid); if (!rm) return;
+          const affected = findAffectedProducts(rmid);
+          showModal({
+            message: `「${rm.name}」を削除しますか？${affected.length > 0 ? `\n\n⚠️ ${affected.length}件の商品・レシピで使用中です。削除するとマスタ連携が解除されます。` : ""}`,
+            confirmLabel: "削除する",
+            cancelLabel: "キャンセル",
+            onConfirm: () => {
+              // 連携解除
+              products = products.map(p => ({
+                ...p,
+                ingredients: (p.ingredients||[]).map(i => i.masterId === rmid ? { ...i, masterId: undefined } : i),
+                recipeVersions: (p.recipeVersions||[]).map(v => ({
+                  ...v, ingredients: (v.ingredients||[]).map(i => i.masterId === rmid ? { ...i, masterId: undefined } : i)
+                })),
+              }));
+              saveProducts();
+              rawMaterials = rawMaterials.filter(r => r.id !== rmid);
+              saveRawMaterials();
+              rawMaterialEditId = null;
+              showStatus(`「${rm.name}」を削除しました`);
+              render();
+            },
+          });
+          return;
+        }
+        case "rm-nutr-auto": {
+          const nameEl = document.getElementById("rm-name");
+          const name = nameEl?.value.trim();
+          if (!name) { showStatus("原材料名を先に入力してください"); return; }
+          const est = estimateNutrition(name);
+          if (!est?.data) { showStatus("栄養成分DBに見つかりませんでした"); return; }
+          const d = est.data;
+          const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+          setV("rm-nutr-kcal", d.kcal); setV("rm-nutr-protein", d.protein);
+          setV("rm-nutr-fat", d.fat); setV("rm-nutr-carbs", d.carbs); setV("rm-nutr-salt", d.salt);
+          showStatus(`🔬 「${est.key}」の栄養成分を${est.estimated?"推定":"DB"}から入力しました`);
+          return;
+        }
+        case "rm-import-db": {
+          const existing = new Set(rawMaterials.map(r => r.name));
+          const toImport = Object.entries(NUTRITION_DB)
+            .filter(([name]) => !existing.has(name))
+            .map(([name, nutr]) => ({
+              ...emptyRawMaterial(),
+              id: uid(), name,
+              nutrition: { kcal: String(nutr.kcal), protein: String(nutr.protein), fat: String(nutr.fat), carbs: String(nutr.carbs), salt: String(nutr.salt) },
+            }));
+          if (!toImport.length) { showStatus("すべての栄養DB食材は登録済みです"); return; }
+          showModal({
+            message: `栄養成分DB（${toImport.length}件）を原材料マスタに一括取込みますか？\n価格・仕入先は後から設定できます。`,
+            confirmLabel: `${toImport.length}件を取込む`,
+            cancelLabel: "キャンセル",
+            onConfirm: () => {
+              rawMaterials = [...rawMaterials, ...toImport];
+              saveRawMaterials();
+              showStatus(`✅ ${toImport.length}件をインポートしました`);
+              render();
+            },
+          });
+          return;
+        }
+        case "rm-link-ings": {
+          const pid = ael.dataset.pid;
+          const vid = ael.dataset.vid;
+          const p = products.find(x => x.id === pid); if (!p) return;
+          let linked = 0;
+          const matchIng = (i) => {
+            if (i.masterId) return i;
+            const match = rawMaterials.find(rm => rm.name === i.name || (rm.labelName && rm.labelName === i.name));
+            if (!match) return i;
+            linked++;
+            return { ...i, masterId: match.id };
+          };
+          if (vid) {
+            p.recipeVersions = (p.recipeVersions || []).map(v =>
+              v.id === vid ? { ...v, ingredients: (v.ingredients||[]).map(matchIng) } : v
+            );
+          } else {
+            p.ingredients = (p.ingredients || []).map(matchIng);
+          }
+          saveProducts();
+          showStatus(linked > 0 ? `🔗 ${linked}件をマスタに自動連携しました` : "名前が完全一致する原材料マスタが見つかりませんでした");
+          render(); return;
+        }
         case "fetch-ai-briefing": { fetchAiBriefingNow(); return; }
         case "refresh-ai-briefing": {
           aiBriefingText = "";
@@ -616,6 +1145,13 @@ function setupDelegation() {
         }
         case "copy-output": copyLabels(); return;
         case "copy-image-output": copyImageLabels(); return;
+        case "copy-text": { copyPlainText(ael.dataset.text || ""); return; }
+        case "copy-field-value": {
+          const cf = ael.dataset.copyField;
+          const inp = cf ? document.querySelector(`[data-master-field="${cf}"]`) : null;
+          if (inp) { copyPlainText(inp.value); showStatus("コピーしました"); }
+          return;
+        }
       }
       return;
     }
@@ -707,6 +1243,52 @@ function setupDelegation() {
     const contEl = t.closest("[data-contamination]");
     if (contEl) { const p=currentProduct(); p.contaminationEnabled=contEl.dataset.contamination==="on"; if(p.contaminationEnabled&&!p.contaminationAllergens&&!p.contaminationText){p.contaminationAllergens=derive(p).allergens.join("、");p.contaminationText=buildContaminationText(p);} render(); return; }
 
+    // [data-wz] — 初回登録ウィザード
+    const wzEl = t.closest("[data-wz]");
+    if (wzEl) {
+      const act = wzEl.dataset.wz;
+      if (act === "skip" || act === "done") {
+        showTutorial = false; wizardStep = 0;
+        safeSet("food-label-tutorial-done", "1");
+        render();
+      } else if (act === "prev") {
+        wizardStep = Math.max(0, wizardStep - 1); render();
+      } else if (act === "step1-next") {
+        const company = document.getElementById("wz-company")?.value.trim();
+        if (!company) { showStatus("会社名を入力してください"); return; }
+        const addr = document.getElementById("wz-address")?.value.trim() || "";
+        const userName = document.getElementById("wz-user")?.value.trim() || "";
+        // 会社情報を製造者テンプレートとして保存
+        const existing = mfrTemplates.find(m => m.manufacturerName === company);
+        if (!existing) {
+          const newMfr = { id: uid(), label: company, manufacturerName: company, manufacturerAddress: addr };
+          mfrTemplates = [newMfr, ...mfrTemplates.filter(m => m.id !== newMfr.id)];
+          safeSet("food-label-mfr-templates", JSON.stringify(mfrTemplates));
+        } else {
+          existing.manufacturerAddress = addr || existing.manufacturerAddress;
+          safeSet("food-label-mfr-templates", JSON.stringify(mfrTemplates));
+        }
+        if (userName) { currentUserName = userName; safeSet("fmcc-current-user", userName); }
+        wizardStep = 1; render();
+      } else if (act === "step2-next") {
+        const prodName = document.getElementById("wz-prod-name")?.value.trim() || "はじめての商品";
+        const prodCat = document.getElementById("wz-prod-cat")?.value.trim() || "";
+        const mfr = mfrTemplates[0];
+        const newP = {
+          id: uid(), name: prodName, internalName: prodName, category: prodCat,
+          phase: "released", publishStatus: "draft", productStatus: "on_sale",
+          ingredients: [{ id: uid(), name: "", weight: "" }],
+          manufacturerName: mfr?.manufacturerName || "", manufacturerAddress: mfr?.manufacturerAddress || "",
+          createdAt: new Date().toISOString().split("T")[0],
+          updatedAt: new Date().toISOString().split("T")[0],
+        };
+        products = [newP, ...products];
+        saveProducts();
+        wizardStep = 2; render();
+      }
+      return;
+    }
+
     // [data-tutorial]
     const tutEl = t.closest("[data-tutorial]");
     if (tutEl) { const act=tutEl.dataset.tutorial; if(act==="next"&&tutorialStep<TUTORIAL_STEPS.length-1){tutorialStep++;render();}else if(act==="prev"&&tutorialStep>0){tutorialStep--;render();}else if(act==="done"||act==="skip"){showTutorial=false;safeSet("food-label-tutorial-done","1");render();} return; }
@@ -747,6 +1329,10 @@ function setupDelegation() {
     const tlFilterEl = t.closest("[data-tl-filter]");
     if (tlFilterEl) { timelineFilter = tlFilterEl.dataset.tlFilter || "all"; render(); return; }
 
+    // [data-am-phase] — アレルゲン管理表フェーズ切替
+    const amPhaseEl = t.closest("[data-am-phase]");
+    if (amPhaseEl) { allergenMatrixPhase = amPhaseEl.dataset.amPhase || "released"; render(); return; }
+
     // [data-restore-history]
     const rhEl = t.closest("[data-restore-history]");
     if (rhEl) { const hist=loadHistory(rhEl.dataset.historyPid); const idx=Number(rhEl.dataset.restoreHistory); if(!hist[idx])return; showModal({message:`${hist[idx].savedAt} の状態に戻しますか？`,confirmLabel:"復元",cancelLabel:"キャンセル",onConfirm:()=>{const r={...hist[idx].snapshot};products=products.map(x=>x.id===r.id?r:x);saveProducts();render();showStatus("復元しました");}}); return; }
@@ -774,24 +1360,42 @@ function setupDelegation() {
       const p = products.find(x => x.id === productDetailId);
       if (p) {
         const newStatus = pipelineEl.dataset.setPipelineStatus;
-        const now = new Date().toLocaleDateString("ja-JP");
-        p.productStatus = newStatus;
-        p.updatedAt = now;
         const ps = PRODUCT_STATUSES.find(s => s.id === newStatus);
-        if (p.phase === "development") {
-          const icon = newStatus === "approved" ? "✅" : newStatus === "review" ? "👥" : newStatus === "in_progress" ? "🔨" : "📋";
-          saveTimelineEvent(p.id, "status_changed", `${icon} ${ps?.label || newStatus}に変更`, "", ["productStatus"]);
-        } else {
-          if (newStatus === "discontinued") {
-            if (!p.discontinuedAt) p.discontinuedAt = now;
-            saveTimelineEvent(p.id, "discontinued", `🔴 ${ps?.label || "終売"}`, "", ["productStatus"]);
-          } else if (newStatus === "on_sale") {
-            saveTimelineEvent(p.id, "status_changed", `✅ ${ps?.label || "販売中"}に変更`, "", ["productStatus"]);
+        const doPipelineChange = () => {
+          const now = new Date().toLocaleDateString("ja-JP");
+          p.productStatus = newStatus;
+          p.updatedAt = now;
+          if (p.phase === "development") {
+            const icon = newStatus === "approved" ? "✅" : newStatus === "review" ? "👥" : newStatus === "in_progress" ? "🔨" : "📋";
+            saveTimelineEvent(p.id, "status_changed", `${icon} ${ps?.label || newStatus}に変更`, "", ["productStatus"]);
+          } else {
+            if (newStatus === "discontinued") {
+              if (!p.discontinuedAt) p.discontinuedAt = now;
+              saveTimelineEvent(p.id, "discontinued", `🔴 ${ps?.label || "終売"}`, "", ["productStatus"]);
+            } else if (newStatus === "on_sale") {
+              saveTimelineEvent(p.id, "status_changed", `✅ ${ps?.label || "販売中"}に変更`, "", ["productStatus"]);
+            }
+          }
+          saveProducts();
+          showStatus(`ステータスを「${ps?.label || newStatus}」に変更しました`);
+          render();
+        };
+        if (newStatus === "on_sale" && typeof checkFoodLabel === "function") {
+          const labelErrs = checkFoodLabel(p, derive(p)).filter(i => i.level === "error");
+          if (labelErrs.length) {
+            const errList = labelErrs.slice(0, 3).map(e => `・${e.msg}`).join("\n");
+            const more = labelErrs.length > 3 ? `\n…他 ${labelErrs.length - 3} 件` : "";
+            showModal({
+              message: `⚠️ 食品表示エラーがあります（${labelErrs.length}件）\n\n${errList}${more}\n\n法的リスクがあります。このまま「発売中」に変更しますか？`,
+              confirmLabel: "変更する",
+              cancelLabel: "キャンセル",
+              onConfirm: doPipelineChange,
+              onCancel: () => {},
+            });
+            return;
           }
         }
-        saveProducts();
-        showStatus(`ステータスを「${ps?.label || newStatus}」に変更しました`);
-        render();
+        doPipelineChange();
       }
       return;
     }
@@ -806,6 +1410,7 @@ function setupDelegation() {
       const label = raw.slice(colonIdx + 1);
       const entry = DETAIL_JUMP_MAP[label];
       productDetailId = pid;
+      healthPanelOpen = false;
       saasView = "product-detail";
       view = "saas";
       safeSet("fmcc-view", saasView);
@@ -823,9 +1428,69 @@ function setupDelegation() {
       return;
     }
 
+    // [data-inline-stock] — テーブルビューの在庫インライン編集
+    const inlineStockEl = t.closest("[data-inline-stock]");
+    if (inlineStockEl) {
+      const pid = inlineStockEl.dataset.inlineStock;
+      const p = products.find(x => x.id === pid); if (!p) return;
+      const td = inlineStockEl.closest("td");
+      const curVal = p.currentStock != null && p.currentStock !== "" ? String(p.currentStock) : "";
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.step = "1"; inp.min = "0";
+      inp.value = curVal;
+      inp.className = "mt-stock-inline-input";
+      inp.title = "在庫数を入力してEnterで保存（Escでキャンセル）";
+      td.innerHTML = "";
+      td.appendChild(inp);
+      inp.focus(); inp.select();
+      const save = () => {
+        const v = inp.value.trim();
+        if (v !== curVal) {
+          p.currentStock = v === "" ? "" : v;
+          p.updatedAt = new Date().toLocaleDateString("ja-JP");
+          saveProducts();
+          showStatus(`在庫を「${v || "—"}${p.stockUnit||""}」に更新しました`);
+        }
+        render();
+      };
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") render(); });
+      inp.addEventListener("blur", save);
+      return;
+    }
+
+    // [data-inline-expiry] — テーブルビューの賞味期限インライン編集
+    const inlineExpiryEl = t.closest("[data-inline-expiry]");
+    if (inlineExpiryEl) {
+      const pid = inlineExpiryEl.dataset.inlineExpiry;
+      const p = products.find(x => x.id === pid); if (!p) return;
+      const td = inlineExpiryEl.closest("td");
+      const curVal = p.expiryDate || "";
+      const inp = document.createElement("input");
+      inp.type = "date"; inp.value = curVal;
+      inp.className = "mt-stock-inline-input";
+      inp.style.width = "130px";
+      inp.title = "賞味期限を入力してEnterで保存（Escでキャンセル）";
+      td.innerHTML = "";
+      td.appendChild(inp);
+      inp.focus();
+      const save = () => {
+        const v = inp.value.trim();
+        if (v !== curVal) {
+          p.expiryDate = v || "";
+          p.updatedAt = new Date().toLocaleDateString("ja-JP");
+          saveProducts();
+          showStatus(`賞味期限を「${v || "未設定"}」に更新しました`);
+        }
+        render();
+      };
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") render(); });
+      inp.addEventListener("blur", save);
+      return;
+    }
+
     // [data-nav-product-detail]
     const navPdEl = t.closest("[data-nav-product-detail]");
-    if (navPdEl && !t.closest(".master-card-actions")) { productDetailId=navPdEl.dataset.navProductDetail;saasView="product-detail";view="saas";safeSet("fmcc-view",saasView);render(); return; }
+    if (navPdEl && !t.closest(".master-card-actions")) { productDetailId=navPdEl.dataset.navProductDetail;healthPanelOpen=false;saasView="product-detail";view="saas";safeSet("fmcc-view",saasView);render(); return; }
 
     // [data-label-from]
     const lfEl = t.closest("[data-label-from]");
@@ -877,8 +1542,33 @@ function setupDelegation() {
     // [data-clear-pipeline-filter]
     if (t.closest("[data-clear-pipeline-filter]")) { masterPipelineFilter=""; render(); return; }
 
+    // [data-clear-responsible-filter]
+    if (t.closest("[data-clear-responsible-filter]")) { masterResponsibleFilter=""; render(); return; }
+
+    // [data-set-responsible-filter] — テーブル担当者セルクリックで絞り込み
+    const srfEl = t.closest("[data-set-responsible-filter]");
+    if (srfEl) { masterResponsibleFilter=srfEl.dataset.setResponsibleFilter; saasView="products"; view="saas"; safeSet("fmcc-view",saasView); render(); return; }
+
+    // [data-clear-allergen-filter]
+    if (t.closest("[data-clear-allergen-filter]")) { masterAllergenFilter=""; render(); return; }
+
+    // [data-set-allergen-filter] — ダッシュボードアレルゲンウィジェットから絞り込み
+    const safEl = t.closest("[data-set-allergen-filter]");
+    if (safEl) { masterAllergenFilter=safEl.dataset.setAllergenFilter; saasView="products"; view="saas"; safeSet("fmcc-view",saasView); render(); return; }
+
+    // [data-clear-ing-filter]
+    if (t.closest("[data-clear-ing-filter]")) { masterIngFilter=""; render(); return; }
+
+    // [data-cross-search-ing] — 原材料行の🔍ボタン → 商品一覧を原材料フィルターで開く
+    const csiEl = t.closest("[data-cross-search-ing]");
+    if (csiEl) {
+      masterIngFilter = csiEl.dataset.crossSearchIng;
+      saasView = "products"; view = "saas"; safeSet("fmcc-view", saasView);
+      render(); return;
+    }
+
     // [data-clear-all-filters]
-    if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; masterPipelineFilter=""; render(); return; }
+    if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; masterPipelineFilter=""; masterResponsibleFilter=""; masterAllergenFilter=""; masterIngFilter=""; render(); return; }
 
     // [data-master-filter]
     const mfEl = t.closest("[data-master-filter]");
@@ -1010,7 +1700,7 @@ function setupDelegation() {
       const label = saveSearchEl.dataset.saveSearch;
       if (!label) return;
       if (savedSearchPresets.some(s => s.label === label)) { showStatus("同じ条件はすでに保存されています"); return; }
-      savedSearchPresets = [...savedSearchPresets, { label, filter: masterFilter, category: masterCategoryFilter, completion: masterCompletionFilter, pipeline: masterPipelineFilter, search: masterSearch }];
+      savedSearchPresets = [...savedSearchPresets, { label, filter: masterFilter, category: masterCategoryFilter, completion: masterCompletionFilter, pipeline: masterPipelineFilter, search: masterSearch, responsible: masterResponsibleFilter, allergen: masterAllergenFilter, ing: masterIngFilter }];
       safeSet("fmcc-saved-searches", JSON.stringify(savedSearchPresets));
       showStatus(`「${label}」を保存しました`);
       render(); return;
@@ -1027,6 +1717,9 @@ function setupDelegation() {
       masterCompletionFilter = s.completion || "";
       masterPipelineFilter = s.pipeline || "";
       masterSearch = s.search || "";
+      masterResponsibleFilter = s.responsible || "";
+      masterAllergenFilter = s.allergen || "";
+      masterIngFilter = s.ing || "";
       render(); return;
     }
 
@@ -1149,6 +1842,7 @@ function setupDelegation() {
     if (view !== "saas") return;
     if (e.key === "d") { e.preventDefault(); saasView="dashboard"; masterSelected=new Set(); render(); return; }
     if (e.key === "p") { e.preventDefault(); saasView="products"; masterSelected=new Set(); render(); return; }
+    if (e.key === "a") { e.preventDefault(); saasView="allergen-matrix"; masterSelected=new Set(); render(); return; }
     if (e.key === "n") {
       e.preventDefault();
       if (!canCreateMore()) { showModal({ message: `${planInfo().label}プランは${planInfo().note}です。` }); return; }
@@ -1158,10 +1852,20 @@ function setupDelegation() {
       saasView = "products"; masterSelected = new Set(); registerMenuOpen = true; render(); return;
     }
     if (e.key === "?") { e.preventDefault(); showShortcutsPanel(); return; }
+    if (e.key === "t" && saasView === "products") {
+      e.preventDefault(); masterView = masterView === "card" ? "table" : "card"; safeSet("fmcc-master-view", masterView); render(); return;
+    }
     if (saasView === "product-detail" && productDetailId) {
       const DETAIL_TABS = ["basic","ingredients","label","spec","cost","ai","history","approval"];
       const tidx = parseInt(e.key) - 1;
       if (tidx >= 0 && tidx < DETAIL_TABS.length) { e.preventDefault(); productDetailTab = DETAIL_TABS[tidx]; render(); return; }
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const navBtns = document.querySelectorAll(".detail-nav-btn:not([disabled])");
+        const btn = e.key === "ArrowLeft" ? navBtns[0] : navBtns[navBtns.length - 1];
+        if (btn && btn.dataset.navProductDetail) {
+          e.preventDefault(); productDetailId = btn.dataset.navProductDetail; healthPanelOpen = false; render(); return;
+        }
+      }
     }
   });
 
@@ -1224,7 +1928,7 @@ function setupDelegation() {
     if (t.matches("[data-field]"))           { const p=currentProduct(); p[t.dataset.field]=t.value; scheduleAutoSave(); return; }
     if (t.matches("[data-volume-amount]"))   { const p=currentProduct(); const {unit}=splitVolume(p.volume); p.volume=buildVolume(t.value,p.volumeCustomUnit?unit:(unit||"個")); return; }
     if (t.matches("[data-volume-custom-unit]")) { const p=currentProduct(); const {amount}=splitVolume(p.volume); p.volumeCustomUnit=true; p.volume=buildVolume(amount,t.value); return; }
-    if (t.matches("[data-ing-name]"))        { const p=currentProduct(); if(!p)return; const ing=p.ingredients[Number(t.dataset.ingName)]; if(!ing)return; ing.name=t.value.replace(/[\/／]/g,""); return; }
+    if (t.matches("[data-ing-name]"))        { const p=currentProduct(); if(!p)return; const ing=p.ingredients[Number(t.dataset.ingName)]; if(!ing)return; ing.name=t.value.replace(/[\/／]/g,""); const rmMatch=rawMaterials.find(r=>r.name===ing.name||(r.labelName&&r.labelName===ing.name)); if(rmMatch) ing.masterId=rmMatch.id; else if(ing.masterId) delete ing.masterId; return; }
     if (t.matches("[data-ing-weight]"))      { const p=currentProduct(); if(!p)return; const ing=p.ingredients[Number(t.dataset.ingWeight)]; if(!ing)return; ing.weight=t.value; return; }
     if (t.matches("[data-nutr]"))            { const p=currentProduct(); p.nutritionManual={...p.nutritionManual,[t.dataset.nutr]:t.value}; return; }
     if (t.matches("[data-bb-days]"))         { const v=parseInt(t.value)||1; currentProduct().bestBefore=`製造日より${v}日`; const prev=document.querySelector(".bb-preview strong"); if(prev) prev.textContent=`製造日より${v}日`; return; }
@@ -1232,9 +1936,54 @@ function setupDelegation() {
     if (t.matches("[data-print-offset]"))    { if(t.dataset.printOffset==="x"){printOffsetX=t.value;safeSet("food-label-offset-x",t.value);}else{printOffsetY=t.value;safeSet("food-label-offset-y",t.value);} return; }
     if (t.matches("[data-print-cfg]"))       { printCfg={...printCfg,label:"自由入力",[t.dataset.printCfg]:t.value}; safeSet("food-label-print-cfg",JSON.stringify(printCfg)); scheduleRender(); return; }
     if (t.matches("[data-master-search]"))   { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{masterSearch=t.value;render();},200); return; }
+    if (t.matches("[data-master-ing-filter]")) { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{masterIngFilter=t.value.trim();render();},300); return; }
+    if (t.matches("[data-rm-search]"))       { clearTimeout(masterSearchTimer); masterSearchTimer=setTimeout(()=>{rawMaterialSearch=t.value;render();},200); return; }
+    if (t.matches("[data-rm-price-calc]")) {
+      const amount = parseFloat(document.getElementById("rm-contentAmount")?.value) || 0;
+      const price  = parseFloat(document.getElementById("rm-purchasePrice")?.value) || 0;
+      const unit   = document.getElementById("rm-contentUnit")?.value || "kg";
+      let totalG = unit==="g"?amount:unit==="kg"?amount*1000:unit==="ml"?amount:unit==="L"?amount*1000:amount;
+      const fmtU = (v, s) => v && totalG ? `${(v/totalG).toFixed(v/totalG<1?3:2)} 円/${s}` : "—";
+      const perG = totalG && price ? price / totalG : null;
+      const setT = (id, txt) => { const el=document.getElementById(id); if (el) el.textContent=txt; };
+      setT("rm-up-g",    perG!==null ? `${perG.toFixed(perG<1?3:2)} 円/g` : "—");
+      setT("rm-up-100g", perG!==null ? `${(perG*100).toFixed(perG*100<1?3:2)} 円/100g` : "—");
+      setT("rm-up-kg",   perG!==null ? `${(perG*1000).toFixed(perG*1000<10?2:1)} 円/kg` : "—");
+      // 影響商品の原価率リアルタイム更新
+      const impactRows = document.getElementById("rm-impact-rows");
+      if (impactRows && rawMaterialEditId && rawMaterialEditId !== "__new__" && perG !== null) {
+        const affNow = findAffectedProducts(rawMaterialEditId);
+        const html = affNow.slice(0, 5).map(p => {
+          const ings = (p.ingredients||[]).filter(i => i.name?.trim());
+          let ingCost = 0;
+          for (const i of ings) {
+            const w = parseFloat(i.weight) || 0;
+            if (!w) continue;
+            if (i.masterId === rawMaterialEditId) {
+              ingCost += w * perG;
+            } else {
+              const rm2 = rawMaterials.find(r => r.id === i.masterId);
+              if (rm2) { const { perG: pg2 } = calcUnitPrices(rm2); if (pg2) ingCost += w * pg2; }
+            }
+          }
+          const price = parseFloat(p.price) || 0;
+          const newRate = price > 0 && ingCost > 0 ? Math.round(ingCost / price * 100) : null;
+          const rateHtml = newRate !== null
+            ? `<span style="color:${newRate<=30?"#16a34a":newRate<=60?"#d97706":"#ef4444"};font-weight:700">${newRate}%</span>`
+            : `<span style="color:#94a3b8">未計算</span>`;
+          return `<div class="rm-impact-row"><span class="rm-impact-name">${escapeHtml(p.internalName||p.name||"名称未設定")}</span><span class="rm-impact-rate">→ ${rateHtml}</span></div>`;
+        }).join("");
+        impactRows.innerHTML = html + (affNow.length > 5 ? `<div class="rm-impact-more">他${affNow.length-5}件</div>` : "");
+      }
+      return;
+    }
     if (t.matches("[data-saved-search]"))    { clearTimeout(savedSearchTimer); savedSearchTimer=setTimeout(()=>{savedSearch=t.value;render();},200); return; }
     if (t.matches("[data-master-field]")) {
       const f = t.dataset.masterField;
+      if (f === "currentStock") {
+        const v = parseFloat(t.value);
+        if (!isNaN(v) && v < 0) { t.value = 0; showStatus("在庫数は0以上を入力してください"); }
+      }
       if (["price","directCost","directPackaging","directShipping","directOther"].includes(f)) {
         const v = parseFloat(t.value);
         if (!isNaN(v) && v < 0) {
@@ -1253,6 +2002,7 @@ function setupDelegation() {
       const p = products.find(x=>x.id===productDetailId); if(!p)return;
       const ing = p.ingredients[Number(t.dataset.masterIngName)]; if(!ing)return;
       ing.name = t.value.replace(/[\/／]/g, "");
+      const rmMatch2=rawMaterials.find(r=>r.name===ing.name||(r.labelName&&r.labelName===ing.name)); if(rmMatch2) ing.masterId=rmMatch2.id; else if(ing.masterId) delete ing.masterId;
       scheduleAutoSaveMaster(); return;
     }
     if (t.matches("[data-master-ing-weight]")) {
@@ -1342,6 +2092,7 @@ function setupDelegation() {
     if (t.matches("[data-master-category-filter]")) { masterCategoryFilter=t.value; render(); return; }
     if (t.matches("[data-master-completion-filter]")) { masterCompletionFilter=t.value; render(); return; }
     if (t.matches("[data-master-pipeline-filter]")) { masterPipelineFilter=t.value; render(); return; }
+    if (t.matches("[data-master-responsible-filter]")) { masterResponsibleFilter=t.value; render(); return; }
     if (t.matches("[data-select-product]")) {
       const pid = t.dataset.selectProduct;
       const wasEmpty = masterSelected.size === 0;
@@ -1368,28 +2119,66 @@ function setupDelegation() {
       else ids.forEach(id => masterSelected.delete(id));
       render(); return;
     }
+    if (t.id === "tb-image" && t.files[0]) {
+      const file = t.files[0];
+      const canvas = document.getElementById("tb-image-preview-canvas");
+      if (canvas) {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const MAX = 400;
+          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.style.display = "block";
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+      }
+      return;
+    }
     if (t.matches("[data-quick-status-select]")) {
       const pid = t.dataset.quickStatusSelect;
       const p = products.find(x => x.id === pid);
       if (p) {
-        const now = new Date().toLocaleDateString("ja-JP");
-        p.productStatus = t.value;
-        p.updatedAt = now;
-        const ps = PRODUCT_STATUSES.find(s => s.id === t.value);
-        if (p.phase === "development") {
-          const icon = t.value === "approved" ? "✅" : t.value === "review" ? "👥" : t.value === "in_progress" ? "🔨" : "📋";
-          saveTimelineEvent(p.id, "status_changed", `${icon} ${ps?.label || t.value}に変更`, "", ["productStatus"]);
-        } else {
-          if (t.value === "discontinued") {
-            if (!p.discontinuedAt) p.discontinuedAt = now;
-            saveTimelineEvent(p.id, "discontinued", `🔴 ${ps?.label || "終売"}`, "", ["productStatus"]);
-          } else if (t.value === "on_sale") {
-            saveTimelineEvent(p.id, "status_changed", `✅ ${ps?.label || "販売中"}に変更`, "", ["productStatus"]);
+        const prevStatus = p.productStatus;
+        const doStatusChange = () => {
+          const now = new Date().toLocaleDateString("ja-JP");
+          p.productStatus = t.value;
+          p.updatedAt = now;
+          const ps = PRODUCT_STATUSES.find(s => s.id === t.value);
+          if (p.phase === "development") {
+            const icon = t.value === "approved" ? "✅" : t.value === "review" ? "👥" : t.value === "in_progress" ? "🔨" : "📋";
+            saveTimelineEvent(p.id, "status_changed", `${icon} ${ps?.label || t.value}に変更`, "", ["productStatus"]);
+          } else {
+            if (t.value === "discontinued") {
+              if (!p.discontinuedAt) p.discontinuedAt = now;
+              saveTimelineEvent(p.id, "discontinued", `🔴 ${ps?.label || "終売"}`, "", ["productStatus"]);
+            } else if (t.value === "on_sale") {
+              saveTimelineEvent(p.id, "status_changed", `✅ ${ps?.label || "販売中"}に変更`, "", ["productStatus"]);
+            }
+          }
+          saveProducts();
+          showStatus(`ステータスを「${ps?.label || t.value}」に変更しました`);
+          render();
+        };
+        if (t.value === "on_sale" && typeof checkFoodLabel === "function") {
+          const labelErrs = checkFoodLabel(p, derive(p)).filter(i => i.level === "error");
+          if (labelErrs.length) {
+            const errList = labelErrs.slice(0, 3).map(e => `・${e.msg}`).join("\n");
+            const more = labelErrs.length > 3 ? `\n…他 ${labelErrs.length - 3} 件` : "";
+            showModal({
+              message: `⚠️ 食品表示エラーがあります（${labelErrs.length}件）\n\n${errList}${more}\n\n法的リスクがあります。このまま「発売中」に変更しますか？`,
+              confirmLabel: "変更する",
+              cancelLabel: "キャンセル",
+              onConfirm: doStatusChange,
+              onCancel: () => { t.value = prevStatus; },
+            });
+            return;
           }
         }
-        saveProducts();
-        showStatus(`ステータスを「${ps?.label || t.value}」に変更しました`);
-        render();
+        doStatusChange();
       }
       return;
     }
@@ -1539,4 +2328,5 @@ function bindDynamic() {
   document.getElementById("ai-chat-input")?.addEventListener("input", e=>{aiRegChatInput=e.target.value;});
   document.getElementById("ai-chat-send")?.addEventListener("click", ()=>sendAiChatMessage());
   document.getElementById("ai-chat-input")?.addEventListener("keydown", e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter")sendAiChatMessage();});
+
 }

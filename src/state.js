@@ -28,6 +28,7 @@ let printOffsetX = safeGet("food-label-offset-x") || "0";
 let printOffsetY = safeGet("food-label-offset-y") || "0";
 let globalHandlersBound = false;
 let showTutorial = !safeGet("food-label-tutorial-done");
+let wizardStep = 0; // 0=会社情報, 1=初回商品, 2=完了
 let tutorialStep = 0;
 let showAiPanel = false;
 let highlightField = null; // ジャンプ後に強調する field selector

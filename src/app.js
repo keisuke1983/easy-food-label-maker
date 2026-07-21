@@ -51,8 +51,80 @@ const TUTORIAL_STEPS = [
   },
 ];
 
+function wizardHtml() {
+  if (!showTutorial) return "";
+  // 初回（商品ゼロ）のときだけウィザードを表示
+  const releasedCount = products.filter(p => (p.phase || "released") === "released").length;
+  if (releasedCount > 0) return "";
+  const mfr = mfrTemplates[0] || {};
+  const steps = [
+    { num: 1, label: "会社情報", icon: "🏢" },
+    { num: 2, label: "最初の商品", icon: "📦" },
+    { num: 3, label: "完了", icon: "🎉" },
+  ];
+  const stepBar = `<div class="wz-steps">${steps.map((s,i) => `<div class="wz-step${wizardStep===i?" active":wizardStep>i?" done":""}"><span class="wz-step-icon">${s.icon}</span><span class="wz-step-label">${s.label}</span></div>${i<steps.length-1?'<div class="wz-step-line"></div>':""}`).join("")}</div>`;
+  let body = "";
+  if (wizardStep === 0) {
+    body = `
+      <h2 class="wz-title">FoodPilotへようこそ！</h2>
+      <p class="wz-desc">まず会社情報を設定しましょう。食品表示ラベル・規格書に自動で反映されます。</p>
+      <div class="wz-form">
+        <label class="wz-lbl">会社名 <span class="wz-req">必須</span></label>
+        <input class="wz-input" id="wz-company" placeholder="例：株式会社〇〇フーズ" value="${escapeHtml(mfr.manufacturerName||"")}">
+        <label class="wz-lbl" style="margin-top:14px">担当者名</label>
+        <input class="wz-input" id="wz-user" placeholder="例：山田 太郎" value="${escapeHtml(currentUserName||"")}">
+        <label class="wz-lbl" style="margin-top:14px">製造所住所 <span class="wz-hint">（省略可）</span></label>
+        <input class="wz-input" id="wz-address" placeholder="例：東京都渋谷区〇〇1-2-3" value="${escapeHtml(mfr.manufacturerAddress||"")}">
+      </div>
+      <div class="wz-actions">
+        <button class="wz-skip" data-wz="skip">スキップ</button>
+        <button class="action primary wz-next" data-wz="step1-next">次へ →</button>
+      </div>`;
+  } else if (wizardStep === 1) {
+    body = `
+      <h2 class="wz-title">最初の商品を登録しましょう</h2>
+      <p class="wz-desc">後からいつでも追加・編集できます。今は商品名だけでOKです。</p>
+      <div class="wz-form">
+        <label class="wz-lbl">商品名 <span class="wz-hint">（省略するとサンプルで作成）</span></label>
+        <input class="wz-input" id="wz-prod-name" placeholder="例：有機玄米クッキー">
+        <label class="wz-lbl" style="margin-top:14px">カテゴリ <span class="wz-hint">（省略可）</span></label>
+        <input class="wz-input" id="wz-prod-cat" placeholder="例：菓子・スナック類">
+      </div>
+      <div class="wz-actions">
+        <button class="action wz-back" data-wz="prev">← 戻る</button>
+        <button class="action primary wz-next" data-wz="step2-next">商品を作成 →</button>
+      </div>`;
+  } else {
+    const firstProduct = products[0];
+    body = `
+      <h2 class="wz-title" style="color:#16a34a">準備完了！ 🎉</h2>
+      <p class="wz-desc">FoodPilotの設定が完了しました。さっそく使い始めましょう。</p>
+      <div class="wz-done-list">
+        ${mfrTemplates[0]?.manufacturerName ? `<div class="wz-done-item">✅ 会社情報を登録しました（${escapeHtml(mfrTemplates[0].manufacturerName)}）</div>` : ""}
+        ${currentUserName ? `<div class="wz-done-item">✅ 担当者名を設定しました（${escapeHtml(currentUserName)}）</div>` : ""}
+        ${firstProduct ? `<div class="wz-done-item">✅ 商品「${escapeHtml(firstProduct.internalName||firstProduct.name||"")}」を作成しました</div>` : ""}
+      </div>
+      <div class="wz-next-tips">
+        <div class="wz-tip">💡 原材料を入力すると栄養成分とアレルゲンが自動計算されます</div>
+        <div class="wz-tip">💡 「ラベル作成」で食品表示ラベルをプレビュー・印刷できます</div>
+      </div>
+      <div class="wz-actions" style="justify-content:center">
+        <button class="action primary" data-wz="done" style="font-size:16px;padding:12px 32px">FoodPilotを使いはじめる ✓</button>
+      </div>`;
+  }
+  return `<div class="wz-overlay">
+    <div class="wz-card">
+      ${stepBar}
+      <div class="wz-body">${body}</div>
+    </div>
+  </div>`;
+}
+
 function tutorialHtml() {
   if (!showTutorial) return "";
+  // 商品ゼロの初回はウィザードを優先
+  const releasedCount = products.filter(p => (p.phase || "released") === "released").length;
+  if (releasedCount === 0) return "";
   const s = TUTORIAL_STEPS[tutorialStep];
   const total = TUTORIAL_STEPS.length;
   const isLast = tutorialStep === total - 1;
@@ -2753,7 +2825,7 @@ function render() {
       <button class="action" onclick="saasView='dashboard';productDetailId=null;render()">ダッシュボードに戻る</button>
     </div>`;
   }
-  document.getElementById("root").innerHTML = `${pageHtml}${tutorialHtml()}${demoMode ? demoOverlayHtml() : ""}`;
+  document.getElementById("root").innerHTML = `${pageHtml}${wizardHtml()}${tutorialHtml()}${demoMode ? demoOverlayHtml() : ""}`;
   document.body.classList.toggle("fp-demo-mode", demoMode && !demoEndScreen);
   bindDynamic();
   window.scrollTo({ top: scrollY, behavior: "instant" });

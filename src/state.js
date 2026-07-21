@@ -2,7 +2,8 @@
 
 let products = loadProducts();
 let draft = null;
-let currentPlan = safeGet("food-label-plan") || "free";
+let currentPlan = safeGet("food-label-plan") || "trial30";
+let trialStartDate = safeGet("food-label-trial-start") || null;
 let view = "saas";
 let editId = null;
 let printTarget = "both";

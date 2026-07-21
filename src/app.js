@@ -2811,7 +2811,26 @@ function scheduleAutoSave() {
   }, 3000);
 }
 function currentProduct() { return editId === "new" ? draft : products.find((p) => p.id === editId); }
-function planInfo() { return PLANS[currentPlan] || PLANS.free; }
+// ── トライアル管理 ────────────────────────────────────────────────────
+function initTrial() {
+  if (currentPlan === "trial30" && !trialStartDate) {
+    trialStartDate = new Date().toISOString().split("T")[0];
+    safeSet("food-label-trial-start", trialStartDate);
+  }
+}
+function trialDaysLeft() {
+  if (!trialStartDate) return 30;
+  const diff = Math.floor((Date.now() - new Date(trialStartDate)) / 86400000);
+  return Math.max(0, 30 - diff);
+}
+function isTrialExpired() {
+  return currentPlan === "trial30" && trialDaysLeft() === 0;
+}
+function effectivePlanId() {
+  if (currentPlan === "trial30" && isTrialExpired()) return "free";
+  return currentPlan;
+}
+function planInfo() { return PLANS[effectivePlanId()] || PLANS.free; }
 function canCreateMore() { return products.length < planInfo().limit; }
 function canUseJanCode() { return currentPlan !== "free"; }
 function selectedMfrTypes(p) {
@@ -2914,29 +2933,55 @@ function homeHtml() {
   </main>`;
 }
 function planHtml() {
-  const POPULAR = "pro";
-  // trial は別セクションで表示するためメイングリッドから除外
-  const mainPlans = Object.entries(PLANS).filter(([id]) => id !== "trial");
+  const eff = effectivePlanId();
+  const daysLeft = trialDaysLeft();
+  const expired = isTrialExpired();
+
+  // トライアルバナー
+  const trialBanner = (currentPlan === "trial30")
+    ? expired
+      ? `<div class="plan-trial-banner plan-trial-banner--expired">
+          ⏰ 30日間の無料トライアルが終了しました。
+          引き続きご利用いただくにはプランをお選びください。
+         </div>`
+      : `<div class="plan-trial-banner">
+          🎉 無料トライアル中 — あと <strong>${daysLeft}日</strong> で終了します。
+          終了後は3商品まで無料で使い続けられます。
+         </div>`
+    : "";
+
+  // 有料プランカード（free・trial30 は除外）
+  const paidPlans = [["starter", PLANS.starter], ["pro", PLANS.pro]];
+  const paidCards = paidPlans.map(([id, p]) => {
+    const isActive = eff === id;
+    const isPopular = id === "pro";
+    const buyBtn = !isActive
+      ? `<button class="plan-buy-btn" data-action="stripe-checkout" data-plan="${id}">購入する →</button>`
+      : `<span class="plan-check">✓ 使用中</span>`;
+    return `<div class="plan-card${isActive ? " selected" : ""}${isPopular ? " popular" : ""}">
+      ${isPopular ? `<span class="popular-badge">人気</span>` : ""}
+      <strong class="plan-name">${p.label}</strong>
+      <em class="plan-price">${p.price}</em>
+      <small class="plan-note">${p.note}</small>
+      ${buyBtn}
+    </div>`;
+  }).join("");
+
+  // フリープランの状態表示
+  const freeStatus = eff === "free" || eff === "trial30"
+    ? `<div class="plan-free-note">
+        <span class="plan-free-badge">✓ フリープラン（3商品まで永続無料）${eff === "trial30" && !expired ? " — トライアル終了後も継続" : " 使用中"}</span>
+       </div>`
+    : "";
+
   return `<section class="plan-panel">
-    <div class="plan-title"><b>プランを選択</b><span>お支払い後に表示されるライセンスキーを設定ページで入力してください</span></div>
-    <div class="plan-grid">${mainPlans.map(([id, p]) => {
-      const isActive = currentPlan === id;
-      const buyBtn = !isActive && id !== "free"
-        ? `<button class="plan-buy-btn" data-action="stripe-checkout" data-plan="${id}">購入する →</button>`
-        : "";
-      return `<div class="plan-card${isActive ? " selected" : ""}${id === POPULAR ? " popular" : ""}">
-        ${id === POPULAR ? `<span class="popular-badge">人気</span>` : ""}
-        <strong class="plan-name">${p.label}</strong>
-        <em class="plan-price">${p.price}</em>
-        <small class="plan-note">${p.note}</small>
-        ${isActive ? `<span class="plan-check">✓ 使用中</span>` : buyBtn}
-      </div>`;
-    }).join("")}
-    </div>
+    ${trialBanner}
+    <div class="plan-title"><b>プランを選択</b><span>お支払い後にライセンスキーを設定ページで入力</span></div>
+    <div class="plan-grid">${paidCards}</div>
+    ${freeStatus}
     <div class="plan-stripe-note">
       <span>💳 Stripe決済（クレジットカード対応）</span>
       <span>🔒 SSL暗号化で安全に処理されます</span>
-      ${currentPlan !== "free" && currentPlan !== "trial" ? `<span>✓ 現在：<strong>${escapeHtml(PLANS[currentPlan]?.label || currentPlan)}プラン</strong></span>` : ""}
     </div>
     <details class="plan-trial-section">
       <summary class="plan-trial-toggle">🧪 モニター・テスターの方はこちら</summary>
@@ -5761,6 +5806,7 @@ if (currentPlan === "trial" && !hasModule("develop")) {
 restoreFromHash();
 window.addEventListener("hashchange", () => { restoreFromHash(); render(); });
 
+initTrial();       // トライアル開始日を記録（初回のみ）
 render();
 setupDelegation(); // ⑨ デリゲーション登録（起動時1回）
 initCloudSync();   // ☁ クラウドから最新データをマージ（非同期・バックグラウンド）

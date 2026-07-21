@@ -277,7 +277,7 @@ const TIMELINE_EVENT_ICONS = {
   status_changed:      "🔄", approval_requested: "👥", approved:           "✅",
   rejected:            "↩",  approval_cancelled: "🚫",
   label_edited:        "🏷", ai_consulted:        "🤖", pdf_exported:       "🖨", duplicated:         "📋",
-  field_changed:       "✏️",
+  field_changed:       "✏️", comment:            "💬", trial_batch:         "📊",
 };
 // 自動タイムライン記録するフィールド名 → 表示ラベル
 const TRACKED_MASTER_FIELDS = {
@@ -290,6 +290,13 @@ const TRACKED_MASTER_FIELDS = {
   manufacturerName: "製造者名",
   originCountry:    "原料原産地",
   internalName:     "管理名",
+  specResponsible:  "担当者",
+  currentStock:     "在庫数",
+  stockUnit:        "在庫単位",
+  expiryDate:       "期限管理日",
+  janCode:          "JANコード",
+  directCost:       "直接原材料費",
+  targetCostRate:   "目標原価率",
 };
 // イベント種別 → ドット色
 const TIMELINE_EVENT_COLORS = {
@@ -298,8 +305,8 @@ const TIMELINE_EVENT_COLORS = {
   approved:         "#059669", released:          "#059669",
   rejected:         "#dc2626", approval_cancelled:"#dc2626", discontinued: "#6b7280",
   approval_requested:"#d97706",
-  ai_consulted:     "#7c3aed", pdf_exported:      "#64748b",
-  status_changed:   "#0891b2",
+  ai_consulted:     "#7c3aed", pdf_exported:      "#64748b", trial_batch:       "#0891b2",
+  status_changed:   "#0891b2", comment:           "#0891b2",
 };
 function saveTimelineEvent(pid, eventType, label, comment = "", changedFields = [], changes = {}) {
   try {
@@ -360,8 +367,14 @@ const CSV_EXPORT_FIELDS = [
   ["manufacturerPostal", "郵便番号"],
   ["janCode",            "JANコード"],
   ["price",              "販売価格"],
-  ["memo",               "メモ"],
+  ["memo",               "備考・特記事項"],
+  ["specResponsible",   "担当者"],
+  ["currentStock",       "在庫数"],
+  ["stockUnit",          "在庫単位"],
+  ["expiryDate",         "期限管理日"],
+  ["releasedAt",         "発売日"],
   ["publishStatus",      "ステータス"],
+  ["approvalStatus",     "承認ステータス"],
   ["updatedAt",          "更新日"],
   ["directCost",         "材料費"],
   ["directPackaging",    "包装費"],
@@ -370,15 +383,85 @@ const CSV_EXPORT_FIELDS = [
   ["totalCost",          "原価合計"],
   ["costRate",           "原価率"],
   ["grossProfit",        "粗利額"],
+  ["labelErrors",        "表示エラー数"],
+  ["labelWarnings",      "表示警告数"],
+  ["allergens",          "アレルゲン"],
 ];
 
-function exportCsv() {
-  const rows = products.map((p) => {
+function exportAllergenCsv() {
+  const allergenNames = ALLERGEN_RULES.map(([name]) => name);
+  const phase = allergenMatrixPhase || "released";
+  let list = phase === "all" ? products
+    : phase === "development" ? products.filter(p => p.phase === "development")
+    : products.filter(p => (p.phase || "released") === "released");
+  list = list.filter(p => p.internalName || p.name);
+  const header = ["商品名", "商品コード", ...allergenNames].join(",");
+  const body = list.map(p => {
+    const ingNames = (p.ingredients || []).map(i => i.name).filter(Boolean);
+    const detected = new Set(detectAllergens(ingNames));
+    const cols = [
+      `"${(p.internalName||p.name||"").replace(/"/g,'""')}"`,
+      `"${(p.code||"").replace(/"/g,'""')}"`,
+      ...allergenNames.map(a => detected.has(a) ? "✓" : ""),
+    ];
+    return cols.join(",");
+  }).join("\n");
+  const csv = "﻿" + header + "\n" + body;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `アレルゲン管理表_${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showStatus(`アレルゲン管理表をCSV出力しました（${list.length}件）`);
+}
+
+function exportCsv(filteredOnly = false) {
+  const todayIso = new Date().toISOString().split("T")[0];
+  const staleIso = new Date(Date.now() - 180*24*60*60*1000).toISOString().split("T")[0];
+  const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  let exportList = [...products];
+  if (filteredOnly) {
+    // 現在の絞り込み条件を再現
+    const rel = exportList.filter(p => (p.phase || "released") === "released");
+    let list = [...rel];
+    if (masterFilter === "starred")      list = list.filter(p => p.starred);
+    else if (masterFilter === "active")  list = list.filter(p => p.publishStatus === "active");
+    else if (masterFilter === "draft")   list = list.filter(p => p.publishStatus === "draft");
+    else if (masterFilter === "incomplete") list = list.filter(p => { const d = derive(p); return calcCompletion(p, d).pct < 100; });
+    else if (masterFilter === "noBestBefore") list = list.filter(p => !p.bestBefore?.trim());
+    else if (masterFilter === "noIngredients") list = list.filter(p => !(p.ingredients||[]).some(i => i.name?.trim()));
+    else if (masterFilter === "noMfr")   list = list.filter(p => !p.manufacturerName?.trim());
+    else if (masterFilter === "noJan")   list = list.filter(p => !p.janCode?.trim());
+    else if (masterFilter === "noImage") list = list.filter(p => !p.imageDataUrl);
+    else if (masterFilter === "noCost")  list = list.filter(p => (p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length);
+    else if (masterFilter === "noStock") list = list.filter(p => p.currentStock==null||p.currentStock===""||parseFloat(p.currentStock)===0);
+    else if (masterFilter === "expired") list = list.filter(p => p.expiryDate && p.expiryDate < todayIso);
+    else if (masterFilter === "expiringSoon") list = list.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso);
+    else if (masterFilter === "stale")   list = list.filter(p => p.updatedAt && p.updatedAt < staleIso);
+    else if (masterFilter === "review")  list = list.filter(p => p.approvalStatus === "review");
+    else if (masterFilter === "hasLabelErrors") list = list.filter(p => { const d = derive(p); return checkFoodLabel(p, d).some(i => i.level === "error"); });
+    if (masterCategoryFilter)   list = list.filter(p => (p.category||"") === masterCategoryFilter);
+    if (masterCompletionFilter) { const t = {lt100:100,lt60:60,lt30:30}[masterCompletionFilter]||100; list = list.filter(p => { const d=derive(p); return calcCompletion(p,d).pct < t; }); }
+    if (masterPipelineFilter)   list = list.filter(p => (p.productStatus||"on_sale") === masterPipelineFilter);
+    if (masterResponsibleFilter) list = list.filter(p => (p.specResponsible||"") === masterResponsibleFilter);
+    if (masterAllergenFilter)   list = list.filter(p => derive(p).allergens.includes(masterAllergenFilter));
+    if (masterIngFilter) { const _mi=masterIngFilter.toLowerCase(); list=list.filter(p=>(p.ingredients||[]).some(i=>(i.name||"").toLowerCase().includes(_mi))); }
+    if (masterSearch) { const _ms = masterSearch.toLowerCase(); list = list.filter(p => (p.internalName||"").toLowerCase().includes(_ms)||(p.name||"").toLowerCase().includes(_ms)||(p.code||"").toLowerCase().includes(_ms)||(p.category||"").toLowerCase().includes(_ms)||(p.janCode||"").includes(_ms)||(p.specResponsible||"").toLowerCase().includes(_ms)||derive(p).allergens.join(" ").includes(_ms)); }
+    exportList = list;
+  }
+  const rows = exportList.map((p) => {
     const costs = calcCosts(p);
+    const d = derive(p);
+    const lcIssues = checkFoodLabel(p, d);
     const extra = {
-      totalCost:   costs.totalCost > 0 ? Math.round(costs.totalCost) : "",
-      costRate:    costs.costRate !== null ? costs.costRate + "%" : "",
-      grossProfit: costs.price > 0 ? Math.round(costs.gross) : "",
+      totalCost:    costs.totalCost > 0 ? Math.round(costs.totalCost) : "",
+      costRate:     costs.costRate !== null ? costs.costRate + "%" : "",
+      grossProfit:  costs.price > 0 ? Math.round(costs.gross) : "",
+      labelErrors:  lcIssues.filter(i => i.level === "error").length || "",
+      labelWarnings:lcIssues.filter(i => i.level === "warn").length || "",
+      allergens:    d.allergens.join("・"),
     };
     return CSV_EXPORT_FIELDS.map(([key]) => {
       const val = extra[key] !== undefined ? extra[key] : (p[key] || "");
@@ -389,9 +472,11 @@ function exportCsv() {
   const csv = [headerRow, ...rows].join("\r\n");
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = "food-labels.csv"; a.click();
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const suffix = filteredOnly ? `_絞込${exportList.length}件` : `_全${exportList.length}件`;
+  const a = document.createElement("a"); a.href = url; a.download = `FoodPilot_商品一覧_${dateStr}${suffix}.csv`; a.click();
   URL.revokeObjectURL(url);
-  showStatus("CSVをエクスポートしました（Excelで開いて編集できます）");
+  showStatus(`CSV をエクスポートしました（${exportList.length}件）`);
 }
 function exportJson() {
   const hasImages = products.some(p => p.imageDataUrl);
@@ -627,8 +712,18 @@ function showStatus(message, { undoLabel, onUndo, duration } = {}) {
 }
 
 
+function rmMasterLookup(masterId) {
+  if (!masterId) return null;
+  const rm = rawMaterials.find(r => r.id === masterId);
+  if (!rm?.nutrition) return null;
+  const n = rm.nutrition;
+  const kcal = parseFloat(n.kcal);
+  if (isNaN(kcal) || (kcal === 0 && !parseFloat(n.protein) && !parseFloat(n.fat) && !parseFloat(n.carbs))) return null;
+  return { kcal: kcal || 0, protein: parseFloat(n.protein) || 0, fat: parseFloat(n.fat) || 0, carbs: parseFloat(n.carbs) || 0, salt: parseFloat(n.salt) || 0 };
+}
+
 function derive(p) {
-  const autoNutrition = calcNutrition(p.ingredients);
+  const autoNutrition = calcNutrition(p.ingredients, rmMasterLookup);
   const nutrition = p.nutritionMode === "manual" ? { ...autoNutrition, ...p.nutritionManual } : autoNutrition;
   const autoAllergens = detectAllergens(p.ingredients.map((i) => i.name).filter(Boolean));
   const allergens = p.allergensMode === "manual" ? (p.allergensManual || "").split(/[、,・\s]+/).filter(Boolean) : autoAllergens;
@@ -782,23 +877,52 @@ function showShortcutsPanel() {
   el.setAttribute("role", "dialog");
   el.setAttribute("aria-modal", "true");
   el.setAttribute("aria-label", "キーボードショートカット一覧");
+  const section = (title, rows) => `
+    <div class="sc-section">
+      <div class="sc-section-title">${title}</div>
+      <table class="shortcuts-table">
+        ${rows.map(([key, desc]) => `<tr><td>${key}</td><td>${desc}</td></tr>`).join("")}
+      </table>
+    </div>`;
+  const kbd = (...keys) => keys.map(k => `<kbd>${k}</kbd>`).join("+");
   el.innerHTML = `<div class="shortcuts-card">
     <div class="shortcuts-hd">⌨ キーボードショートカット</div>
-    <table class="shortcuts-table">
-      <tr><td><kbd>d</kbd></td><td>ダッシュボードへ移動</td></tr>
-      <tr><td><kbd>p</kbd></td><td>商品管理へ移動</td></tr>
-      <tr><td><kbd>n</kbd></td><td>新規商品を追加</td></tr>
-      <tr><td><kbd>/</kbd></td><td>商品を検索</td></tr>
-      <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>商品を保存</td></tr>
-      <tr><td><kbd>1</kbd>〜<kbd>8</kbd></td><td>商品詳細タブを切替（基本/原材料/ラベル/規格書/原価/AI/履歴/承認）</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>戻る / サイドバーを閉じる</td></tr>
-      <tr><td><kbd>?</kbd></td><td>ショートカット一覧を表示</td></tr>
-    </table>
-    <button class="action primary shortcuts-close">閉じる</button>
+    <div class="sc-grid">
+      ${section("🧭 ナビゲーション", [
+        [kbd("d"),           "ダッシュボードへ移動"],
+        [kbd("p"),           "商品管理（発売済み）へ移動"],
+        [kbd("a"),           "アレルゲン管理表へ移動"],
+        [kbd("n"),           "新規商品を追加"],
+        [kbd("Esc"),         "戻る / モーダルを閉じる"],
+        [kbd("?"),           "このパネルを表示"],
+      ])}
+      ${section("🔍 商品一覧", [
+        [kbd("/"),                     "検索ボックスにフォーカス"],
+        [kbd("t"),                     "テーブル / カード表示を切替（テーブルビュー時）"],
+        [kbd("Ctrl","A"),              "テーブルで全件選択"],
+        ["在庫セルをクリック",         "在庫数をインライン編集（Enter で保存）"],
+        ["担当者チップをクリック",     "担当者で絞り込み"],
+        ["アレルゲンチップをクリック", "アレルゲンで絞り込み"],
+      ])}
+      ${section("📋 商品詳細", [
+        [kbd("1")+"〜"+kbd("8"),          "タブ切替（基本/原材料/ラベル/規格書/原価/AI・チェック/履歴/承認）"],
+        [kbd("←")+" / "+kbd("→"),        "前の商品 / 次の商品（フィルター状態を維持）"],
+        [kbd("Ctrl","S"),                 "商品を保存"],
+      ])}
+      ${section("📊 ダッシュボード", [
+        ["KPIカードをクリック",       "該当条件の商品一覧に移動"],
+        ["アレルゲンバーをクリック",  "そのアレルゲンで商品を絞り込み"],
+        ["担当者バーをクリック",      "その担当者で商品を絞り込み"],
+        ["表示チェックエラーをクリック", "エラーのある商品カルテを開く"],
+      ])}
+    </div>
+    <button class="action primary shortcuts-close" style="margin-top:16px;width:100%">閉じる（Esc）</button>
   </div>`;
   document.body.appendChild(el);
   el.querySelector(".shortcuts-close").addEventListener("click", () => el.remove());
   el.addEventListener("click", e => { if (e.target === el) el.remove(); });
+  el.addEventListener("keydown", e => { if (e.key === "Escape") el.remove(); });
+  el.querySelector(".shortcuts-close").focus();
 }
 
 function focusKey(el) {
@@ -810,183 +934,1619 @@ function focusKey(el) {
   if (el.id) return `#${el.id}`;
   return null;
 }
-// ══ デモモード ════════════════════════════════════════════════════════════
-const DEMO_STEPS = [
-  { step:1, title:"FoodPilotとは？",   fullscreen:true,  view:"dashboard",
-    heading:"商品情報を一度登録するだけで、\n食品表示・規格書・原価・AIまで自動化できます。",
-    point:"食品メーカーが毎日行う「ラベル作成・規格書提出・原価計算」をFoodPilot一つに集約。作業時間を最大80%削減した事例があります。" },
-
-  { step:2, title:"写真から登録", fullscreen:true, view:"reg-photo", showRegMethods:true,
-    heading:"商品写真を撮るだけで\nAIが原材料・製造者・栄養成分を自動で読み取ります",
-    point:"パッケージ裏面を撮影するだけ。Llama Vision AIが原材料名・製造者・アレルゲン・栄養成分をゼロ入力で抽出します。" },
-
-  { step:3, title:"AI自動入力結果",                      view:"edit", autoScroll:true,
-    heading:"写真から全項目が自動入力されました",
-    point:"商品名・原材料7品目・製造者・賞味期限・保存方法が入力済みです。修正が必要な箇所だけ直して保存するだけ。手入力と比べて工数が大幅に削減されます。" },
-
-  { step:4, title:"栄養成分の自動計算",                   view:"edit", clickSection:"栄養成分表示",
-    heading:"原材料の重量から\n栄養成分を自動で計算します",
-    point:"原材料ごとの重量（g）を入力するだけで、エネルギー・たんぱく質・脂質・炭水化物・食塩相当量をFoodPilotが自動計算します。栄養士への外注が不要になります。" },
-
-  { step:5, title:"食品表示ラベル",                       view:"label-nav", printAnim:true,
-    heading:"食品表示ラベルが\nリアルタイムで自動生成されます",
-    point:"入力と同時にラベルが更新されます。サイズ・フォントを自由に調整し、そのままPDF印刷またはPNG書き出しができます。食品表示法に沿ったレイアウトを自動で構成します。" },
-
-  { step:5, title:"商品規格書",                          view:"spec-sheet-nav",
-    heading:"A4規格書がワンクリックで完成\n取引先へその場で提出できます",
-    point:"原材料・アレルゲン・栄養成分・製造者を整形したA4規格書を自動生成。署名欄付きPDFを出力して取引先に即日提出できます。規格書作成の外注コストをゼロにできます。" },
-
-  { step:6, title:"AI商品説明文",                        view:"ai-descriptions-nav", clickGenerate:true,
-    heading:"楽天・Amazon・Yahoo用の\n商品説明文をAIが自動生成します",
-    point:"登録した商品情報をもとに、ECサイト向けの魅力的な商品説明文をAIが自動作成。販路（楽天・Amazon・自社EC）ごとに文体を最適化します。コピーライターへの外注が不要になります。" },
-
-  { step:7, title:"原価・利益管理",                       view:"product-detail", detailTab:"cost", autoScroll:true,
-    heading:"原価率・粗利率・粗利額を\n商品ごとにリアルタイム計算",
-    point:"材料費・包装費・送料を入力するだけで原価率と粗利が即計算されます。「どの商品が一番儲かるか」をすべての商品で横断管理できます。" },
-
-  { step:8, title:"AIが今日の課題を検出",                 view:"dashboard",
-    heading:"AIが商品ごとの課題を自動で検出し\n優先順位をつけて提案します",
-    point:"未入力項目・期限切れ・原価未設定・製造者情報なしなど、法令違反リスクも含めてAIが毎日チェック。担当者が見落とすミスを防ぎます。" },
-
-  { step:9, title:"デモ完了",           fullscreen:true,  view:"dashboard",
-    heading:"商品を一度登録するだけで、\nFoodPilotが商品管理をすべて支援します。",
-    point:"ラベル作成・規格書・AI説明文・原価管理・食品表示チェックがすべて標準搭載。無料プランから今日はじめられます。" },
+// ══ デモモード v2 ═════════════════════════════════════════════════════════
+const DEMO_STEPS_MANAGE = [
+  { step:1, title:"ダッシュボード",   sub:"今日の全商品状況がひと目でわかります",     view:"dashboard" },
+  { step:2, title:"AI で商品登録",    sub:"写真1枚で登録完了 — 入力時間ゼロへ",       view:"product-detail", detailTab:"basic" },
+  { step:3, title:"商品一覧",         sub:"検索・フィルターで目的の商品に即アクセス", view:"products" },
+  { step:4, title:"商品カルテ",       sub:"これだけ見れば商品のすべてがわかります",   view:"product-detail", detailTab:"basic" },
+  { step:5, title:"タイムライン",     sub:"誰が・いつ・何をしたか — 永久に残ります", view:"product-detail", detailTab:"timeline" },
+  { step:6, title:"食品表示ラベル",   sub:"食品表示法準拠ラベルが自動で完成します",   view:"label-nav" },
+  { step:7, title:"A4 商品規格書",    sub:"Excelで何時間もかかった規格書が即完成",    view:"spec-sheet-nav" },
 ];
+const DEMO_STEPS_DEVELOP = [
+  { step:1, title:"開発プロジェクト", sub:"開発スタート — ここから新商品の旅が始まります",     view:"dev-products" },
+  { step:2, title:"試作レシピ入力",   sub:"原材料を入れるたびに原価・栄養成分がリアルタイム計算", view:"dev-detail", devTab:"recipe" },
+  { step:3, title:"バージョン比較",   sub:"何が変わったか・どこが改善されたか一目でわかる",     view:"dev-detail", devTab:"recipe", compareMode:true },
+  { step:4, title:"AI レビュー",      sub:"AIが食品表示法のミスを発売前に見つけます",           view:"ai-consult-nav" },
+  { step:5, title:"採用決定",         sub:"ボタン1つで承認ルートが自動で回り始めます",          view:"dev-detail", devTab:"approval" },
+  { step:6, title:"発売",             sub:"最も感動する瞬間 — 全部がつながります",              view:"dev-detail", devTab:"overview" },
+  { step:7, title:"商品管理へ移行",   sub:"この商品の誕生から今日まで一本の線で見えます",       view:"product-detail", detailTab:"timeline", useReleased:true },
+];
+function currentDemoSteps() { return demoType === "develop" ? DEMO_STEPS_DEVELOP : DEMO_STEPS_MANAGE; }
 
-const DEMO_SAMPLE = {
-  _isDemo: true,
-  name: "有機抹茶クッキー",
-  internalName: "有機抹茶クッキー",
-  category: "菓子類",
-  janCode: "4901234567890",
-  netWeight: "80",
-  netWeightUnit: "g",
-  expiryType: "best-before",
-  expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-  storageMethod: "直射日光・高温多湿を避け、常温で保存してください。",
-  publishStatus: "active",
-  manufacturerName: "株式会社サンプルフーズ",
-  manufacturerAddress: "東京都渋谷区代々木1-1-1 フードビル3F",
+// ── デモ用サンプル商品データ ─────────────────────────────────────────────
+const _DEMO_MFR = {
+  manufacturerName: "株式会社みらい食品",
+  manufacturerAddress: "東京都渋谷区代々木1-2-3 みらいビル2F",
   manufacturerPostal: "151-0053",
-  manufacturerPhone: "03-1234-5678",
+  manufacturerPhone: "03-5678-1234",
   manufacturerType: ["製造者"],
-  ingredients: [
-    { name: "小麦粉", weight: 42 },
-    { name: "バター", weight: 20 },
-    { name: "砂糖", weight: 18 },
-    { name: "卵", weight: 12 },
-    { name: "有機抹茶パウダー", weight: 5 },
-    { name: "食塩", weight: 1 },
-    { name: "膨張剤", weight: 0.5, isAdditive: true },
-  ],
-  allergens: [],
-  allergensMode: "auto",
-  directCost: "120",
-  price: "680",
-  costMode: "direct",
-  approvalStatus: "approved",
 };
 
-let demoScrollTimer = null;
-function stopDemoAutoScroll() {
-  if (demoScrollTimer) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
-}
-function startDemoAutoScroll(delay = 150) {
-  stopDemoAutoScroll();
-  setTimeout(() => {
-    window.scrollTo(0, 0);
-    const duration = 5000;
-    const start = Date.now();
-    demoScrollTimer = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const t = Math.min(elapsed / duration, 1);
-      const eased = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      window.scrollTo(0, maxScroll * eased);
-      if (t >= 1) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
-    }, 16);
-  }, delay);
-}
-function startDemoClickSection(sectionName) {
-  setTimeout(() => {
-    const btn = document.querySelector(`[data-toggle-section="${sectionName}"]`);
-    if (!btn) return;
-    btn.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => {
-      btn.classList.add("demo-click-anim");
-      setTimeout(() => {
-        btn.click();
-        btn.classList.remove("demo-click-anim");
-        setTimeout(() => {
-          btn.scrollIntoView({ behavior: "smooth", block: "start" });
-          setTimeout(() => {
-            const startY = window.scrollY;
-            const endY = startY + window.innerHeight * 0.65;
-            const duration = 2500;
-            const t0 = Date.now();
-            stopDemoAutoScroll();
-            demoScrollTimer = setInterval(() => {
-              const t = Math.min((Date.now() - t0) / duration, 1);
-              const eased = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
-              window.scrollTo(0, startY + (endY - startY) * eased);
-              if (t >= 1) { clearInterval(demoScrollTimer); demoScrollTimer = null; }
-            }, 16);
-          }, 500);
-        }, 300);
-      }, 500);
-    }, 700);
-  }, 400);
-}
-function startDemoPrintTypewriter() {
-  setTimeout(() => {
-    const cells = Array.from(document.querySelectorAll(".label-paper td"));
-    if (!cells.length) return;
-    const saved = cells.map(el => { const t = el.textContent; el.textContent = ""; return { el, t }; });
-    let i = 0, c = 0;
-    function tick() {
-      if (i >= saved.length) return;
-      const { el, t } = saved[i];
-      if (c < t.length) {
-        el.textContent += t[c++];
-        setTimeout(tick, 20 + Math.random() * 15);
-      } else { i++; c = 0; setTimeout(tick, 110); }
-    }
+const DEMO_PRODUCTS_MANAGE = [
+  {
+    _isDemo: true,
+    name: "米粉プレーンドーナツ", internalName: "米粉プレーンドーナツ 250g",
+    category: "菓子類", phase: "released",
+    janCode: "4901000000001", netWeight: "250", netWeightUnit: "g",
+    expiryType: "best-before",
+    expiryDate: new Date(Date.now() + 90 * 864e5).toISOString().split("T")[0],
+    storageMethod: "直射日光・高温多湿を避け、常温で保存してください。",
+    publishStatus: "active", productStatus: "active", approvalStatus: "approved",
+    ..._DEMO_MFR,
+    ingredients: [
+      { name: "米粉",               weight: 120 },
+      { name: "砂糖",               weight: 60 },
+      { name: "卵",                 weight: 50 },
+      { name: "バター",             weight: 40 },
+      { name: "アーモンドミルク",   weight: 25 },
+      { name: "ベーキングパウダー", weight:  5, isAdditive: true },
+      { name: "バニラエッセンス",   weight:  1, isAdditive: true },
+    ],
+    allergens: [], allergensMode: "auto",
+    directCost: "145", price: "580", costMode: "direct",
+    updatedAt: "2026-07-18 14:23", createdAt: "2026-05-01 10:00",
+  },
+  {
+    _isDemo: true,
+    name: "抹茶クリームドーナツ", internalName: "抹茶クリームドーナツ 2個入",
+    category: "菓子類", phase: "released",
+    janCode: "4901000000002", netWeight: "2", netWeightUnit: "個",
+    expiryType: "best-before",
+    expiryDate: new Date(Date.now() + 60 * 864e5).toISOString().split("T")[0],
+    storageMethod: "要冷蔵（10℃以下）。開封後はお早めにお召し上がりください。",
+    publishStatus: "active", productStatus: "active", approvalStatus: "approved",
+    ..._DEMO_MFR,
+    ingredients: [
+      { name: "米粉",                 weight: 80 },
+      { name: "クリームチーズ",       weight: 60 },
+      { name: "砂糖",                 weight: 40 },
+      { name: "有機抹茶パウダー",     weight:  8 },
+      { name: "卵",                   weight: 30 },
+      { name: "バター",               weight: 25 },
+      { name: "生クリーム",           weight: 20 },
+      { name: "ベーキングパウダー",   weight:  3, isAdditive: true },
+    ],
+    allergens: [], allergensMode: "auto",
+    directCost: "95", price: "380", costMode: "direct",
+    updatedAt: "2026-07-15 09:45", createdAt: "2026-05-10 11:00",
+  },
+  {
+    _isDemo: true,
+    name: "豆腐ベーグル プレーン", internalName: "豆腐ベーグル プレーン 80g",
+    category: "パン類", phase: "released",
+    janCode: "4901000000003", netWeight: "80", netWeightUnit: "g",
+    expiryType: "best-before",
+    expiryDate: new Date(Date.now() + 5 * 864e5).toISOString().split("T")[0],
+    storageMethod: "常温で保存。開封後は当日中にお召し上がりください。",
+    publishStatus: "active", productStatus: "active", approvalStatus: "approved",
+    ..._DEMO_MFR,
+    ingredients: [
+      { name: "米粉",       weight: 100 },
+      { name: "絹ごし豆腐", weight:  80 },
+      { name: "砂糖",       weight:   8 },
+      { name: "食塩",       weight:   3 },
+      { name: "ドライイースト", weight: 2, isAdditive: true },
+    ],
+    allergens: [], allergensMode: "auto",
+    directCost: "60", price: "250", costMode: "direct",
+    updatedAt: "2026-07-17 16:30", createdAt: "2026-06-01 09:00",
+  },
+];
+
+const DEMO_PRODUCTS_DEVELOP = [
+  {
+    _isDemo: true,
+    name: "グルテンフリーパンケーキミックス", internalName: "グルテンフリーパンケーキミックス 200g",
+    category: "菓子類", phase: "development",
+    janCode: "4901000000010", netWeight: "200", netWeightUnit: "g",
+    expiryType: "best-before",
+    expiryDate: new Date(Date.now() + 365 * 864e5).toISOString().split("T")[0],
+    storageMethod: "直射日光・高温多湿を避け、常温で保存してください。",
+    publishStatus: "draft", productStatus: "review", approvalStatus: "review",
+    ..._DEMO_MFR,
+    ingredients: [],
+    allergens: [], allergensMode: "auto",
+    directCost: "134", price: "480", costMode: "direct",
+    updatedAt: "2026-07-18 11:00", createdAt: "2026-06-15 10:00",
+    devProject: {
+      projectName: "グルテンフリーパンケーキ（2027春新商品）",
+      projectNote: "米粉と豆乳パウダーを主原料としたグルテンフリーパンケーキミックス。アレルギー対応商品として既存ラインナップを補完する。ターゲット：グルテン不耐症・小麦アレルギーのある家族層。",
+      projectManager: "田中 花子",
+      priority: "high",
+      devPhase: "最終調整",
+      startDate: "2026-06-15",
+      targetReleaseDate: "2026-09-01",
+      targetPrice: "480",
+      targetCostRate: "30",
+    },
+    adoptedRecipeVersionId: "demo-rv2",
+    recipeVersions: [
+      {
+        id: "demo-rv1", version: "Ver.1", status: "draft",
+        createdAt: "2026-06-20",
+        note: "初回試作。コシが強すぎ、ふんわり感が弱かった。豆乳パウダーを加えることで改善できる可能性あり。",
+        directCost: "154", costMode: "direct",
+        ingredients: [
+          { name: "米粉",               weight: 150 },
+          { name: "砂糖",               weight:  30 },
+          { name: "片栗粉",             weight:  10 },
+          { name: "食塩",               weight:   2 },
+          { name: "ベーキングパウダー", weight:   8, isAdditive: true },
+        ],
+      },
+      {
+        id: "demo-rv2", version: "Ver.2", status: "adopted",
+        createdAt: "2026-07-05",
+        note: "豆乳パウダーを追加、砂糖を減量。ふんわり感が改善。原価率を32%→28%に削減。試作評価A。採用決定。",
+        directCost: "134", costMode: "direct",
+        ingredients: [
+          { name: "米粉",               weight: 140 },
+          { name: "豆乳パウダー",       weight:  20 },
+          { name: "砂糖",               weight:  20 },
+          { name: "片栗粉",             weight:  10 },
+          { name: "食塩",               weight:   2 },
+          { name: "ベーキングパウダー", weight:   8, isAdditive: true },
+        ],
+      },
+    ],
+    trialBatches: [
+      {
+        id: "demo-tb1", date: "2026-06-25", label: "試作#1（Ver.1）", result: "C",
+        note: "コシが強すぎ、ふんわり感なし。豆乳パウダー追加を検討。",
+      },
+      {
+        id: "demo-tb2", date: "2026-07-08", label: "試作#2（Ver.2）", result: "A",
+        note: "食感・味ともに良好。グルテンフリーらしい軽さが出た。採用推奨。",
+      },
+    ],
+  },
+  {
+    _isDemo: true, _isDemoReleased: true,
+    name: "グルテンフリーパンケーキミックス", internalName: "グルテンフリーパンケーキミックス 200g",
+    category: "菓子類", phase: "released",
+    janCode: "4901000000010", netWeight: "200", netWeightUnit: "g",
+    expiryType: "best-before",
+    expiryDate: new Date(Date.now() + 180 * 864e5).toISOString().split("T")[0],
+    storageMethod: "直射日光・高温多湿を避け、常温で保存してください。",
+    publishStatus: "active", productStatus: "active", approvalStatus: "approved",
+    ..._DEMO_MFR,
+    ingredients: [
+      { name: "米粉",               weight: 140 },
+      { name: "豆乳パウダー",       weight:  20 },
+      { name: "砂糖",               weight:  20 },
+      { name: "片栗粉",             weight:  10 },
+      { name: "食塩",               weight:   2 },
+      { name: "ベーキングパウダー", weight:   8, isAdditive: true },
+    ],
+    allergens: [], allergensMode: "auto",
+    directCost: "134", price: "480", costMode: "direct",
+    updatedAt: "2026-09-01 10:00", createdAt: "2026-09-01 10:00",
+  },
+];
+
+// ── デモ v2 共通ユーティリティ ───────────────────────────────────────────
+let _demoGen = 0; // アニメーションキャンセル用世代カウンタ
+const demoSleep = ms => {
+  const g = _demoGen;
+  return new Promise((r, rej) => setTimeout(() => g === _demoGen ? r() : rej(Object.assign(new Error("demo:abort"), { isAbort: true })), ms));
+};
+
+async function demoCountUp(el, target, duration) {
+  if (!el || isNaN(target) || target <= 0) return;
+  const t0 = Date.now(), g = _demoGen;
+  await new Promise((resolve, reject) => {
+    const tick = () => {
+      if (g !== _demoGen) { reject(Object.assign(new Error("demo:abort"), { isAbort: true })); return; }
+      const p = Math.min((Date.now() - t0) / duration, 1);
+      el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick); else resolve();
+    };
     tick();
-  }, 350);
+  });
 }
-function startDemoClickGenerate() {
-  setTimeout(() => {
-    const btn = document.querySelector('[data-action="generate-ai-desc"]');
-    if (!btn) return;
-    btn.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => {
-      btn.classList.add("demo-click-anim");
-      setTimeout(() => { btn.click(); btn.classList.remove("demo-click-anim"); }, 500);
-    }, 700);
-  }, 800);
+
+async function demoTypeIn(el, text, speed) {
+  if (!el) return;
+  el.textContent = "";
+  for (const ch of text) { el.textContent += ch; await demoSleep(speed); }
+}
+
+// ── バーチャルカーソル ───────────────────────────────────────────────────
+let _vcEl = null, _vcX = window.innerWidth / 2, _vcY = window.innerHeight / 2;
+function _getVcEl() {
+  if (!_vcEl) {
+    _vcEl = document.createElement("div");
+    _vcEl.id = "demo-vc";
+    _vcEl.innerHTML = `<svg width="20" height="24" viewBox="0 0 20 24" fill="none">
+      <path d="M3 2 L3 20 L7.5 15.5 L11 23 L13.5 22 L10 14.5 L16.5 14.5 Z"
+        fill="white" stroke="#1a1a1a" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>`;
+    document.body.appendChild(_vcEl);
+  }
+  return _vcEl;
+}
+function vcShow() { _getVcEl().style.display = "block"; }
+function vcHide() { if (_vcEl) _vcEl.style.display = "none"; }
+async function vcMove(x, y, ms = 500) {
+  const el = _getVcEl(), sx = _vcX, sy = _vcY, t0 = Date.now(), g = _demoGen;
+  el.style.display = "block";
+  return new Promise((r, rej) => {
+    const tick = () => {
+      if (g !== _demoGen) { rej(Object.assign(new Error("demo:abort"), { isAbort: true })); return; }
+      const p = Math.min((Date.now() - t0) / ms, 1);
+      const e = p < .5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3) / 2;
+      el.style.left = (_vcX = sx + (x - sx) * e) + "px";
+      el.style.top  = (_vcY = sy + (y - sy) * e) + "px";
+      p < 1 ? requestAnimationFrame(tick) : r();
+    };
+    requestAnimationFrame(tick);
+  });
+}
+async function vcMoveToEl(el, offX = 0, offY = 0, ms = 480) {
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  await vcMove(r.left + r.width / 2 + offX, r.top + r.height / 2 + offY, ms);
+}
+async function vcClick(el, ms = 420) {
+  if (!el) return;
+  await vcMoveToEl(el, 0, 0, ms);
+  const vc = _getVcEl();
+  vc.classList.add("vc-click");
+  await demoSleep(300);
+  vc.classList.remove("vc-click");
+}
+async function vcTypeSearch(text) {
+  const selectors = ["#master-search", "[name='master-search']",
+    "input[placeholder*='検索']", "input[type='search']"];
+  let searchEl = null;
+  for (const s of selectors) { searchEl = document.querySelector(s); if (searchEl) break; }
+  if (searchEl) await vcMoveToEl(searchEl, 0, 0, 400);
+  masterSearch = "";
+  render();
+  for (const ch of text) {
+    if (!demoMode) break;
+    masterSearch += ch;
+    render();
+    await demoSleep(85 + Math.random() * 40);
+  }
+}
+async function vcSmoothScroll(el, toY, ms = 1200) {
+  if (!el) return;
+  const from = el.scrollTop, dist = toY - from, t0 = Date.now(), g = _demoGen;
+  return new Promise((r, rej) => {
+    const tick = () => {
+      if (g !== _demoGen) { rej(Object.assign(new Error("demo:abort"), { isAbort: true })); return; }
+      const p = Math.min((Date.now() - t0) / ms, 1);
+      el.scrollTop = from + dist * (p < .5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3) / 2);
+      p < 1 ? requestAnimationFrame(tick) : r();
+    };
+    tick();
+  });
+}
+
+// ── デモ用スクロール（overflow:hidden でも動く） ─────────────────────────
+function demoScrollTo(el, block = "center") {
+  if (!el) return;
+  const main = document.querySelector(".saas-main,.saas-content");
+  if (!main) return;
+  const mainRect = main.getBoundingClientRect();
+  const elRect   = el.getBoundingClientRect();
+  const relTop   = elRect.top - mainRect.top + main.scrollTop;
+  let target;
+  if (block === "center") target = relTop - main.clientHeight / 2 + el.offsetHeight / 2;
+  else if (block === "start") target = relTop - 20;
+  else target = relTop - main.clientHeight + el.offsetHeight + 20;
+  main.scrollTop = Math.max(0, target);
+}
+
+// ── コールアウトバブル ───────────────────────────────────────────────────
+let _coEl = null;
+function _getCoEl() {
+  if (!_coEl) {
+    _coEl = document.createElement("div");
+    _coEl.id = "demo-callout";
+    document.body.appendChild(_coEl);
+  }
+  return _coEl;
+}
+// コールアウト速度倍率（1.0=標準、大きいほど遅い）
+const CALLOUT_SPEED = 1.5;
+async function showCalloutAt(text, x, y, side = "right") {
+  const co = _getCoEl();
+  co.textContent = text;
+  co.className = "demo-callout";
+  co.style.left = ""; co.style.top = "";
+  co.style.opacity = "0"; co.style.display = "block";
+  await demoSleep(16);
+  co.style.opacity = "1";
+}
+async function showCalloutOnEl(text, el, side = "right") {
+  await showCalloutAt(text, 0, 0, side);
+}
+// コールアウトを表示して待機（CALLOUT_SPEED倍率を適用）
+async function showCalloutWait(ms) { await demoSleep(Math.round(ms * CALLOUT_SPEED)); }
+function hideCallout() { const co = _getCoEl(); co.style.opacity = "0"; }
+
+// ── ナレーションパネル ───────────────────────────────────────────────────
+let _narrEl = null;
+function showNarr(items, ai = -1) {
+  if (!_narrEl) {
+    _narrEl = document.createElement("div");
+    _narrEl.id = "demo-narr";
+    document.body.appendChild(_narrEl);
+  }
+  _narrEl.innerHTML = items.map((t, i) => {
+    const done = i < ai, active = i === ai;
+    return `<div class="demo-narr-item${done ? " dn-done" : active ? " dn-active" : ""}">
+      <span class="demo-narr-num">${done ? "✓" : i + 1}</span>
+      <span class="demo-narr-txt">${escapeHtml(t)}</span>
+    </div>`;
+  }).join("");
+  _narrEl.style.display = "block";
+}
+function updateNarr(ai) {
+  if (!_narrEl) return;
+  _narrEl.querySelectorAll(".demo-narr-item").forEach((el, i) => {
+    el.className = "demo-narr-item" + (i < ai ? " dn-done" : i === ai ? " dn-active" : "");
+    const n = el.querySelector(".demo-narr-num");
+    if (n) n.textContent = i < ai ? "✓" : String(i + 1);
+  });
+}
+function hideNarr() { if (_narrEl) _narrEl.style.display = "none"; }
+
+// ── ハイライトリング ─────────────────────────────────────────────────────
+let _hlEl = null;
+function showHl(el) {
+  if (!_hlEl) {
+    _hlEl = document.createElement("div"); _hlEl.id = "demo-hl";
+    document.body.appendChild(_hlEl);
+  }
+  if (!el) { _hlEl.style.display = "none"; return; }
+  const r = el.getBoundingClientRect(), pad = 6;
+  Object.assign(_hlEl.style, {
+    display: "block",
+    left: (r.left - pad) + "px", top: (r.top - pad) + "px",
+    width: (r.width + pad * 2) + "px", height: (r.height + pad * 2) + "px",
+  });
+}
+function hideHl() { if (_hlEl) _hlEl.style.display = "none"; }
+
+// ── デモバナー ────────────────────────────────────────────────────────
+let _bnEl = null;
+function _getBnEl() {
+  if (!_bnEl) { _bnEl = document.createElement("div"); _bnEl.id = "demo-banner"; document.body.appendChild(_bnEl); }
+  return _bnEl;
+}
+function showBanner(tag, title, desc = "") {
+  const el = _getBnEl();
+  el.innerHTML = `<span class="demo-bn-tag">${escapeHtml(tag)}</span><span class="demo-bn-title">${escapeHtml(title)}</span>${desc ? `<span class="demo-bn-desc">${escapeHtml(desc)}</span>` : ""}`;
+  el.classList.add("bn-on");
+  document.body.classList.toggle("fp-dd", demoType === "develop");
+}
+function hideBanner() { if (_bnEl) _bnEl.classList.remove("bn-on"); document.body.classList.remove("fp-dd"); }
+
+// ── 発売カスケード ────────────────────────────────────────────────────
+async function showCascade(msgs) {
+  let cas = document.getElementById("demo-cascade");
+  if (!cas) { cas = document.createElement("div"); cas.id = "demo-cascade"; document.body.appendChild(cas); }
+  cas.innerHTML = msgs.map(m => `<div class="demo-cas-item">${escapeHtml(m)}</div>`).join("");
+  cas.classList.add("cas-on");
+  const items = cas.querySelectorAll(".demo-cas-item");
+  for (const it of items) { await demoSleep(500); it.classList.add("cas-show"); }
+  await demoSleep(1400);
+  cas.classList.remove("cas-on"); cas.innerHTML = "";
+}
+
+function _demoCleanup() {
+  vcHide(); hideCallout(); hideHl(); hideNarr(); hideBanner();
+  document.getElementById("dp-ai-overlay")?.remove();
+  document.getElementById("dp-recipe-overlay")?.remove();
+  document.getElementById("dp-ai-review-overlay")?.remove();
+  document.getElementById("dp-appr-overlay")?.remove();
+  document.getElementById("dp-rel-overlay")?.remove();
+  const cas = document.getElementById("demo-cascade"); if (cas) { cas.classList.remove("cas-on"); cas.innerHTML = ""; }
+}
+
+function demoPresAnimateStep() {
+  if (!demoMode || demoEndScreen) return;
+  _demoGen++; // 旧アニメーションの demoSleep を全てアボート
+  _demoCleanup();
+  const animFn = demoType === "develop" ? _getDemoDevAnim(demoStep) : _getDemoManageAnim(demoStep);
+  if (!animFn) return;
+  animFn().catch(() => {}).finally(() => {
+    _demoCleanup();
+    if (demoMode && !demoEndScreen) {
+      const nb = document.querySelector('[data-action="demo-next"]');
+      if (nb) nb.classList.add("dp-nav-btn--pulse");
+    }
+  });
+}
+
+function _getDemoManageAnim(step) {
+  switch (step) {
+    case 1: return _demoAnim_Dashboard;
+    case 2: return _demoAnim_AIReg;
+    case 3: return _demoAnim_Products;
+    case 4: return _demoAnim_Karte;
+    case 5: return _demoAnim_Timeline;
+    case 6: return _demoAnim_Label;
+    case 7: return _demoAnim_SpecSheet;
+    default: return null;
+  }
+}
+function _getDemoDevAnim(step) {
+  switch (step) {
+    case 1: return _demoAnim_DevList;
+    case 2: return _demoAnim_RecipeInput;
+    case 3: return _demoAnim_VersionDiff;
+    case 4: return _demoAnim_AIReview;
+    case 5: return _demoAnim_ApprovalFlow;
+    case 6: return _demoAnim_ReleaseAnim;
+    case 7: return _demoAnim_DevTimeline;
+    default: return null;
+  }
+}
+
+// ─── 管理デモ アニメーション v3 ─────────────────────────────────────────
+
+async function _demoAnim_Dashboard() {
+  showBanner("STEP 1 / 7", "📊 ダッシュボード", "管理者が毎朝開く画面 — 全商品の今を一瞬で把握できます");
+  await demoSleep(700);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const narr = ["全商品のKPIをひと目で確認", "要対応アラートを確認", "今日の業務を把握 ✓"];
+  showNarr(narr, 0);
+  vcShow();
+
+  await showCalloutAt("これがFoodPilotのダッシュボードです。管理している商品の「今」がすべて見えています", window.innerWidth / 2, window.innerHeight * 0.35, "bottom");
+  await showCalloutWait(2200);
+  hideCallout();
+
+  const kpiCandidates = Array.from(root.querySelectorAll(
+    "[class*='kpi-card'],[class*='stat-card'],[class*='kpi-item'],[class*='db-kpi'],[class*='kpi-num'],[class*='summary-card']"
+  )).filter(Boolean).slice(0, 4);
+  const kpiDescs = [
+    "発売中の商品数 — 何をいくつ売っているか、ひと目でわかります",
+    "今月の開発プロジェクト — 進行中の新商品開発を見逃しません",
+    "承認待ち・期限切れ — 優先で対応すべき案件が自動で浮かびます",
+    "商品情報の完成度 — 未入力項目を自動チェックして通知します",
+  ];
+  for (let i = 0; i < Math.min(kpiCandidates.length, 3); i++) {
+    if (!demoMode) break;
+    const card = kpiCandidates[i];
+    showHl(card);
+    await vcMoveToEl(card, 0, 0, 420);
+    const numEl = card.querySelector("[class*='num'],[class*='val'],[class*='count'],[class*='kpi-v'],[class*='stat-v']");
+    const n = parseInt(numEl?.textContent?.replace(/[^0-9]/g, "") || "0");
+    if (numEl && n > 0 && n < 500) await demoCountUp(numEl, n, 700);
+    await showCalloutOnEl(kpiDescs[i], card, i < 2 ? "right" : "left");
+    await showCalloutWait(2200);
+    hideCallout(); hideHl();
+    await demoSleep(180);
+  }
+  updateNarr(1);
+  const taskEl = root.querySelector(
+    "[class*='db2-alert'],[class*='task-list'],[class*='today-task'],[class*='alert-list'],[class*='urgent']"
+  );
+  if (taskEl) {
+    showHl(taskEl);
+    await vcMoveToEl(taskEl, 0, -20, 500);
+    await showCalloutOnEl("賞味期限切れ・承認待ちなど — 対応が必要な案件を自動でアラート表示します", taskEl, "right");
+    await showCalloutWait(2200);
+    hideCallout(); hideHl();
+  }
+
+  updateNarr(2);
+  await showCalloutAt("朝にこの画面を開くだけ — 今日何をすべきかが全部わかります", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2000);
+  hideCallout();
+  hideNarr();
+}
+
+async function _demoAnim_AIReg() {
+  showBanner("STEP 2 / 7", "📷 AI 商品登録", "パッケージ写真1枚から — AIが商品情報をすべて読み取ります");
+  await demoSleep(500);
+  const narr = ["① 写真を撮影・選択", "② AIが画像を解析中...", "③ 商品名を読み取り完了", "④ 原材料・製造者を自動抽出", "⑤ 商品カルテ完成 🎉"];
+  showNarr(narr, 0);
+
+  document.getElementById("dp-ai-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "dp-ai-overlay"; overlay.className = "dp-ai-overlay";
+  overlay.innerHTML = `
+    <div class="dp-ai-card">
+      <div class="dp-ai-title">📷 AI 商品解析 — 米粉プレーンドーナツ</div>
+      <div class="dp-ai-phases">
+        <div class="dp-ai-ph" id="dp-ai-ph0"><span class="dp-ai-ph-icon">📸</span><span>パッケージ写真を読み込んでいます...</span></div>
+        <div class="dp-ai-ph" id="dp-ai-ph1"><span class="dp-ai-ph-icon dp-spin">🔍</span><span>AI が画像を解析中... バーコード・文字を認識</span></div>
+        <div class="dp-ai-ph" id="dp-ai-ph2"><span class="dp-ai-ph-icon">✨</span><span>商品情報を抽出しています</span></div>
+      </div>
+      <div class="dp-ai-sep"></div>
+      <div class="dp-ai-fields">
+        <div class="dp-ai-frow" id="dp-ai-r0"><span class="dp-ai-fl">① 商品名</span><span class="dp-ai-fv" id="dp-ai-v0"></span></div>
+        <div class="dp-ai-frow" id="dp-ai-r1"><span class="dp-ai-fl">② 原材料</span><span class="dp-ai-fv" id="dp-ai-v1"></span></div>
+        <div class="dp-ai-frow" id="dp-ai-r2"><span class="dp-ai-fl">③ 製造者</span><span class="dp-ai-fv" id="dp-ai-v2"></span></div>
+        <div class="dp-ai-frow" id="dp-ai-r3"><span class="dp-ai-fl">④ 栄養成分</span><span class="dp-ai-fv" id="dp-ai-v3"></span></div>
+        <div class="dp-ai-frow" id="dp-ai-r4"><span class="dp-ai-fl">⑤ アレルゲン</span><span class="dp-ai-fv" id="dp-ai-v4"></span></div>
+      </div>
+      <div class="dp-ai-success" id="dp-ai-suc">✅ 商品カルテを自動作成しました — 入力時間: 約0秒</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await demoSleep(150); overlay.classList.add("visible");
+
+  document.getElementById("dp-ai-ph0")?.classList.add("visible"); updateNarr(0); await demoSleep(900);
+  document.getElementById("dp-ai-ph1")?.classList.add("visible"); updateNarr(1); await demoSleep(1100);
+  document.getElementById("dp-ai-ph2")?.classList.add("visible"); updateNarr(2); await demoSleep(600);
+
+  const data = [
+    [0, "米粉プレーンドーナツ", 22, 2],
+    [1, "米粉、砂糖、卵、バター、アーモンドミルク／ベーキングパウダー、バニラエッセンス", 11, 3],
+    [2, "株式会社みらい食品（東京都渋谷区代々木1-2-3）", 15, 3],
+    [3, "エネルギー 180kcal · たんぱく質 3.2g · 脂質 8.1g · 炭水化物 23.4g", 11, 4],
+    [4, "卵・乳成分を含む（アレルゲン自動判定）", 16, 4],
+  ];
+  for (const [i, text, speed, ni] of data) {
+    if (!demoMode) break;
+    document.getElementById(`dp-ai-r${i}`)?.classList.add("visible");
+    const v = document.getElementById(`dp-ai-v${i}`);
+    if (v) await demoTypeIn(v, text, speed);
+    updateNarr(ni);
+    await demoSleep(120);
+  }
+  document.getElementById("dp-ai-suc")?.classList.add("visible");
+  updateNarr(5);
+  await demoSleep(2000);
+  overlay.style.transition = "opacity .5s"; overlay.style.opacity = "0";
+  await demoSleep(500); overlay.remove();
+
+  await demoSleep(300);
+  vcShow();
+  const root = document.getElementById("root");
+  if (!root) return;
+  const scrollEl = root.querySelector(".saas-main,[class*='pd-body'],[class*='detail-body']") || root;
+  await vcSmoothScroll(scrollEl, (scrollEl.scrollHeight - scrollEl.clientHeight) * 0.6, 2600);
+  await showCalloutAt("写真1枚で — ここまですべて自動入力されました", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(1800);
+  hideCallout();
+  await showCalloutAt("従来：担当者が手入力で 30〜60分。商品が100品あれば — 延べ50時間以上", window.innerWidth / 2, window.innerHeight * 0.45, "top");
+  await showCalloutWait(2200);
+  hideCallout();
+  await demoSleep(200);
+  await showCalloutAt("FoodPilot：写真1枚 → 約0秒 ✓", window.innerWidth / 2, window.innerHeight * 0.45, "top");
+  await showCalloutWait(2200);
+  hideCallout(); hideNarr();
+}
+
+async function _demoAnim_Products() {
+  showBanner("STEP 3 / 7", "📋 商品一覧", "全商品を一覧管理 — 検索・フィルターで目的の商品に即アクセス");
+  await demoSleep(600);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const narr = ["キーワード検索で絞り込み", "カテゴリ・状態でフィルター", "商品カルテを開く"];
+  showNarr(narr, 0);
+  vcShow();
+
+  masterSearch = ""; masterCategoryFilter = ""; render();
+  await demoSleep(300);
+
+  // 検索バーを見つけてクリック演出
+  const searchSels = ["#master-search","[name='master-search']","input[placeholder*='検索']","input[type='search']"];
+  let searchEl = null;
+  for (const s of searchSels) { searchEl = document.querySelector(s); if (searchEl) break; }
+  if (searchEl) {
+    showHl(searchEl);
+    await vcMoveToEl(searchEl, 0, 0, 450);
+    await showCalloutOnEl("商品名・原材料・JANコードで検索できます", searchEl, "bottom");
+    await showCalloutWait(1200);
+    hideCallout(); hideHl();
+  }
+  await vcTypeSearch("ドーナツ");
+  await demoSleep(300);
+  const resultCount = root.querySelectorAll("[class*='master-card'],[class*='product-card'],[class*='card-item']").length;
+  await showCalloutAt(`「ドーナツ」で ${resultCount} 件に絞り込み — 入力するたびにリアルタイムで更新されます`, _vcX, _vcY - 40, "top");
+  await showCalloutWait(2000);
+  hideCallout();
+  updateNarr(1);
+
+  // 検索クリア → フィルター演出
+  masterSearch = ""; render();
+  await demoSleep(400);
+  const filterEl = root.querySelector("[class*='filter'],[class*='category-filter'],[data-action*='filter'],[class*='status-filter']");
+  if (filterEl) {
+    showHl(filterEl);
+    await vcMoveToEl(filterEl, 0, 0, 480);
+    await showCalloutOnEl("カテゴリ・販売状況・担当者でもフィルタリングできます", filterEl, "bottom");
+    await showCalloutWait(2000);
+    hideCallout(); hideHl();
+  }
+  updateNarr(2);
+
+  // 商品カードへ
+  await demoSleep(300);
+  const card = root.querySelector("[class*='master-card'],[class*='product-card'],[class*='card-item']");
+  if (card) {
+    showHl(card);
+    await vcMoveToEl(card, 0, 0, 450);
+    await showCalloutOnEl("クリックすると商品カルテが開きます — 次で詳しく見てみましょう", card, "right");
+    await showCalloutWait(1800);
+    hideCallout(); hideHl();
+  }
+  await demoSleep(300);
+  await showCalloutAt("商品が100品・1000品になっても — 探す時間は1秒以下です", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2000);
+  hideCallout();
+  masterSearch = "";
+  hideNarr();
+}
+
+async function _demoAnim_Karte() {
+  showBanner("STEP 4 / 7", "🗂️ 商品カルテ", "FoodPilot の核心 — 1商品のすべての情報がここに集まっています");
+  await demoSleep(700);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const tabDefs = [
+    { key: "basic",       label: "基本情報",    desc: "商品名・内容量・JANコード・製造者など — 基本情報をひとつに集約" },
+    { key: "ingredients", label: "原材料",      desc: "原材料を入力するだけで — アレルゲンが自動で判定・表示されます" },
+    { key: "label",       label: "ラベル",      desc: "食品表示法準拠のラベルがリアルタイムでプレビューされています" },
+    { key: "spec",        label: "規格書",      desc: "A4規格書もこのタブから — 取引先に配布できる形式で即出力" },
+    { key: "history",     label: "変更履歴",    desc: "誰が・いつ・何を変えたか — すべての変更が自動で記録されています" },
+  ];
+  showNarr(tabDefs.map(t => t.label), 0);
+  vcShow();
+
+  await showCalloutAt("これが「商品カルテ」です。1商品のすべての情報がここに集まっています", window.innerWidth / 2, window.innerHeight * 0.35, "bottom");
+  await showCalloutWait(2000);
+  hideCallout();
+
+  for (let i = 0; i < tabDefs.length; i++) {
+    if (!demoMode) break;
+    const t = tabDefs[i];
+    updateNarr(i);
+    productDetailTab = t.key;
+    render();
+    await demoSleep(200);
+    const tabBtn = root.querySelector(`[data-detail-tab="${t.key}"]`)
+      || root.querySelector(`.detail-tab:nth-child(${i + 1})`);
+    if (tabBtn) {
+      showHl(tabBtn);
+      await vcClick(tabBtn, 360);
+    }
+    const content = root.querySelector(
+      ".detail-basic-layout,.karte-section,.karte-grid,.karte-body,.karte-content,[class*='detail-tab-body']"
+    ) || root.querySelector(".saas-content,.saas-main,main");
+    const sMain = document.querySelector(".saas-main");
+    if (content) {
+      await demoSleep(200);
+      demoScrollTo(content, "start");
+      await demoSleep(150);
+      showHl(content);
+      await vcMoveToEl(content, 0, -20, 350);
+      if (i >= 1 && sMain) await vcSmoothScroll(sMain, Math.min(sMain.scrollTop + 320, sMain.scrollHeight - sMain.clientHeight), 900);
+    }
+    if (tabBtn) await showCalloutOnEl(t.desc, tabBtn, "bottom");
+    else await showCalloutAt(t.desc, window.innerWidth / 2, window.innerHeight / 2, "top");
+    await showCalloutWait(2800);
+    hideCallout(); hideHl();
+    await demoSleep(200);
+  }
+  updateNarr(tabDefs.length);
+  await showCalloutAt("この画面ひとつで — 担当者が変わっても・何年後でも・この商品のすべてがわかります", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(1800);
+  hideCallout();
+  await demoSleep(300);
+  await showCalloutAt("FoodPilot 最大の強み — 商品カルテです", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(1800);
+  hideCallout();
+  hideNarr();
+}
+
+async function _demoAnim_Timeline() {
+  showBanner("STEP 5 / 7", "📅 タイムライン", "この商品の「歴史」がすべて自動記録 — 誰が・いつ・何をしたか永久に残ります");
+  await demoSleep(700);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const narr = ["最新の変更を確認", "ラベル・規格書の更新履歴", "商品の誕生まで遡る"];
+  showNarr(narr, 0);
+  vcShow();
+
+  const scrollEl = root.querySelector(".saas-main") || root;
+  const entries = Array.from(root.querySelectorAll(".tl2-row,[class*='tl-item'],[class*='karte-tl-row']"));
+
+  // エントリーごとのコールアウト（最新→最古の順）
+  const entryCallouts = [
+    "最新の更新 — 食品表示ラベルが改訂されました。誰が・いつ変えたか、すべて記録されています",
+    "アレルゲン表示を修正 — 修正前の内容もいつでも確認できます。「戻せない」は過去の話です",
+    "A4規格書を取引先へ配布 — 送付日時・担当者まで自動記録。「送りましたよね？」が証明できます",
+    "品質チェック完了 — 「確認した」という事実が証拠として永久に残ります",
+    "🌱 ラベル初版 — ここからこの商品の歴史が始まりました",
+    "📝 初回登録 — AIが写真から自動入力した、最初の記録です",
+  ];
+
+  if (entries.length) {
+    for (let i = 0; i < Math.min(entries.length, 6); i++) {
+      if (!demoMode) break;
+      demoScrollTo(entries[i], "center");
+      await demoSleep(300);
+      showHl(entries[i]);
+      await vcMoveToEl(entries[i], 0, 0, 350);
+      const calloutText = entryCallouts[i];
+      if (calloutText) {
+        await showCalloutOnEl(calloutText, entries[i], "left");
+        if (i === 1) updateNarr(1);
+        if (i === 4) updateNarr(2);
+        const waitMs = (i >= 4) ? 2400 : 1700;
+        await showCalloutWait(waitMs);
+        hideCallout();
+      } else {
+        await demoSleep(500);
+      }
+      hideHl(); await demoSleep(150);
+    }
+  } else {
+    await vcSmoothScroll(scrollEl, (scrollEl.scrollHeight - scrollEl.clientHeight) * 0.8, 3500);
+    updateNarr(2);
+  }
+  await showCalloutAt("「あのとき誰が変えたの？」が一瞬でわかります — 担当者が変わっても安心です", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(1800);
+  hideCallout();
+  await demoSleep(300);
+  await showCalloutAt("これが商品の「人生記録」です — 登録から今日まで、何もなくなりません", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2000);
+  hideCallout();
+  hideNarr();
+}
+
+async function _demoAnim_Label() {
+  showBanner("STEP 6 / 7", "🏷️ 食品表示ラベル", "食品表示法に準拠したラベルが — いつでも・何枚でも即座に生成");
+  await demoSleep(700);
+  const narr = ["ラベルをリアルタイム生成", "アレルゲン自動表示を確認", "PDF書き出しで完成 ✓"];
+  showNarr(narr, 0);
+  vcShow();
+
+  const root = document.getElementById("root");
+  // 一括生成ボタンをクリック
+  const genBtn = document.querySelector(
+    "[data-action*='gen'],[data-action*='label-gen'],[class*='gen-btn'],[class*='label-btn'],[class*='label-generate']"
+  );
+  if (genBtn) {
+    showHl(genBtn);
+    await vcMoveToEl(genBtn, 0, 0, 450);
+    await showCalloutOnEl("このボタンで食品表示ラベルを自動生成", genBtn, "top");
+    await showCalloutWait(1200);
+    hideCallout(); hideHl();
+    await vcClick(genBtn, 400);
+    await demoSleep(300);
+  }
+
+  // ラベルプレビューをアニメーション（完成したラベルをそのまま見せる）
+  const labelEl = document.querySelector(".label-paper,[class*='label-preview'],[class*='label-paper']");
+  if (labelEl) {
+    demoScrollTo(labelEl, "center");
+    await demoSleep(400);
+    showHl(labelEl);
+    await vcMoveToEl(labelEl, 0, -20, 500);
+    await showCalloutOnEl("食品表示法に準拠したラベルが自動で完成しました — 手入力ゼロです", labelEl, "right");
+    await showCalloutWait(2000);
+    hideCallout(); hideHl();
+
+    // 各行をひとつずつ紹介
+    const rows = Array.from(labelEl.querySelectorAll("tr"));
+    const rowDescs = [
+      "商品名・名称 — 商品カルテから自動で引用されます",
+      "原材料名 — 重量順に並び替え済み。アレルゲンは自動判定",
+      "内容量・賞味期限 — 登録情報がすべて自動反映されています",
+    ];
+    for (let i = 0; i < Math.min(rows.length, 3); i++) {
+      if (!demoMode) break;
+      demoScrollTo(rows[i], "center");
+      await demoSleep(250);
+      showHl(rows[i]);
+      await vcMoveToEl(rows[i], 0, 0, 350);
+      await showCalloutOnEl(rowDescs[i], rows[i], "right");
+      if (i === 1) updateNarr(1);
+      await showCalloutWait(1800);
+      hideCallout(); hideHl();
+      await demoSleep(150);
+    }
+  } else {
+    await showCalloutAt("食品表示法に準拠したラベルがリアルタイムで生成されています", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+    await showCalloutWait(2000);
+    hideCallout();
+    updateNarr(1);
+  }
+  await demoSleep(300);
+
+  // アレルゲン行をハイライト
+  const allergenEl = document.querySelector(
+    "[class*='allergen'],[class*='label-allergen'],[class*='label-al'],.label-paper tr:nth-child(3),.label-paper tr:nth-child(4)"
+  );
+  if (allergenEl) {
+    demoScrollTo(allergenEl, "center");
+    await demoSleep(300);
+    showHl(allergenEl);
+    await vcMoveToEl(allergenEl, 0, 0, 420);
+    await showCalloutOnEl("アレルゲンは自動で太字・強調表示 — 表示漏れによる回収リスクがゼロになります", allergenEl, "right");
+    await showCalloutWait(2200);
+    hideCallout(); hideHl();
+  }
+  updateNarr(2);
+
+  const printBtn = document.querySelector(
+    "[data-action*='print'],[data-action*='pdf'],[class*='print-btn'],[class*='pdf-btn']"
+  );
+  if (printBtn) {
+    showHl(printBtn);
+    await vcMoveToEl(printBtn, 0, 0, 450);
+    await showCalloutOnEl("PDF書き出し — そのまま印刷・メール添付・取引先共有ができます", printBtn, "top");
+    await showCalloutWait(2000);
+    hideCallout(); hideHl();
+  }
+  await showCalloutAt("食品表示法に準拠したラベルが — 何枚でも・何度でも・即座に完成します", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2200);
+  hideCallout();
+  hideNarr();
+}
+
+async function _demoAnim_SpecSheet() {
+  showBanner("STEP 7 / 7", "📄 A4 商品規格書", "Excelで何時間もかかっていた規格書が — ワンクリックで自動完成");
+  await demoSleep(500);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const narr = ["規格書を自動生成", "各セクションを確認", "最下部まで確認 ✓"];
+  showNarr(narr, 0);
+  vcShow();
+
+  await showCalloutAt("A4商品規格書 — 取引先から毎回求められる書類です。Excelで作ると担当者の半日が消えます", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+  await showCalloutWait(2400);
+  hideCallout();
+
+  // 生成ボタンがあればクリック
+  const genBtn = root.querySelector(
+    "[data-action*='spec'],[data-action*='generate'],[class*='spec-gen'],[class*='spec-btn']"
+  );
+  if (genBtn) {
+    showHl(genBtn);
+    await vcMoveToEl(genBtn, 0, 0, 450);
+    await showCalloutOnEl("このボタンを1回押すだけです", genBtn, "top");
+    await showCalloutWait(1400);
+    hideCallout(); hideHl();
+    await vcClick(genBtn, 400);
+    await demoSleep(400);
+  }
+
+  const scrollEl = root.querySelector(".saas-main,[class*='spec-v2'],[class*='spec-sheet'],[class*='spec-wrap']") || root;
+  const specArea = root.querySelector(".spec-v2,#spec-print-area,[class*='spec-v2']") || scrollEl;
+  showHl(specArea);
+  await vcMoveToEl(specArea, 0, -40, 450);
+  await showCalloutAt("A4規格書が完成しました — すべての情報が自動で入力されています", _vcX, _vcY - 30, "right");
+  await showCalloutWait(2000);
+  hideCallout(); hideHl();
+
+  updateNarr(1);
+  // spec-v2-section-label（セクションヘッダー）と直後のテーブルを順にハイライト
+  const sectionMsgs = [
+    "商品の基本情報 — 商品カルテから自動引用されています",
+    "原材料・保存方法・アレルゲンも自動記入 — 手入力不要です",
+    "栄養成分表 — 計算式に基づき自動算出されています",
+  ];
+  const sectionLabels = Array.from(root.querySelectorAll(
+    ".spec-v2-section-label,[class*='spec-section-label'],[class*='spec-v2-section']"
+  ));
+  const specTables = Array.from(root.querySelectorAll(
+    ".spec-v2-table,[class*='spec-v2-table'],table"
+  ));
+  const targets = sectionLabels.length > 0 ? sectionLabels : specTables;
+  for (let i = 0; i < Math.min(targets.length, 3); i++) {
+    if (!demoMode) break;
+    const el = targets[i];
+    demoScrollTo(el, "center");
+    await demoSleep(500);
+    showHl(el);
+    await vcMoveToEl(el, 0, 0, 380);
+    await showCalloutOnEl(sectionMsgs[i] || "各セクションが自動で入力されています", el, "left");
+    await showCalloutWait(2000);
+    hideCallout(); hideHl();
+    await demoSleep(200);
+  }
+
+  updateNarr(2);
+  // 規格書全体をゆっくりスクロール — 量の多さを見せる
+  await vcSmoothScroll(scrollEl, scrollEl.scrollHeight - scrollEl.clientHeight, 4000);
+  await demoSleep(600);
+  await showCalloutAt("これだけの情報が — ボタン1つで完成しました", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+  await showCalloutWait(1600);
+  hideCallout();
+  await demoSleep(200);
+  await showCalloutAt("もしExcelで作っていたら — 担当者の丸1日が消えます", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+  await showCalloutWait(1800);
+  hideCallout();
+  await demoSleep(200);
+  await showCalloutAt("FoodPilot なら — ワンクリック・数秒で完成します ✓", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+  await showCalloutWait(2200);
+  hideCallout();
+  hideNarr();
+}
+
+// ─── 開発デモ アニメーション v3 ─────────────────────────────────────────
+
+async function _demoAnim_DevList() {
+  showBanner("STEP 1 / 7", "🧪 商品開発プロジェクト", "開発中の新商品を一元管理 — ここから新商品の旅が始まります");
+  await demoSleep(700);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const narr = ["開発プロジェクト一覧を確認", "進行中の商品を確認", "対象商品を開く"];
+  showNarr(narr, 0);
+  vcShow();
+
+  await showCalloutAt("これが商品開発の管理画面です。試作から発売まで — すべてここで一元管理します", window.innerWidth / 2, window.innerHeight * 0.35, "bottom");
+  await showCalloutWait(2200);
+  hideCallout();
+
+  const listEl = root.querySelector(
+    "[class*='dev-list'],[class*='dev-projects'],[class*='master-list'],[class*='project-list']"
+  );
+  if (listEl) {
+    showHl(listEl);
+    await vcMoveToEl(listEl, 0, -20, 450);
+    await showCalloutOnEl("開発中・審査中・承認待ち — 全プロジェクトのステータスがひと目でわかります", listEl, "right");
+    await showCalloutWait(2000);
+    hideCallout(); hideHl();
+  }
+  updateNarr(1);
+
+  const card = root.querySelector(
+    "[class*='dev-card'],[class*='project-card'],[class*='dev-row'],[class*='master-card']"
+  );
+  if (card) {
+    await demoSleep(300);
+    showHl(card);
+    await vcMoveToEl(card, 0, 0, 450);
+    await showCalloutOnEl("「グルテンフリーパンケーキ」— 2027年春の新商品。試作Ver.1の評価がCだったところから始まります", card, "right");
+    updateNarr(2);
+    await showCalloutWait(2200);
+    hideCallout();
+    await vcClick(card, 350);
+    hideHl();
+  }
+  await demoSleep(300);
+  hideNarr();
+}
+
+async function _demoAnim_RecipeInput() {
+  showBanner("STEP 2 / 7", "🍳 試作レシピ入力", "原材料を入れるたびに — 原価・栄養成分がリアルタイムで自動計算されます");
+  await demoSleep(600);
+  const narr = ["① 原材料を順番に入力", "② 原価が自動計算（目標28%）", "③ 栄養成分も自動更新", "④ Ver.2 レシピ保存完了 ✓"];
+  showNarr(narr, 0);
+
+  document.getElementById("dp-recipe-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "dp-recipe-overlay"; overlay.className = "dp-ai-overlay";
+  overlay.innerHTML = `
+    <div class="dp-ai-card dp-recipe-card">
+      <div class="dp-ai-title">📝 試作レシピ入力 — Ver.2（グルテンフリーパンケーキ）</div>
+      <div class="dp-recipe-cols">
+        <div class="dp-recipe-left">
+          <div class="dp-recipe-col-label">原材料を入力 →</div>
+          <div id="dp-ing-list"></div>
+        </div>
+        <div class="dp-recipe-right">
+          <div class="dp-recipe-col-label">⚡ 原価シミュレーション</div>
+          <div class="dp-recipe-stats">
+            <div class="dp-rs"><span class="dp-rs-l">製造原価</span><span class="dp-rs-v" id="dp-rc">¥ —</span></div>
+            <div class="dp-rs dp-rs-sep"></div>
+            <div class="dp-rs"><span class="dp-rs-l">現在の原価率</span><span class="dp-rs-v" id="dp-rr" style="font-size:1.15em;font-weight:800">— %</span></div>
+            <div class="dp-rs"><span class="dp-rs-l">目標原価率</span><span class="dp-rs-v" style="color:#f59e0b;font-weight:700">30% 以下</span></div>
+            <div class="dp-rs" id="dp-sim-judge" style="display:none">
+              <span class="dp-rs-l"></span>
+              <span class="dp-rs-v" id="dp-sim-label" style="font-size:1.05em;font-weight:800"></span>
+            </div>
+            <div class="dp-rs dp-rs-sep"></div>
+            <div class="dp-rs"><span class="dp-rs-l">カロリー</span><span class="dp-rs-v" id="dp-ca">— kcal</span></div>
+            <div class="dp-rs"><span class="dp-rs-l">たんぱく質</span><span class="dp-rs-v" id="dp-pr">— g</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="dp-ai-success" id="dp-recipe-done">✅ Ver.2 レシピ確定 — 原価率28% で目標達成！</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await demoSleep(150); overlay.classList.add("visible");
+
+  const ings = [
+    { name:"米粉",               w:"140g", cost:180,  rate:26, cal:370,  prot:5.6,  fat:1.2 },
+    { name:"豆乳パウダー",       w:"20g",  cost:245,  rate:28, cal:395,  prot:8.8,  fat:2.1 },
+    { name:"砂糖",               w:"20g",  cost:250,  rate:29, cal:450,  prot:8.8,  fat:2.1 },
+    { name:"片栗粉",             w:"10g",  cost:252,  rate:29, cal:460,  prot:8.9,  fat:2.1 },
+    { name:"食塩",               w:"2g",   cost:252,  rate:29, cal:460,  prot:8.9,  fat:2.1 },
+    { name:"ベーキングパウダー", w:"8g",   cost:245,  rate:28, cal:462,  prot:8.9,  fat:2.2 },
+  ];
+  const ingList = document.getElementById("dp-ing-list");
+  async function flashEl(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.transition = "color .1s"; el.style.color = "#4ade80";
+    await demoSleep(200); el.style.color = "";
+  }
+  for (let idx = 0; idx < ings.length; idx++) {
+    if (!demoMode) break;
+    const ing = ings[idx];
+    const row = document.createElement("div");
+    row.className = "dp-ing-row"; row.style.opacity = "0";
+    row.innerHTML = `<span class="dp-ing-name"></span><span class="dp-ing-w" style="margin-left:8px;color:#94a3b8"></span>`;
+    ingList?.appendChild(row);
+    row.style.transition = "opacity .2s"; row.style.opacity = "1";
+    await demoTypeIn(row.querySelector(".dp-ing-name"), ing.name, 20);
+    await demoTypeIn(row.querySelector(".dp-ing-w"), ing.w, 28);
+    const rc = document.getElementById("dp-rc"); if (rc) rc.textContent = "¥" + ing.cost;
+    const rr = document.getElementById("dp-rr"); if (rr) { rr.textContent = ing.rate + "%"; rr.style.color = ing.rate <= 30 ? "#4ade80" : "#f87171"; }
+    const ca = document.getElementById("dp-ca"); if (ca) ca.textContent = ing.cal + " kcal";
+    const pr = document.getElementById("dp-pr"); if (pr) pr.textContent = ing.prot + " g";
+    const judgeRow = document.getElementById("dp-sim-judge");
+    const judgeLabel = document.getElementById("dp-sim-label");
+    if (judgeRow && judgeLabel) {
+      judgeRow.style.display = "";
+      const ok = ing.rate <= 30;
+      judgeLabel.textContent = ok ? `✅ 目標達成（余裕 ${30 - ing.rate}%）` : `⚠ 超過 +${ing.rate - 30}%`;
+      judgeLabel.style.color = ok ? "#4ade80" : "#f87171";
+    }
+    await flashEl("dp-rc"); await flashEl("dp-rr");
+    if (idx === 1) { updateNarr(1); await flashEl("dp-ca"); }
+    if (idx === 3) { updateNarr(2); }
+    await demoSleep(200);
+  }
+  document.getElementById("dp-recipe-done")?.classList.add("visible");
+  updateNarr(3);
+  await demoSleep(1400);
+  const doneEl = document.getElementById("dp-recipe-done");
+  if (doneEl) await showCalloutOnEl("原価率28% — 目標達成です。次はVer.1との違いを比べてみましょう", doneEl, "top");
+  else await showCalloutAt("原価率28% — 目標達成。次はVer.1との差分を確認します", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2000);
+  hideCallout();
+  overlay.style.transition = "opacity .5s"; overlay.style.opacity = "0";
+  await demoSleep(500); overlay.remove();
+  hideNarr();
+}
+
+async function _demoAnim_VersionDiff() {
+  showBanner("STEP 3 / 7", "📊 バージョン比較", "試作Ver.1 vs Ver.2 — 何が変わったか・どこが改善されたか一目でわかります");
+  await demoSleep(700);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const narr = ["Ver.1 を確認", "Ver.2 との差分を確認", "原価率 改善を確認"];
+  showNarr(narr, 0);
+  vcShow();
+
+  const area = root.querySelector(
+    "[class*='rv-compare'],[class*='compare-area'],[class*='version-compare'],[class*='rv-wrap'],[class*='rcmp-table']"
+  );
+  const cols = Array.from(root.querySelectorAll(
+    "[class*='rv-col'],[class*='compare-col'],[class*='version-col'],[class*='rcmp-th']"
+  )).slice(0, 2);
+
+  // 比較エリアを先頭で画面に収める
+  if (area) {
+    demoScrollTo(area, "start");
+    await demoSleep(500);
+  }
+
+  if (area) {
+    showHl(area);
+    await vcMoveToEl(area, 0, -20, 450);
+    await showCalloutOnEl("Ver.1 と Ver.2 のレシピを横並びで比較できます", area, "right");
+    await showCalloutWait(2000);
+    hideCallout(); hideHl();
+  }
+  updateNarr(1);
+
+  if (cols[0]) {
+    showHl(cols[0]);
+    await vcMoveToEl(cols[0], 0, 0, 400);
+    await showCalloutOnEl("Ver.1 — 原価率 32%。目標（30%以下）をオーバーしています", cols[0], "right");
+    await showCalloutWait(1800);
+    hideCallout(); hideHl();
+    await demoSleep(200);
+  }
+  if (cols[1]) {
+    showHl(cols[1]);
+    await vcMoveToEl(cols[1], 0, 0, 400);
+    await showCalloutOnEl("Ver.2 — 原価率 28% ✓ 目標達成！変更した原材料は黄色でハイライトされています", cols[1], "left");
+    await showCalloutWait(2200);
+    hideCallout(); hideHl();
+  }
+  updateNarr(2);
+
+  const costEl = root.querySelector("[class*='cost-rate'],[class*='direct-cost'],[class*='cost-row'],[class*='rv-cost'],[class*='rcmp-diff']");
+  if (costEl) {
+    showHl(costEl);
+    await vcMoveToEl(costEl, 0, 0, 400);
+    await showCalloutOnEl("原価率 32% → 28%。4ポイントの改善。この差が積み重なると年間で大きな利益になります", costEl, "bottom");
+    await showCalloutWait(2400);
+    hideCallout(); hideHl();
+  }
+  await showCalloutAt("「なんとなく」ではなく「数値で」判断できる — 担当者が変わっても、いつでも同じ基準で決断できます", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2400);
+  hideCallout();
+  hideNarr();
+}
+
+async function _demoAnim_AIReview() {
+  showBanner("STEP 4 / 7", "🤖 AI レビュー", "AIが食品表示法のミスと改善ポイントを — 発売前に自動でチェックします");
+  await demoSleep(600);
+  const narr = ["① AIに問い合わせ送信", "② AIが分析中...", "③ 重要な指摘が届きました", "④ 全項目を確認 ✓"];
+  showNarr(narr, 0);
+
+  document.getElementById("dp-ai-review-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "dp-ai-review-overlay"; overlay.className = "dp-ai-overlay";
+  overlay.innerHTML = `
+    <div class="dp-ai-card">
+      <div class="dp-ai-title">🤖 AI レビュー — グルテンフリーパンケーキ（2027春新商品）</div>
+      <div class="dp-ai-phases">
+        <div class="dp-ai-ph" id="dp-rv-q"><span class="dp-ai-ph-icon">💬</span><span id="dp-rv-qtxt"></span></div>
+        <div class="dp-ai-ph" id="dp-rv-a"><span class="dp-ai-ph-icon dp-spin">🔍</span><span>AI が原材料・表示・コストを分析中...</span></div>
+      </div>
+      <div class="dp-ai-sep"></div>
+      <div id="dp-ai-sug-list" class="dp-ai-suggestions"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await demoSleep(150); overlay.classList.add("visible");
+
+  const qEl = document.getElementById("dp-rv-qtxt");
+  document.getElementById("dp-rv-q")?.classList.add("visible");
+  if (qEl) await demoTypeIn(qEl, "このレシピで食品表示法に問題はありますか？", 22);
+  updateNarr(1);
+  await demoSleep(300);
+  document.getElementById("dp-rv-a")?.classList.add("visible");
+  await demoSleep(1400);
+  updateNarr(2);
+
+  const items = [
+    "⚠️ 表示必須: 豆乳パウダーは大豆由来のため「大豆」アレルゲン表示が必要です。",
+    "✅ 解決策: 表示ラベルの「アレルゲン」欄に「大豆」を追加してください（自動反映可能）。",
+    "💰 原価: 原価率 28% は目標範囲（30% 以下）。Ver.1 より 4pt 改善 — 合格。",
+    "🌾 差別化: 食物繊維（オーツ麦等）を追加すると他社製品との差別化になります。",
+    "✅ グルテンフリー: 使用原材料にグルテン由来成分は検出されません — 表示可能。",
+  ];
+  const sugList = document.getElementById("dp-ai-sug-list");
+  for (let i = 0; i < items.length; i++) {
+    if (!sugList || !demoMode) break;
+    const item = document.createElement("div");
+    item.className = "dp-ai-sug-item"; item.style.opacity = "0";
+    sugList.appendChild(item);
+    item.style.transition = "opacity .3s"; item.style.opacity = "1";
+    await demoTypeIn(item, items[i], 11);
+    if (i === 2) updateNarr(3);
+    await demoSleep(280);
+  }
+  await demoSleep(1400);
+  // 締めの価値訴求コールアウト
+  const calloutText = "発売前にAIが自動チェック — ラベルミスによる回収リスクを未然に防ぎます";
+  const sugg = document.getElementById("dp-ai-sug-list");
+  if (sugg) await showCalloutOnEl(calloutText, sugg, "right");
+  else await showCalloutAt(calloutText, window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2200);
+  hideCallout();
+  overlay.style.transition = "opacity .5s"; overlay.style.opacity = "0";
+  await demoSleep(500); overlay.remove();
+  hideNarr();
+}
+
+async function _demoAnim_ApprovalFlow() {
+  showBanner("STEP 5 / 7", "✅ 採用 & 承認フロー", "採用ボタンを押すだけ — 承認ルートが自動で回り始めます");
+  await demoSleep(600);
+  const narr = ["採用ボタンを押下", "開発部長が承認", "品質管理が承認", "全承認 ✓ 発売準備完了"];
+  showNarr(narr, 0);
+  vcShow();
+
+  // 採用ボタンをカーソルで押す演出
+  const root = document.getElementById("root");
+  const adoptBtn = root?.querySelector(
+    "[data-action*='adopt'],[data-action*='approve'],[class*='adopt-btn'],[class*='approve-btn'],[class*='dp-adopt']"
+  );
+  if (adoptBtn) {
+    showHl(adoptBtn);
+    await vcMoveToEl(adoptBtn, 0, 0, 600);
+    await showCalloutOnEl("このボタンを押すだけです — あとはシステムが自動で動きます", adoptBtn, "top");
+    await showCalloutWait(1600);
+    hideCallout();
+    await vcClick(adoptBtn, 400);
+    hideHl();
+    await demoSleep(400);
+  } else {
+    // ボタンが見つからない場合はカーソルを画面中央へ
+    await vcMove(window.innerWidth / 2, window.innerHeight * 0.45, 500);
+    await showCalloutAt("採用ボタンを押しました — 承認フローが自動起動します", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+    await showCalloutWait(1600);
+    hideCallout();
+  }
+
+  vcHide();
+  document.getElementById("dp-appr-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "dp-appr-overlay"; overlay.className = "dp-ai-overlay";
+  overlay.innerHTML = `
+    <div class="dp-ai-card dp-appr-card">
+      <div class="dp-ai-title">✅ 採用 &amp; 承認フロー — グルテンフリーパンケーキ Ver.2</div>
+      <div class="dp-appr-flow">
+        <div class="dp-appr-step dp-appr-step--active" id="dp-as0">
+          <span class="dp-appr-num dp-appr-num--ok">✓</span>
+          <div><b>採用申請</b><br><span style="font-size:11px;opacity:.7">田中 花子（開発担当） · Ver.2 採用申請</span></div>
+        </div>
+        <div class="dp-appr-arrow">↓</div>
+        <div class="dp-appr-step" id="dp-as1">
+          <span class="dp-appr-num">2</span>
+          <div><b>開発部長 承認待ち</b><br><span style="font-size:11px;opacity:.7">山田 太郎 · 原価率 28% 確認中...</span></div>
+        </div>
+        <div class="dp-appr-arrow">↓</div>
+        <div class="dp-appr-step" id="dp-as2">
+          <span class="dp-appr-num">3</span>
+          <div><b>品質管理 承認待ち</b><br><span style="font-size:11px;opacity:.7">品質管理チーム · アレルゲン表示確認中...</span></div>
+        </div>
+        <div class="dp-appr-arrow">↓</div>
+        <div class="dp-appr-step" id="dp-as3">
+          <span class="dp-appr-num">✓</span>
+          <div><b class="dp-appr-ok">全承認完了 — 発売可能</b><br><span style="font-size:11px;opacity:.7">3名の承認が揃いました</span></div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await demoSleep(150); overlay.classList.add("visible");
+
+  function _approveStep(id, label) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add("dp-appr-step--active");
+    const b = el.querySelector("b"); if (b) b.textContent = label;
+    const num = el.querySelector(".dp-appr-num");
+    if (num) { num.className = "dp-appr-num dp-appr-num--ok"; num.textContent = "✓"; }
+  }
+
+  await demoSleep(1200);
+  _approveStep("dp-as1", "開発部長 承認 ✓");
+  updateNarr(1);
+
+  await demoSleep(1100);
+  _approveStep("dp-as2", "品質管理 承認 ✓");
+  updateNarr(2);
+
+  await demoSleep(1000);
+  const as3 = document.getElementById("dp-as3");
+  if (as3) {
+    as3.classList.add("dp-appr-step--active");
+    const as3num = as3.querySelector(".dp-appr-num");
+    if (as3num) { as3num.className = "dp-appr-num dp-appr-num--ok"; }
+  }
+  updateNarr(3);
+
+  await demoSleep(800);
+  const finalEl = document.getElementById("dp-as3");
+  if (finalEl) {
+    finalEl.style.transition = "box-shadow .3s";
+    finalEl.style.boxShadow = "0 0 0 2px #22c55e, 0 4px 20px rgba(34,197,94,.4)";
+  }
+
+  await demoSleep(800);
+  await showCalloutAt("書類を回す・催促する — そんな手間が全部なくなります。次のステップは「発売」です", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2200);
+  hideCallout();
+  overlay.style.transition = "opacity .5s"; overlay.style.opacity = "0";
+  await demoSleep(500); overlay.remove();
+  hideNarr();
+}
+
+async function _demoAnim_ReleaseAnim() {
+  showBanner("STEP 6 / 7", "🚀 発売処理", "最も感動する瞬間 — ボタン1つで全システムが一斉に動きます");
+  await demoSleep(700);
+  const narr = ["「発売する」ボタンを押下", "全システムへ自動連携中...", "すべてつながりました 🎉"];
+  showNarr(narr, 0);
+  vcShow();
+
+  const root = document.getElementById("root");
+  const relBtn = root?.querySelector(
+    "[data-action*='release'],[data-action*='launch'],[class*='release-btn'],[class*='launch-btn']"
+  );
+  if (relBtn) {
+    showHl(relBtn);
+    await vcMoveToEl(relBtn, 0, 0, 600);
+    await showCalloutOnEl("このボタンを1回押すだけです — あとはすべてFoodPilotが自動でやります", relBtn, "top");
+    await showCalloutWait(2000);
+    hideCallout();
+    await vcClick(relBtn, 400);
+    hideHl();
+    await demoSleep(300);
+  } else {
+    await vcMove(window.innerWidth / 2, window.innerHeight * 0.5, 500);
+    await showCalloutAt("「発売する」ボタンを押しました — ここからFoodPilotが全自動で動きます", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+    await showCalloutWait(1800);
+    hideCallout();
+  }
+
+  vcHide();
+  document.getElementById("dp-rel-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "dp-rel-overlay"; overlay.className = "dp-ai-overlay";
+  overlay.innerHTML = `
+    <div class="dp-ai-card dp-rel-card">
+      <div style="text-align:center;margin-bottom:16px">
+        <div id="dp-rel-ico" style="font-size:56px;line-height:1;margin-bottom:8px;display:inline-block">🚀</div>
+        <div class="dp-ai-title" style="justify-content:center;font-size:17px;color:#f59e0b">発売処理を開始しました</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">グルテンフリーパンケーキミックス 200g</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px" id="dp-rel-steps"></div>
+      <div id="dp-rel-final" style="margin-top:16px;padding:14px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;text-align:center;opacity:0;transition:opacity .6s">
+        <div style="font-size:20px;margin-bottom:6px">🎉</div>
+        <div style="font-size:15px;font-weight:800;color:#4ade80">すべてのシステムに自動反映されました</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px">開発から管理まで — FoodPilotがひとつにつなぎます</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  await demoSleep(150); overlay.classList.add("visible");
+  updateNarr(1);
+
+  const ico = document.getElementById("dp-rel-ico");
+  if (ico) {
+    ico.style.transition = "transform .7s cubic-bezier(.34,1.56,.64,1)";
+    ico.style.transform = "scale(1.3) translateY(-6px)";
+  }
+  await demoSleep(600);
+  if (ico) { ico.style.transform = "scale(1)"; }
+
+  const steps = [
+    { icon: "📦", text: "商品管理データベースへ登録完了", delay: 500 },
+    { icon: "🗂️", text: "商品カルテを自動生成 — 全情報を引き継ぎました", delay: 600 },
+    { icon: "📋", text: "商品一覧に追加 — 即日から販売状況を管理", delay: 600 },
+    { icon: "📅", text: "タイムラインに発売記録を追加しました", delay: 600 },
+    { icon: "📊", text: "ダッシュボードのKPIを更新しました", delay: 600 },
+    { icon: "🏷️", text: "食品表示ラベルを商品管理に紐づけました", delay: 600 },
+  ];
+  const stepsEl = document.getElementById("dp-rel-steps");
+  for (const s of steps) {
+    if (!stepsEl || !demoMode) break;
+    const el = document.createElement("div");
+    el.style.cssText = "display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#e2e8f0;opacity:0;transform:translateX(-12px);transition:opacity .35s,transform .35s;background:rgba(255,255,255,.06);padding:8px 14px;border-radius:8px;border-left:3px solid #22c55e;";
+    el.innerHTML = `<span style="font-size:16px">${s.icon}</span><span>${s.text}</span>`;
+    stepsEl.appendChild(el);
+    await demoSleep(80);
+    el.style.opacity = "1"; el.style.transform = "translateX(0)";
+    await demoSleep(s.delay);
+  }
+  updateNarr(2);
+
+  await demoSleep(400);
+  const finalEl = document.getElementById("dp-rel-final");
+  if (finalEl) finalEl.style.opacity = "1";
+  await demoSleep(1200);
+  await showCalloutAt("ボタン1回で — 開発から管理まで、すべて自動でつながります。もう何も漏れません ✓", window.innerWidth / 2, window.innerHeight * 0.55, "top");
+  await showCalloutWait(2600);
+  hideCallout();
+  overlay.style.transition = "opacity .5s"; overlay.style.opacity = "0";
+  await demoSleep(500); overlay.remove();
+  hideNarr();
+}
+
+async function _demoAnim_DevTimeline() {
+  showBanner("STEP 7 / 7", "📅 開発タイムライン", "この商品の誕生から今日まで — すべての記録が一本の線に");
+  await demoSleep(700);
+  const root = document.getElementById("root");
+  if (!root) return;
+  const narr = ["発売〜引き継ぎ記録を確認", "採用・承認フローを確認", "開発のはじまりまで遡る"];
+  showNarr(narr, 0);
+  vcShow();
+
+  await showCalloutAt("これが開発タイムラインです。「発売する」を押してから商品管理に引き継がれるまで、すべての記録がここにあります", window.innerWidth / 2, window.innerHeight * 0.35, "bottom");
+  await showCalloutWait(2400);
+  hideCallout();
+
+  const entries = Array.from(root.querySelectorAll(
+    ".tl2-row,[class*='tl-item'],[class*='karte-tl-row']"
+  ));
+  // timeline entries order (newest first):
+  // 0:食品表示ラベル初版確定 1:発売処理 2:承認フロー完了 3:Ver.2採用決定 4:試作#2 5:試作#1 6:開発スタート
+  const devCallouts = [
+    { idx: 1, msg: "🚀 発売処理完了 — 開発から商品管理へ。自動で全データが引き継がれました" },
+    { idx: 2, msg: "✅ 全承認フロー完了 — 部長・品質管理の3名が順番に承認しました" },
+    { idx: 3, msg: "✅ Ver.2 採用決定 — 原価率28%で目標達成。ここで発売GOが出ました" },
+    { idx: 5, msg: "🧪 試作#1（Ver.1）— 原価率32%で目標オーバー。だから試作を重ねました" },
+    { idx: 6, msg: "🌱 開発スタート — ここからグルテンフリーパンケーキの旅が始まりました" },
+  ];
+
+  if (entries.length) {
+    for (let i = 0; i < Math.min(entries.length, 7); i++) {
+      if (!demoMode) break;
+      demoScrollTo(entries[i], "center");
+      await demoSleep(350);
+      showHl(entries[i]);
+      await vcMoveToEl(entries[i], 0, 0, 380);
+      const co = devCallouts.find(c => c.idx === i);
+      if (co) {
+        await showCalloutOnEl(co.msg, entries[i], "left");
+        if (i === 2) updateNarr(1);
+        if (i === 5) updateNarr(2);
+        await showCalloutWait(2000);
+        hideCallout();
+      } else {
+        await demoSleep(600);
+      }
+      await demoSleep(400);
+      hideHl(); await demoSleep(200);
+    }
+  } else {
+    const scrollEl = root.querySelector(".saas-main") || root;
+    await vcSmoothScroll(scrollEl, scrollEl.scrollHeight - scrollEl.clientHeight, 4000);
+    updateNarr(2);
+  }
+  await showCalloutAt("開発スタートから発売まで、すべての決断・承認・記録が一本の線に残ります", window.innerWidth / 2, window.innerHeight * 0.45, "top");
+  await showCalloutWait(2200);
+  hideCallout();
+  await demoSleep(300);
+  await showCalloutAt("「あのとき何故この原材料を選んだのか」— 何年後でも、誰でも、1秒で答えられます", window.innerWidth / 2, window.innerHeight * 0.45, "top");
+  await showCalloutWait(2800);
+  hideCallout();
+  hideNarr();
+}
+
+function demoModuleSelectHtml() {
+  const DEMOS = [
+    {
+      type: "manage",
+      modules: ["manage"],
+      icon: "📦",
+      title: "商品管理デモ",
+      duration: "約7分 · 7ステップ",
+      personas: ["豆腐・納豆メーカー", "菓子・パン製造", "食品受託製造", "調味料・惣菜"],
+      features: [
+        "商品一覧・カルテ管理",
+        "食品表示ラベル自動生成",
+        "A4規格書ワンクリック",
+        "AI表示チェック",
+      ],
+      steps: "ダッシュボード → 商品一覧 → 商品カルテ → タイムライン → ラベル → 規格書 → AIレビュー",
+      recommended: false,
+    },
+    {
+      type: "develop",
+      modules: ["manage", "develop"],
+      icon: "🧪",
+      title: "商品開発デモ",
+      duration: "約8分 · 7ステップ",
+      personas: ["新商品を毎年複数開発", "OEM受託開発", "試作・レシピ管理が必要", "開発〜発売を一元管理したい"],
+      features: [
+        "開発プロジェクト管理",
+        "試作版比較（Ver.1 vs Ver.2）",
+        "AIへの原材料相談",
+        "発売処理〜商品カルテ移行",
+      ],
+      steps: "開発一覧 → 試作Ver.1 → Ver.2比較 → AI相談 → 採用決定 → 発売処理 → 商品カルテ → タイムライン",
+      recommended: true,
+    },
+  ];
+  const cardsHtml = DEMOS.map(d => `
+    <button class="demo-select-card${d.recommended ? " demo-select-card--rec" : ""}"
+      data-action="demo-start-with-modules"
+      data-modules="${escapeHtml(JSON.stringify(d.modules))}"
+      data-demo-type="${d.type}">
+      ${d.recommended ? `<span class="demo-select-rec-badge">おすすめ</span>` : ""}
+      <div class="demo-select-card-hd">
+        <span class="demo-select-card-icon">${d.icon}</span>
+        <div>
+          <div class="demo-select-card-name">${d.title}</div>
+          <div class="demo-select-card-duration">${d.duration}</div>
+        </div>
+      </div>
+      <div class="demo-select-persona">
+        <div class="demo-select-persona-label">こんな方に</div>
+        <div class="demo-select-persona-tags">
+          ${d.personas.map(p => `<span>${p}</span>`).join("")}
+        </div>
+      </div>
+      <ul class="demo-select-features">
+        ${d.features.map(f => `<li>${f}</li>`).join("")}
+      </ul>
+      <div class="demo-select-flow">${d.steps}</div>
+      <div class="demo-select-card-cta">体験を開始 →</div>
+    </button>`).join("");
+
+  return saasLayout("デモを開始", `
+    <div class="demo-select-wrap">
+      <div class="demo-select-hero">
+        <img src="./assets/app-icon.svg" alt="" class="demo-select-hero-icon" onerror="this.style.display='none'">
+        <h2 class="demo-select-hero-title">FoodPilot デモ体験へようこそ</h2>
+        <p class="demo-select-hero-sub">貴社の状況に近いデモをお選びください。所要時間は約7〜8分です。</p>
+      </div>
+      <div class="demo-select-cards">${cardsHtml}</div>
+      <p class="demo-select-note">デモデータは本番データに一切影響しません。いつでも終了・再開できます。</p>
+    </div>
+  `);
 }
 
 function startDemo() {
   products = products.filter(p => !p._isDemo);
-  const dp = Object.assign({}, DEMO_SAMPLE, {
-    id: "demo-fp-" + Date.now(),
-    updatedAt: new Date().toISOString().replace("T"," ").slice(0,16),
-    createdAt:  new Date().toISOString().replace("T"," ").slice(0,16),
-  });
-  demoProductId = dp.id;
-  products.unshift(dp);
+  const now = new Date().toISOString().replace("T", " ").slice(0, 16);
+  const templates = demoType === "develop" ? DEMO_PRODUCTS_DEVELOP : DEMO_PRODUCTS_MANAGE;
+  const demoProds = templates.map((tmpl, i) => Object.assign({}, tmpl, {
+    id: "demo-fp-" + (Date.now() + i),
+    updatedAt: now,
+    createdAt: tmpl.createdAt || now,
+    // ラベル完成度チェックに使われるフィールド名を補完
+    volume:      tmpl.volume      || (tmpl.netWeight ? `${tmpl.netWeight}${tmpl.netWeightUnit || ""}` : ""),
+    bestBefore:  tmpl.bestBefore  || tmpl.expiryDate || "",
+    storage:     tmpl.storage     || tmpl.storageMethod || "",
+    productStatus: tmpl.productStatus === "active" ? "on_sale" : (tmpl.productStatus || "on_sale"),
+  }));
+  demoProductId = demoProds[0].id;
+  products.unshift(...demoProds);
+
+  // デモ用タイムラインイベントを事前登録（タイムラインアニメーションで表示するため）
+  if (demoType === "develop") {
+    const relProd = demoProds.find(p => p._isDemoReleased);
+    if (relProd) {
+      const tl = [
+        { icon:"🏷️", label:"食品表示ラベル 初版確定", savedAt:"2026-09-01 10:30", savedBy:"品質管理チーム", comment:"" },
+        { icon:"🚀", label:"発売処理 — 商品管理へ移行完了", savedAt:"2026-09-01 09:00", savedBy:"田中 花子", comment:"グルテンフリーパンケーキミックス 200g 新発売" },
+        { icon:"👥", label:"承認フロー完了（部長 · 品質 · 営業）", savedAt:"2026-07-12 09:00", savedBy:"承認システム", comment:"" },
+        { icon:"✅", label:"Ver.2 採用決定 — レシピ確定", savedAt:"2026-07-10 11:00", savedBy:"山田 太郎（開発部長）", comment:"原価率 28%。試作#2 評価 A 採用" },
+        { icon:"🧪", label:"試作#2（Ver.2）実施 — 評価 A ✓", savedAt:"2026-07-08 15:00", savedBy:"田中 花子", comment:"食感・味ともに良好。ふんわり感 改善確認" },
+        { icon:"🧪", label:"試作#1（Ver.1）実施 — 評価 C", savedAt:"2026-06-25 14:00", savedBy:"田中 花子", comment:"コシが強すぎ。豆乳パウダー追加を検討" },
+        { icon:"🌱", label:"開発プロジェクト開始", savedAt:"2026-06-15 10:00", savedBy:"田中 花子", comment:"2027春新商品として立ち上げ。グルテン不耐症対応ライン" },
+      ];
+      try { safeSet(`food-label-timeline-${relProd.id}`, JSON.stringify(tl)); } catch {}
+    }
+  } else {
+    const mainProd = demoProds[0];
+    const tl = [
+      { icon:"🔄", label:"食品表示ラベル 改訂版確定", savedAt:"2026-07-18 14:23", savedBy:"品質管理チーム", comment:"卵・乳成分の表示強調" },
+      { icon:"🏷️", label:"ラベル改訂 — アレルゲン表示修正", savedAt:"2026-07-15 10:00", savedBy:"佐藤 健", comment:"" },
+      { icon:"📋", label:"A4規格書 印刷・取引先へ配布", savedAt:"2026-06-01 11:00", savedBy:"佐藤 健", comment:"" },
+      { icon:"✅", label:"表示内容 品質チェック完了", savedAt:"2026-05-15 09:00", savedBy:"品質管理チーム", comment:"" },
+      { icon:"🏷️", label:"食品表示ラベル 初版作成", savedAt:"2026-05-10 14:00", savedBy:"佐藤 健", comment:"" },
+      { icon:"📝", label:"商品情報 初回登録（AI 解析）", savedAt:"2026-05-01 10:00", savedBy:"佐藤 健", comment:"パッケージ写真から自動入力" },
+    ];
+    try { safeSet(`food-label-timeline-${mainProd.id}`, JSON.stringify(tl)); } catch {}
+  }
+
   try { localStorage.setItem("food-label-products-static", JSON.stringify(products)); } catch {}
   demoMode = true;
+  demoEndScreen = false;
   demoStep = 1;
+  demoAnimPlayed = false;
+  document.documentElement.classList.add("fp-demo-active");
+  document.body.classList.add("fp-demo-active");
+  // デモ中は全スクロール操作を完全ブロック
+  const _wbl = e => e.preventDefault();
+  const _kbl = e => {
+    if (["ArrowUp","ArrowDown","PageUp","PageDown"," "].includes(e.key)) e.preventDefault();
+  };
+  window._demoWheelBlock = _wbl;
+  window._demoKeyBlock   = _kbl;
+  window.addEventListener("wheel",     _wbl, { passive: false });
+  window.addEventListener("touchmove", _wbl, { passive: false });
+  window.addEventListener("keydown",   _kbl);
   applyDemoStep();
   render();
+  // render() 後にスクロール位置をリセット（新しい DOM に適用するため）
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".saas-main,.saas-content").forEach(el => { el.scrollTop = 0; });
+  });
+  setTimeout(demoPresAnimateStep, 600);
 }
 
 function endDemo() {
-  stopDemoAutoScroll();
+  _demoCleanup();
+  document.documentElement.classList.remove("fp-demo-active");
+  document.body.classList.remove("fp-demo-active", "fp-dd");
+  if (window._demoWheelBlock) {
+    window.removeEventListener("wheel",     window._demoWheelBlock);
+    window.removeEventListener("touchmove", window._demoWheelBlock);
+    delete window._demoWheelBlock;
+  }
+  if (window._demoKeyBlock) {
+    window.removeEventListener("keydown", window._demoKeyBlock);
+    delete window._demoKeyBlock;
+  }
   products = products.filter(p => !p._isDemo);
   try { localStorage.setItem("food-label-products-static", JSON.stringify(products)); } catch {}
   demoMode = false;
+  demoEndScreen = false;
   demoStep = 1;
   demoProductId = null;
   saasView = "dashboard";
@@ -995,90 +2555,142 @@ function endDemo() {
 }
 
 function applyDemoStep() {
-  const s = DEMO_STEPS[demoStep - 1];
-  stopDemoAutoScroll();
+  const steps = currentDemoSteps();
+  const s = steps[demoStep - 1];
+  if (!s) return;
+  _demoCleanup();
   sidebarOpen = false;
   registerMenuOpen = false;
-  if (s.view === "dashboard")                { saasView = "dashboard"; view = "saas"; }
-  else if (s.view === "reg-photo")           { saasView = "reg-photo"; view = "saas"; }
-  else if (s.view === "edit" || s.view === "label-nav") {
-    editId = demoProductId;
-    draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct());
-    view = "edit"; saasView = s.view === "label-nav" ? "label-nav" : "edit";
-    if (s.printAnim) startDemoPrintTypewriter();
-    if (s.autoScroll) {
-      openSections = new Set(["基本情報", "原材料"]);
-      startDemoAutoScroll(150);
-    } else if (s.clickSection) {
-      openSections = new Set(["商品情報", "原材料"]);
-      startDemoClickSection(s.clickSection);
-    } else if (s.openSection) {
-      openSections = new Set([s.openSection]);
-      const sec = s.openSection;
-      setTimeout(() => {
-        const btn = document.querySelector(`[data-toggle-section="${sec}"]`);
-        if (btn) btn.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 80);
+  recipeCompareMode = false;
+  recipeCompareIds = [];
+  healthPanelOpen = false;
+
+  if (s.view === "dashboard") {
+    saasView = "dashboard"; view = "saas";
+  }
+  else if (s.view === "products") {
+    masterSearch = ""; saasView = "products"; view = "saas";
+  }
+  else if (s.view === "dev-products") {
+    saasView = "dev-products"; view = "saas";
+  }
+  else if (s.view === "dev-detail") {
+    productDetailId = demoProductId;
+    devDetailTab = s.devTab || "overview";
+    activeRecipeVersionId = null;
+    saasView = "product-detail"; view = "saas";
+    if (s.compareMode) {
+      const dp = products.find(x => x.id === demoProductId);
+      const vids = (dp?.recipeVersions || []).map(v => v.id);
+      if (vids.length >= 2) { recipeCompareMode = true; recipeCompareIds = vids; }
     }
   }
+  else if (s.view === "ai-consult-nav") {
+    aiConsultProductId = demoProductId;
+    saasView = "ai-consult-nav"; view = "saas";
+  }
+  else if (s.view === "label-nav") {
+    editId = demoProductId;
+    draft = extendProductMaster(products.find(p => p.id === demoProductId) || emptyProduct());
+    view = "edit"; saasView = "label-nav";
+  }
   else if (s.view === "product-detail") {
-    productDetailId = demoProductId;
+    let targetId = demoProductId;
+    if (s.useReleased) {
+      const rp = products.find(p => p._isDemoReleased);
+      if (rp) targetId = rp.id;
+    }
+    productDetailId = targetId;
     productDetailTab = s.detailTab || "basic";
     saasView = "product-detail"; view = "saas";
-    if (s.autoScroll) startDemoAutoScroll(300);
   }
-  else if (s.view === "spec-sheet-nav")      { specSheetId = demoProductId; saasView = "spec-sheet-nav"; view = "saas"; }
-  else if (s.view === "ai-descriptions-nav") {
-    aiDescId = demoProductId; saasView = "ai-descriptions-nav"; view = "saas";
-    if (s.clickGenerate) startDemoClickGenerate();
+  else if (s.view === "spec-sheet-nav") {
+    specSheetId = demoProductId; saasView = "spec-sheet-nav"; view = "saas";
   }
 }
 
-function demoOverlayHtml() {
-  const TOTAL = DEMO_STEPS.length;
-  const s = DEMO_STEPS[demoStep - 1];
-  const pct = Math.round((demoStep / TOTAL) * 100);
-  const prevBtn = demoStep > 1 ? `<button class="demo-btn-sec" data-action="demo-prev">← 戻る</button>` : "";
-  const nextLabel = demoStep === TOTAL ? "デモを終了する ✓" : "次へ →";
-  const topBar = `
-    <div class="demo-topbar">
-      <div class="demo-topbar-left">
-        <span class="demo-step-badge">STEP ${demoStep} / ${TOTAL}</span>
-        <span class="demo-topbar-title">${escapeHtml(s.title)}</span>
-        <div class="demo-progress-track"><div class="demo-progress-fill" style="width:${pct}%"></div></div>
-      </div>
-      <button class="demo-end-btn" data-action="demo-end">✕ デモ終了</button>
-    </div>`;
-
-  if (s.fullscreen) {
-    const regHtml = s.showRegMethods ? `
-      <div class="demo-reg-grid">
-        <div class="demo-reg-card demo-reg-card--active"><div class="demo-reg-icon">📷</div><div class="demo-reg-label">商品写真から登録</div><div class="demo-reg-desc">パッケージ裏面を撮るだけでAIが全項目を自動入力</div><div class="demo-reg-now">← 今回はこちら</div></div>
-        <div class="demo-reg-card"><div class="demo-reg-icon">📄</div><div class="demo-reg-label">規格書から登録</div><div class="demo-reg-desc">PDF・Excelから自動抽出</div></div>
-        <div class="demo-reg-card"><div class="demo-reg-icon">🤖</div><div class="demo-reg-label">AIで登録</div><div class="demo-reg-desc">チャット形式で情報を作成</div></div>
-        <div class="demo-reg-card"><div class="demo-reg-icon">✏️</div><div class="demo-reg-label">手入力</div><div class="demo-reg-desc">従来どおり手動で入力</div></div>
-      </div>` : "";
-    return `
-      <div class="demo-overlay demo-fullscreen" id="demo-overlay">
-        ${topBar}
-        <div class="demo-center">
-          <p class="demo-step-num-big">STEP ${demoStep}</p>
-          <h2 class="demo-heading">${escapeHtml(s.heading).replace(/\n/g,"<br>")}</h2>
-          ${regHtml}
-          <div class="demo-point-box"><span class="demo-point-icon">💡</span><span><b>ここがポイント</b><br>${escapeHtml(s.point)}</span></div>
-          <div class="demo-nav-row">${prevBtn}<button class="demo-btn-prim" data-action="demo-next">${nextLabel}</button></div>
+function demoEndHtml() {
+  const FEATURES = [
+    { icon: "📷", title: "AI 商品登録", desc: "写真1枚で原材料・栄養成分まで自動入力" },
+    { icon: "🗂️", title: "商品カルテ", desc: "1商品のすべての情報がひとつの画面に集約" },
+    { icon: "🏷️", title: "食品表示ラベル", desc: "食品表示法準拠のラベルをリアルタイム生成" },
+    { icon: "📄", title: "A4 規格書", desc: "ワンクリックで取引先向け規格書が自動完成" },
+    { icon: "🧪", title: "商品開発管理", desc: "試作・レシピ比較・採用から発売まで一元管理" },
+    { icon: "🤖", title: "AI レビュー", desc: "表示法違反・コスト改善をAIが自動チェック" },
+  ];
+  return `
+    <div class="demo-overlay demo-fullscreen demo-end-overlay" id="demo-overlay">
+      <div class="demo-end-inner">
+        <div class="demo-end-check-wrap" style="animation:demo-pop .5s ease-out"><div class="demo-end-check">✓</div></div>
+        <h2 class="demo-end-title">デモ体験が完了しました</h2>
+        <p class="demo-end-subtitle">FoodPilot でできること</p>
+        <div class="demo-end-features">
+          ${FEATURES.map(f => `
+            <div class="demo-end-feature">
+              <span class="demo-end-feature-icon">${f.icon}</span>
+              <div>
+                <div class="demo-end-feature-title">${f.title}</div>
+                <div class="demo-end-feature-desc">${f.desc}</div>
+              </div>
+            </div>`).join("")}
         </div>
-      </div>`;
-  }
+        <div class="demo-end-tagline">
+          <p class="demo-end-tagline-main">ExcelとLINEでバラバラだった商品情報を、ひとつに。</p>
+          <p class="demo-end-tagline-sub">FoodPilot は、商品の企画から終売まで、すべての情報とプロセスを一元管理します。</p>
+        </div>
+        <div class="demo-end-cta-box">
+          <p class="demo-end-cta-title">「うちでも使いたい」と思っていただけましたか？</p>
+          <p class="demo-end-cta-sub">まずは無料30分、貴社の課題をお聞かせください。導入サポートも充実しています。</p>
+          <div class="demo-nav-row" style="margin-top:16px;justify-content:center;flex-wrap:wrap">
+            <button class="demo-btn-sec" data-action="demo-restart">← 別のデモを見る</button>
+            <button class="demo-btn-cta" data-action="demo-contact">📞 導入を相談する（無料）</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function demoOverlayHtml() {
+  if (demoEndScreen) return demoEndHtml();
+
+  const steps = currentDemoSteps();
+  const TOTAL = steps.length;
+  const s = steps[demoStep - 1];
+  if (!s) return "";
+
+  const fillPct = Math.round((demoStep / TOTAL) * 100);
+  const typeBadge = demoType === "develop"
+    ? `<span class="demo-type-badge demo-type-badge--develop">🧪 商品開発</span>`
+    : `<span class="demo-type-badge demo-type-badge--manage">📦 商品管理</span>`;
+
+  const prevBtn = demoStep > 1
+    ? `<button class="dp-nav-btn" data-action="demo-prev">← 戻る</button>`
+    : `<button class="dp-nav-btn" disabled style="opacity:.3;cursor:default">← 戻る</button>`;
+  const nextLabel = demoStep === TOTAL ? "まとめを見る ✓"
+    : `次: ${escapeHtml(steps[demoStep].title)} →`;
 
   return `
-    <div class="demo-overlay demo-float" id="demo-overlay">
-      ${topBar}
-      <div class="demo-callout">
-        <div class="demo-callout-head">📌 ${escapeHtml(s.title)}</div>
-        <div class="demo-callout-msg">${escapeHtml(s.heading)}</div>
-        <div class="demo-point-box"><span class="demo-point-icon">💡</span><span><b>ここがポイント</b><br>${escapeHtml(s.point)}</span></div>
-        <div class="demo-nav-row">${prevBtn}<button class="demo-btn-prim" data-action="demo-next">${nextLabel}</button></div>
+    <div class="demo-topbar-v2" id="dp-topbar">
+      <div class="dp-tb-left">${typeBadge}</div>
+      <div class="demo-v2-progress">
+        <div class="demo-v2-step-info">
+          <span class="demo-v2-step-label">STEP ${demoStep}/${TOTAL}</span>
+          <span class="demo-v2-step-title">${escapeHtml(s.title)}</span>
+        </div>
+        <div class="demo-v2-bar-track"><div class="demo-v2-bar-fill" style="width:${fillPct}%"></div></div>
+      </div>
+      <div class="dp-tb-right">
+        <button class="demo-end-btn" data-action="demo-end">✕ 終了</button>
+      </div>
+    </div>
+    <div class="dp-bottom" id="dp-bottom">
+      <div class="dp-bottom-info">
+        <div class="dp-bottom-step-lbl">STEP ${demoStep} · ${escapeHtml(s.title)}</div>
+        <div class="dp-bottom-subtitle">${escapeHtml(s.sub || "")}</div>
+      </div>
+      <div class="dp-bottom-ctrl">
+        ${prevBtn}
+        <button class="dp-nav-btn dp-nav-btn--primary" data-action="demo-next">${nextLabel}</button>
       </div>
     </div>`;
 }
@@ -1093,10 +2705,17 @@ function render() {
   const scrollY = window.scrollY;
   const formScrollY = document.querySelector(".form-column")?.scrollTop ?? 0;
   const prevScrollY = document.querySelector(".preview-column")?.scrollTop ?? 0;
+  // モジュールガード: 未契約のビューへのアクセスをダッシュボードにリダイレクト
+  if (view === "saas" && typeof guardView === "function") {
+    const guarded = guardView(saasView);
+    if (guarded !== saasView) saasView = guarded;
+  }
+
   let pageHtml;
   try {
     if (view === "saas") {
-      if (saasView === "dashboard") pageHtml = dashboardHtml();
+      if (saasView === "demo-select") pageHtml = demoModuleSelectHtml();
+      else if (saasView === "dashboard") pageHtml = dashboardHtml();
       else if (saasView === "products") pageHtml = productsListHtml();
       else if (saasView === "dev-products") pageHtml = devProductsHtml();
       else if (saasView === "product-detail") {
@@ -1111,7 +2730,9 @@ function render() {
       else if (saasView === "reg-ai-chat") pageHtml = aiChatRegisterHtml();
       else if (saasView === "settings-nav") pageHtml = newSettingsHtml();
       else if (saasView === "team-approval") pageHtml = teamApprovalHtml();
+      else if (saasView === "allergen-matrix") pageHtml = allergenMatrixHtml();
       else if (saasView === "shelf-scan") pageHtml = shelfScanHtml();
+      else if (saasView === "raw-materials") pageHtml = rawMaterialsHtml();
       else if (saasView === "template-select") pageHtml = templateSelectHtml();
       else pageHtml = dashboardHtml();
     } else if (view === "home") {
@@ -1133,6 +2754,7 @@ function render() {
     </div>`;
   }
   document.getElementById("root").innerHTML = `${pageHtml}${tutorialHtml()}${demoMode ? demoOverlayHtml() : ""}`;
+  document.body.classList.toggle("fp-demo-mode", demoMode && !demoEndScreen);
   bindDynamic();
   window.scrollTo({ top: scrollY, behavior: "instant" });
   const fc = document.querySelector(".form-column");
@@ -1148,6 +2770,7 @@ function render() {
       }
     }
   }
+  if (typeof syncHash === "function") syncHash();
 }
 function scheduleRender() {
   clearTimeout(renderTimer);
@@ -1592,14 +3215,23 @@ function sidebarHtml() {
     </div>
     <div class="nav-links">
       ${navLink({ id:"dashboard", label:"ホーム", ico:"🏠" })}
-      ${sectionLabel("🔬 開発ライン", "nav-section-dev")}
-      ${navLink({ id:"dev-products", label:"開発中" + (devCount > 0 ? ` (${devCount})` : ""), ico:"🧪" }, releaseBadge)}
-      ${navLink({ id:"team-approval", label:"承認待ち" + (reviewCount > 0 ? ` (${reviewCount})` : ""), ico:"👥" }, reviewBadge)}
-      ${sectionLabel("📦 管理ライン", "nav-section-mgmt")}
-      ${navLink({ id:"products", label:"発売中" + (managedCount > 0 ? ` (${managedCount})` : ""), ico:"📋" })}
-      ${sectionLabel("🤖 AI機能")}
-      ${navLink({ id:"ai-consult-nav", label:"AI相談", ico:"💬" })}
-      ${navLink({ id:"ai-descriptions-nav", label:"AI説明文", ico:"✨" })}
+      ${hasModule("manage") ? `
+        ${sectionLabel("📦 商品管理")}
+        ${navLink({ id:"products", label:"商品一覧" + (managedCount > 0 ? ` (${managedCount})` : ""), ico:"📋" })}
+        ${navLink({ id:"team-approval", label:"承認" + (reviewCount > 0 ? ` (${reviewCount})` : ""), ico:"👥" }, reviewBadge)}
+        ${navLink({ id:"allergen-matrix", label:"アレルゲン表", ico:"🧾" })}
+      ` : ""}
+      ${hasModule("develop") ? `
+        ${sectionLabel("🧪 商品開発")}
+        ${navLink({ id:"dev-products", label:"開発プロジェクト" + (devCount > 0 ? ` (${devCount})` : ""), ico:"🔬" }, releaseBadge)}
+      ` : ""}
+      ${hasModule("manage") ? `
+        ${sectionLabel("データ管理")}
+        ${navLink({ id:"raw-materials", label:"原材料マスタ" + (rawMaterials.length > 0 ? ` (${rawMaterials.length})` : ""), ico:"🌾" })}
+        ${sectionLabel("🤖 AI機能")}
+        ${navLink({ id:"ai-consult-nav", label:"AI相談", ico:"💬" })}
+        ${navLink({ id:"ai-descriptions-nav", label:"AI説明文", ico:"✨" })}
+      ` : ""}
     </div>
     <div class="nav-footer">${userChip}${navLink(settingItem)}</div>
   </nav>
@@ -1610,11 +3242,14 @@ function saasTopbar(title) {
   const cloudBtn = isCloudEnabled()
     ? `<button class="cloud-sync-topbar-btn" id="cloud-sync-topbar-btn" data-nav="settings-nav" title="クラウド同期">☁</button>`
     : "";
+  const planBadge = saasView !== "demo-select"
+    ? `<span class="plan-badge">${planInfo().label}プラン</span>`
+    : "";
   return `<header class="saas-topbar">
     <button class="saas-menu-btn" data-action="toggle-sidebar">☰</button>
     <span class="saas-topbar-title">${escapeHtml(title)}</span>
     ${cloudBtn}
-    <span class="plan-badge">${planInfo().label}プラン</span>
+    ${planBadge}
   </header>`;
 }
 
@@ -1642,6 +3277,47 @@ function productStatusBadges(p, d) {
   </div>`;
 }
 
+// ── 原材料マスタ ──────────────────────────────────────────────────────
+function saveRawMaterials() {
+  safeSet("fp-raw-materials", JSON.stringify(rawMaterials));
+  // ingMaster（名前サジェスト）にも反映
+  const names = rawMaterials.map(rm => rm.name).filter(Boolean);
+  ingMaster = [...new Set([...names, ...ingMaster])].slice(0, 300);
+  safeSet("food-label-ing-master", JSON.stringify(ingMaster));
+}
+
+function emptyRawMaterial() {
+  return {
+    id: uid(), name: "", labelName: "", maker: "", supplier: "",
+    spec: "", contentAmount: "", contentUnit: "kg",
+    purchasePrice: "", taxIncluded: false,
+    nutrition: { kcal: "", protein: "", fat: "", carbs: "", salt: "" },
+    allergens: [], additiveType: "",
+    updatedAt: new Date().toLocaleDateString("ja-JP"),
+    priceHistory: [],
+  };
+}
+
+function calcUnitPrices(rm) {
+  const amount = parseFloat(rm.contentAmount) || 0;
+  const price  = parseFloat(rm.purchasePrice)  || 0;
+  if (!amount || !price) return { perG: null, per100g: null, perKg: null };
+  const unit = rm.contentUnit || "kg";
+  let totalG = unit === "g" ? amount : unit === "kg" ? amount * 1000 : unit === "ml" ? amount : unit === "L" ? amount * 1000 : amount;
+  if (!totalG) return { perG: null, per100g: null, perKg: null };
+  const perG = price / totalG;
+  return { perG, per100g: perG * 100, perKg: perG * 1000 };
+}
+
+function findAffectedProducts(rmId) {
+  return products.filter(p => {
+    const ings = p.ingredients || [];
+    if (ings.some(i => i.masterId === rmId)) return true;
+    const vers = p.recipeVersions || [];
+    return vers.some(v => (v.ingredients || []).some(i => i.masterId === rmId));
+  });
+}
+
 // ── 原価計算 ──────────────────────────────────────────────────────────
 const COST_UNITS = ["g", "kg", "ml", "L", "個", "袋", "本", "枚"];
 const COST_PRICE_UNITS = [
@@ -1660,9 +3336,30 @@ function calcItemCost(ci) {
   return amount * unitCost * (1 + loss / 100);
 }
 
+function calcCostsFromRecipe(ingredients, priceStr) {
+  const ings = (ingredients || []).filter(i => i.name?.trim());
+  const price = parseFloat(priceStr) || 0;
+  let rawCost = 0;
+  let linkedCount = 0;
+  const lineItems = ings.map(i => {
+    const rm = rawMaterials.find(r => r.id === i.masterId);
+    const { perG } = rm ? calcUnitPrices(rm) : { perG: null };
+    const w = parseFloat(i.weight) || 0;
+    const cost = (perG !== null && w > 0) ? w * perG : null;
+    if (cost !== null) { rawCost += cost; linkedCount++; }
+    return { name: i.name, weight: w, cost, perG, rm: rm || null };
+  });
+  const gross = price - rawCost;
+  const costRate   = price > 0 ? Math.round(rawCost / price * 100) : null;
+  const profitRate = price > 0 ? Math.round(gross   / price * 100) : null;
+  return { mode: "recipe", rawCost, packaging: 0, labor: 0, shipping: 0, other: 0, totalCost: rawCost, price, gross, costRate, profitRate, lineItems, linkedCount };
+}
+
 function calcCosts(p) {
   const mode  = p.costMode || "direct";
   const price = parseFloat(p.price) || 0;
+
+  if (mode === "recipe") return calcCostsFromRecipe(p.ingredients, p.price);
 
   if (mode === "direct") {
     const rawCost   = parseFloat(p.directCost) || 0;
@@ -1785,6 +3482,7 @@ function masterIngredientsTabHtml(p, d, isMissing) {
         value="${escapeHtml(String(ing.weight || ""))}"
         placeholder="重量(g)">
       <button class="master-ing-del" data-remove-master-ing="${idx}" title="削除" aria-label="この原材料を削除">×</button>
+      ${ing.name?.trim() ? `<button class="master-ing-cross" data-cross-search-ing="${escapeHtml(ing.name.trim())}" title="「${escapeHtml(ing.name.trim())}」を使用している全商品を確認（原材料クロス検索）">🔍</button>` : ""}
     </div>`).join("");
 
   const allergenHtml = d.allergens.length
@@ -1793,6 +3491,11 @@ function masterIngredientsTabHtml(p, d, isMissing) {
 
   const sortHint = ings.filter(i => parseFloat(i.weight) > 0).length >= 2
     ? `<button class="action" data-action="sort-master-ing" style="margin-left:8px">重量順に並べ直す</button>`
+    : "";
+  const totalWeight = ings.reduce((s, i) => s + (parseFloat(i.weight) || 0), 0);
+  const totalWeightBadge = totalWeight > 0
+    ? `<span class="ing-total-weight-badge${Math.abs(totalWeight - 100) < 0.1 ? " ing-tw--exact" : totalWeight > 100 ? " ing-tw--over" : ""}"
+         title="原材料の重量合計">合計 ${totalWeight % 1 === 0 ? totalWeight : totalWeight.toFixed(1)}g${Math.abs(totalWeight - 100) < 0.1 ? " ✓" : totalWeight > 100 ? " ⚠️超過" : ""}</span>`
     : "";
 
   return `
@@ -1803,9 +3506,10 @@ function masterIngredientsTabHtml(p, d, isMissing) {
     <div class="detail-section">
       <div class="master-ing-section-hd">
         <h3 class="detail-section-title" style="margin:0">原材料を編集</h3>
+        ${totalWeightBadge}
         ${sortHint}
       </div>
-      <p class="field-hint">重量(g)を入力すると多い順に自動ソートされます。添加物は自動で「／」で区切られます。</p>
+      <p class="field-hint">重量(g)を入力すると多い順に自動ソートされます。合計が100gになると栄養成分計算が最も正確になります。添加物は自動で「／」で区切られます。</p>
       <datalist id="master-ing-datalist">${datalistOptions}</datalist>
       <div class="master-ing-list" id="master-ing-list">${ingRows}</div>
       <button class="action" data-action="add-master-ing" style="margin-top:10px">＋ 原材料を追加</button>
@@ -2383,6 +4087,55 @@ function aiDescriptionsHtml() {
   `);
 }
 
+// ── アレルゲン管理表 ──────────────────────────────────────────────────
+function allergenMatrixHtml() {
+  const allergenNames = ALLERGEN_RULES.map(([name]) => name);
+  const bigEight = new Set(["えび","かに","くるみ","小麦","そば","卵","乳","落花生"]);
+  const phase = allergenMatrixPhase || "released";
+  let list = phase === "all" ? products
+    : phase === "development" ? products.filter(p => p.phase === "development")
+    : products.filter(p => (p.phase || "released") === "released");
+  list = list.filter(p => p.internalName || p.name);
+  if (!list.length) {
+    return saasLayout("アレルゲン管理表", `<div class="empty-state"><p>対象商品がありません。</p><button class="action" data-nav="products">商品管理へ</button></div>`);
+  }
+  const rows = list.map(p => {
+    const ingNames = (p.ingredients || []).map(i => i.name).filter(Boolean);
+    const detected = new Set(detectAllergens(ingNames));
+    return { p, detected };
+  });
+  const phaseOpts = [{ id:"released", label:"発売中" }, { id:"development", label:"開発中" }, { id:"all", label:"全商品" }];
+  const tableHtml = `<table class="am-table">
+    <thead><tr>
+      <th class="am-th-product">商品名</th>
+      ${allergenNames.map(a => `<th class="am-th-allergen${bigEight.has(a)?" am-th-big8":""}">${escapeHtml(a)}</th>`).join("")}
+    </tr></thead>
+    <tbody>${rows.map(({ p, detected }) => `<tr>
+      <td class="am-td-product"><button class="am-product-link" data-nav-product-detail="${escapeHtml(p.id)}">${escapeHtml(p.internalName||p.name||"名称未入力")}</button></td>
+      ${allergenNames.map(a => `<td class="am-td-cell${detected.has(a)?" am-td-yes":""}">${detected.has(a)?"✓":""}</td>`).join("")}
+    </tr>`).join("")}</tbody>
+  </table>`;
+  return saasLayout("アレルゲン管理表", `
+    <div class="am-toolbar">
+      <div class="am-toolbar-left">
+        <div class="am-phase-tabs">${phaseOpts.map(o=>`<button class="am-phase-tab${phase===o.id?" active":""}" data-am-phase="${o.id}">${o.label}</button>`).join("")}</div>
+        <span class="am-count">${rows.length}件</span>
+      </div>
+      <div class="am-toolbar-right">
+        <button class="action" data-action="export-allergen-csv" title="アレルゲン管理表をCSVで出力">↓ CSV出力</button>
+        <button class="action" data-action="print-allergen-matrix" title="印刷">🖨 印刷</button>
+      </div>
+    </div>
+    <div class="am-legend">
+      <span class="am-legend-chip am-legend-big8">■ 特定原材料8品目</span>
+      <span class="am-legend-chip">□ 特定原材料に準ずるもの</span>
+      <span class="am-legend-chip am-legend-yes">✓ 含む</span>
+      <span class="am-legend-note">※ アレルゲン自動検出。原材料メーカー規格書で要確認。</span>
+    </div>
+    <div class="am-scroll-wrap">${tableHtml}</div>
+  `);
+}
+
 // ── チーム・承認ページ ────────────────────────────────────────────────
 function teamApprovalHtml() {
   const ROLES = [{ v:"admin", l:"管理者（承認・編集すべて可）" }, { v:"editor", l:"編集者（商品編集・確認依頼可）" }, { v:"reviewer", l:"確認者（承認・差し戻し可）" }];
@@ -2400,12 +4153,33 @@ function teamApprovalHtml() {
   const approvedList = products.filter(p => p.approvalStatus === "approved");
   const rejectedList = products.filter(p => p.approvalStatus === "rejected");
 
+  const reviewProductRow = (p) => `
+    <div class="approval-product-row approval-product-row--review">
+      <button class="approval-product-main" data-nav-product-detail="${escapeHtml(p.id)}" title="クリックで詳細を開く">
+        <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+        ${p.assignedTo ? `<span class="approval-product-meta">依頼：${escapeHtml(p.assignedTo)}</span>` : ""}
+        <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+      </button>
+      <div class="approval-quick-actions" onclick="event.stopPropagation()">
+        <button class="approval-quick-approve" data-action="quick-approve" data-pid="${escapeHtml(p.id)}" title="承認する">✓ 承認</button>
+        <button class="approval-quick-reject"  data-action="quick-reject"  data-pid="${escapeHtml(p.id)}" title="差し戻す">↩ 差戻</button>
+      </div>
+    </div>`;
+
   const productRow = (p) => `
     <div class="approval-product-row" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
       <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
       ${p.assignedTo ? `<span class="approval-product-meta">依頼：${escapeHtml(p.assignedTo)}</span>` : ""}
       ${p.approverName ? `<span class="approval-product-meta">承認：${escapeHtml(p.approverName)}</span>` : ""}
       <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+    </div>`;
+
+  const rejectedRow = (p) => `
+    <div class="approval-product-row approval-product-row--rejected" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
+      <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
+      ${p.approverName ? `<span class="approval-product-meta">差し戻し：${escapeHtml(p.approverName)}</span>` : ""}
+      <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+      ${p.approvalComment ? `<span class="approval-reject-reason">💬 ${escapeHtml(p.approvalComment)}</span>` : ""}
     </div>`;
 
   return saasLayout("チーム・承認", `
@@ -2424,8 +4198,11 @@ function teamApprovalHtml() {
         ${currentUserName ? `<p style="margin-top:12px;font-size:13px">現在のユーザー：<strong>${escapeHtml(currentUserName)}</strong></p>` : `<p class="notice" style="margin-top:12px">「自分として使う」をクリックするとユーザーを切り替えられます。</p>`}
       </div>
       <div class="settings-card">
-        <h3>🔵 確認待ち（${reviewList.length}件）</h3>
-        ${reviewList.length ? reviewList.map(productRow).join("") : `<p class="notice">確認待ちの商品はありません。</p>`}
+        <div class="approval-section-hd">
+          <h3>🔵 確認待ち（${reviewList.length}件）</h3>
+          ${reviewList.length >= 2 ? `<button class="action primary" data-action="approve-all" style="font-size:12px;padding:5px 12px">✓ すべて承認（${reviewList.length}件）</button>` : ""}
+        </div>
+        ${reviewList.length ? reviewList.map(reviewProductRow).join("") : `<p class="notice">確認待ちの商品はありません。</p>`}
       </div>
       <div class="settings-card">
         <h3>✅ 承認済み（${approvedList.length}件）</h3>
@@ -2433,7 +4210,7 @@ function teamApprovalHtml() {
       </div>
       <div class="settings-card">
         <h3>↩ 差し戻し（${rejectedList.length}件）</h3>
-        ${rejectedList.length ? rejectedList.map(productRow).join("") : `<p class="notice">差し戻しの商品はありません。</p>`}
+        ${rejectedList.length ? rejectedList.map(rejectedRow).join("") : `<p class="notice">差し戻しの商品はありません。</p>`}
       </div>
     </div>
   `);
@@ -2711,6 +4488,10 @@ function updateMiniPreview() {
 function saveMaster(isAuto = false) {
   const p = products.find(x=>x.id===productDetailId);
   if (!p) return;
+  // before-state snapshot for diff tracking
+  const _before = {};
+  Object.keys(TRACKED_MASTER_FIELDS).forEach(f => { _before[f] = p[f] ?? ""; });
+
   document.querySelectorAll("[data-master-field]").forEach(el => {
     p[el.dataset.masterField] = el.value;
   });
@@ -2759,6 +4540,17 @@ function saveMaster(isAuto = false) {
     if (p.costItems[i]) p.costItems[i].lossRate = el.value;
   });
   p.updatedAt = new Date().toLocaleDateString("ja-JP");
+  // diff tracking: compute changed fields with before/after values
+  if (!isAuto) {
+    const _changes = {};
+    const _fields = [];
+    Object.keys(TRACKED_MASTER_FIELDS).forEach(f => {
+      const before = String(_before[f] ?? "");
+      const after  = String(p[f] ?? "");
+      if (before !== after) { _changes[f] = { from: before || "（未入力）", to: after || "（削除）" }; _fields.push(f); }
+    });
+    if (_fields.length) saveTimelineEvent(p.id, "field_changed", "✏️ 商品情報を更新", "", _fields, _changes);
+  }
   saveProducts();
   updateMiniPreview();
   masterAutoSaveStatus = "saved";
@@ -2822,6 +4614,9 @@ const CONSULT_TEMPLATES = [
   { label: "改善点を教えてください", key: "improvements" },
   { label: "原材料名の表示順を確認", key: "ingredients_order" },
   { label: "栄養成分表示の確認", key: "nutrition_check" },
+  { label: "消費期限と賞味期限の違いは？", key: "expiry_type" },
+  { label: "OEM・PB商品の表示ルールは？", key: "oem_label" },
+  { label: "コンタミネーション（交差汚染）の表示は？", key: "contamination" },
 ];
 
 function generateConsultResponse(p, questionKey) {
@@ -2868,6 +4663,12 @@ function generateConsultResponse(p, questionKey) {
       const ok = Number(n.kcal) > 0;
       return "## 📊 " + dn + " の栄養成分確認\n\n| 項目 | 値 |\n|------|----|\n| エネルギー | " + (ok ? n.kcal + " kcal" : "未計算") + " |\n| たんぱく質 | " + (ok ? n.protein + " g" : "未計算") + " |\n| 脂質 | " + (ok ? n.fat + " g" : "未計算") + " |\n| 炭水化物 | " + (ok ? n.carbs + " g" : "未計算") + " |\n| 食塩相当量 | " + (ok ? n.salt + " g" : "未計算") + " |\n\n" + (!ok ? "⚠️ 栄養成分が未計算です。\n\n原材料に重量を入力するか、手動入力モードで値を設定してください。\n\n" : "") + "**注意事項**\n- 一般消費者向け加工食品には栄養成分表示が**義務**\n- 100gまたは100mLあたり（もしくは1食分）で表示\n- 正確な値には公認検査機関での分析を推奨";
     }
+    case "expiry_type":
+      return "## 📅 消費期限と賞味期限の違い\n\n| | 消費期限 | 賞味期限 |\n|---|---|---|\n| **対象** | 品質劣化が早い食品 | 品質が比較的安定した食品 |\n| **意味** | この日まで**安全に食べられる** | この日まで**おいしく食べられる** |\n| **代表例** | 弁当・サンドイッチ・生菓子 | 缶詰・スナック菓子・カップ麺 |\n| **期限後** | 廃棄推奨 | 品質が変化する可能性あり |\n\n**選び方の目安**\n- おおむね**5日以内**に品質が劣化する食品 → 消費期限\n- それ以上日持ちする食品 → 賞味期限\n\n**設定に必要なもの**\n- 微生物試験・理化学試験などの科学的根拠\n- 保管条件（温度・湿度）の明確化\n- 流通・販売期間を加味した安全係数の設定\n\n※ 期限設定は製品の安全性に直結します。食品衛生の専門家または試験機関に相談してください。";
+    case "oem_label":
+      return "## 🏭 OEM・PB商品の表示ルール\n\n**基本原則**：食品表示の「製造者」欄には**実際に製造した者**を記載します。\n\n**よくあるケース別の表示**\n\n| ケース | 表示方法 |\n|---|---|\n| 自社製造・自社ブランド | 「製造者」として自社名・住所 |\n| 他社製造・自社ブランド（OEM） | 「製造者」として**製造委託先**の名称・住所 |\n| 自社製造・小売PB | 「製造者」として**自社**の名称・住所（販売者が別途表示可） |\n| 輸入品 | 「輸入者」として**輸入業者**の名称・住所 |\n\n**販売者の表示について**\n- 製造者と販売者が異なる場合、「販売者」を追記することが可能（義務ではない）\n- 小売業者のPB商品では「販売者：○○スーパー」と「製造者：△△食品」を両方記載するケースが多い\n\n**注意点**\n- 製造委託先（OEM先）の同意が必要\n- 製造施設の衛生管理責任は製造者が負う\n- 契約書でアレルゲン管理・品質基準を明確化すること\n\n※ 具体的な表示内容は消費者庁「食品表示基準Q&A」や専門家にご確認ください。";
+    case "contamination":
+      return "## ⚠️ コンタミネーション（交差汚染）の表示\n\n**コンタミネーションとは**\n製造ラインや設備の共有により、意図せずアレルゲンが混入する可能性のこと。\n\n**表示の基本ルール**\n- 食品表示法では、**原材料として使用しているアレルゲンは義務表示**\n- コンタミネーションによる混入リスクの表示は**現時点で義務ではない**（任意表示）\n\n**任意表示の書き方例**\n```\n本製品は○○（アレルゲン名）を使用した設備で製造しています。\n```\n```\n本製品工場では○○を含む製品を製造しています。\n```\n\n**表示する際の注意**\n- 実際にリスクがない場合の「念のため」表示は**推奨されない**（消費者の誤解を招く）\n- リスクが実際にある場合は積極的に表示することが消費者保護につながる\n- 「微量含む可能性あり」と「含む」は意味が異なるため適切に使い分ける\n\n**製造ラインの管理**\n- アレルゲン管理手順書の整備\n- ライン洗浄・切替え時のアレルゲン検査\n- 製造順序の工夫（アレルゲンの少ない製品→多い製品の順）\n\n※ アレルゲン管理は製品の安全性に直結します。専門家への相談を推奨します。";
     default:
       return "## 🤖 AI食品表示アドバイザー\n\n**" + dn + "** について何でもご質問ください。\n\n**よく使う質問テンプレート**\n" + CONSULT_TEMPLATES.map(t => "- " + t.label).join("\n") + "\n\n上のテンプレートボタンをクリックすると素早くアクセスできます。\n\n※ このAI相談機能は食品表示の参考情報を提供します。法的判断については必ず専門家にご確認ください。";
   }
@@ -3009,8 +4810,13 @@ function registerBtnHtml() {
           </span>
         </button>`).join("")}
     </div>` : "";
+  const pi = planInfo();
+  const remaining = pi.limit !== Infinity ? pi.limit - products.length : null;
+  const limitBadge = remaining !== null && remaining <= 2
+    ? `<span class="reg-limit-badge${remaining <= 0 ? " reg-limit-badge--full" : ""}">${remaining <= 0 ? "上限達成" : `残り${remaining}件`}</span>`
+    : "";
   return `<div class="reg-btn-wrap">
-    <button class="action primary reg-main-btn" data-reg-toggle>＋ 商品登録 ▾</button>
+    <button class="action primary reg-main-btn${remaining !== null && remaining <= 0 ? " reg-main-btn--disabled" : ""}" data-reg-toggle${remaining !== null && remaining <= 0 ? ' title="プランの上限に達しています"' : ""}>＋ 商品登録 ▾${limitBadge}</button>
     ${dropdown}
   </div>`;
 }
@@ -3450,7 +5256,7 @@ function aiConsultHtml() {
             ${aiConsultSending ? "回答中..." : "送信 ▶"}
           </button>
         </div>
-        ${hasApiKey ? "" : `<p class="notice">💡 <a class="field-link" data-nav="settings-nav">設定画面</a>でOpenAI APIキーを登録するとChatGPTが直接回答します（現在はテンプレート回答）</p>`}
+        <p class="notice">💡 上のテンプレートボタンは即座に回答が得られます。テキストボックスへの自由入力でも詳細な食品表示アドバイスが受けられます。</p>
       </div>
       <div class="consult-right">
         <div class="consult-preview-title">ラベルプレビュー（${escapeHtml(displayName)}）</div>
@@ -3572,6 +5378,7 @@ function handleImageFile(file) {
       canvas.getContext("2d").drawImage(img, 0, 0, w, h);
       p.imageDataUrl = canvas.toDataURL("image/jpeg", 0.75);
       p.updatedAt = new Date().toLocaleDateString("ja-JP");
+      saveTimelineEvent(p.id, "spec_updated", "🖼 商品画像を登録", "", ["imageDataUrl"]);
       saveProducts(); showStatus("画像を登録しました"); render();
     };
     img.src = ev.target.result;
@@ -3886,6 +5693,7 @@ async function activateTrialCode() {
     currentPlan = "trial";
     safeSet("food-label-plan", "trial");
     safeSet("food-label-license-key", code);
+    setModules(["manage", "develop"]);
     showStatus("✓ モニタープランが有効になりました！（全機能無制限）", { duration: 5000 });
     render();
     return;
@@ -3914,6 +5722,44 @@ async function activateTrialCode() {
     if (btn) { btn.disabled = false; btn.textContent = "参加する"; }
   }
 }
+
+// ── URLハッシュ ディープリンク ──────────────────────────────────────────
+function syncHash() {
+  if (view !== "saas") return;
+  let hash = "dashboard";
+  if (saasView === "product-detail" && productDetailId) {
+    hash = `product/${productDetailId}`;
+  } else if (saasView === "products") {
+    hash = "products";
+  } else if (saasView === "dev-products") {
+    hash = "dev";
+  }
+  const target = `#${hash}`;
+  if (location.hash !== target) history.replaceState(null, "", target);
+}
+
+function restoreFromHash() {
+  const hash = (location.hash || "").slice(1);
+  if (!hash || hash === "dashboard") {
+    view = "saas"; saasView = saasView || "dashboard"; return;
+  }
+  if (hash === "products") { view = "saas"; saasView = "products"; return; }
+  if (hash === "dev")      { view = "saas"; saasView = "dev-products"; return; }
+  if (hash.startsWith("product/")) {
+    const pid = hash.slice(8);
+    if (products.find(x => x.id === pid)) {
+      view = "saas"; saasView = "product-detail"; productDetailId = pid;
+    }
+  }
+}
+
+// trialプランなのに develop モジュールが未有効な場合は自動で付与
+if (currentPlan === "trial" && !hasModule("develop")) {
+  setModules(["manage", "develop"]);
+}
+
+restoreFromHash();
+window.addEventListener("hashchange", () => { restoreFromHash(); render(); });
 
 render();
 setupDelegation(); // ⑨ デリゲーション登録（起動時1回）

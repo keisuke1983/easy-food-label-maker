@@ -14,7 +14,7 @@ let statusMessage = "";
 let openSections = new Set(["商品情報", "原材料", "印刷・サイズ設定"]);
 let autoSaveTimer = null;
 let autoSaveStatus = "";
-let previewZoom = 100;
+let previewZoom = 75;
 let dragSrcIdx = null;
 let recentStorage = JSON.parse(safeGet("food-label-recent-storage") || "[]");
 let savedSearch = "";
@@ -71,6 +71,9 @@ let teamMembers = (() => { try { return JSON.parse(safeGet("fmcc-team-members") 
 let currentUserName = safeGet("fmcc-current-user") || "";
 
 let masterPipelineFilter = ""; // "" | PRODUCT_STATUSES の id
+let masterResponsibleFilter = ""; // "" | 担当者名
+let masterAllergenFilter   = ""; // "" | アレルゲン名
+let masterIngFilter        = ""; // "" | 原材料名（クロス検索）
 let masterView = safeGet("fmcc-master-view") || "card"; // "card" | "table"
 let masterSelected = new Set(); // テーブルビュー一括操作用選択済み商品ID
 
@@ -92,6 +95,9 @@ let aiBriefingLoading = false;
 let demoMode = false;
 let demoStep = 1;
 let demoProductId = null;
+let demoType = "manage"; // "manage" | "develop"
+let demoEndScreen = false; // デモ終了後のサマリー画面
+let demoAnimPlayed = false; // 現在ステップのアニメーション再生済み
 
 // ── 商品開発（FoodPilot Develop）────────────────────────────────────────
 let devDetailTab = "overview"; // "overview"|"recipe"|"trial"|"cost"|"nutrition"|"approval"
@@ -102,3 +108,27 @@ let recipeCompareIds = []; // 比較対象バージョンID（最大4件）
 
 // ── タイムラインフィルター ──────────────────────────────────────────────
 let timelineFilter = "all"; // "all"|"label"|"cost"|"ai"|"released"|"field"|"approval"
+
+// ── モジュール契約 ────────────────────────────────────────────────────────
+let activeModules = (() => {
+  try {
+    const s = JSON.parse(safeGet("fp-active-modules") || "null");
+    return new Set(Array.isArray(s) ? s : ["manage"]);
+  } catch { return new Set(["manage"]); }
+})();
+
+// ── 商品カルテ UI 状態 ──────────────────────────────────────────────────
+let healthPanelOpen = false; // 健康診断パネル展開状態
+
+// ── アレルゲン管理表 ─────────────────────────────────────────────────────
+let allergenMatrixPhase = "released"; // "released"|"development"|"all"
+
+// ── 原材料マスタ ────────────────────────────────────────────────────────
+let rawMaterials = (() => { try { return JSON.parse(safeGet("fp-raw-materials") || "[]"); } catch { return []; } })();
+let rawMaterialEditId = null;  // null = 一覧, "__new__" = 新規, string = 編集中 ID
+let rawMaterialSearch = "";    // 一覧検索
+let rmNewStep = "select";      // "select" | "manual" | "scan-photo" | "scan-spec"
+let rmScanStep = 0;            // 0=未選択, 1=処理中, 2=完了, -1=エラー
+let rmScanDraft = {};          // AI抽出結果
+let rmScanError = "";
+let rmScanPreview = "";        // 画像プレビュー base64

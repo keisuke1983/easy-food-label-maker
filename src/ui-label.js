@@ -234,7 +234,12 @@ function labelChecklist(p, d) {
     { label: p.manufacturerName?.trim() ? "製造者名が入力されています" : "製造者名が未入力です → 製造者セクションで入力してください", ok: !!p.manufacturerName?.trim() },
     { label: p.manufacturerAddress?.trim() ? "製造者住所が入力されています" : "製造者住所が未入力です → 製造者セクションで入力してください", ok: !!p.manufacturerAddress?.trim() },
     { label: d.nutrition.kcal > 0 ? "栄養成分が計算・設定されています" : "栄養成分は未計算（任意：原材料に重量を入力するか手動で設定してください）", ok: true },
-    { label: "アレルゲンを確認済み（自動検出または手動設定）", ok: p.allergensMode === "manual" || d.autoAllergens.length >= 0 },
+    {
+      label: p.allergensMode === "manual"
+        ? (p.allergensManual?.trim() ? "アレルゲンが手動設定されています" : "アレルゲンの手動入力が未記入です → アレルゲンセクションで入力してください")
+        : (d.autoAllergens.length > 0 ? `アレルゲンを自動検出済み（${d.autoAllergens.join("・")}）` : "アレルゲン：検出なし（非アレルゲン原料のみ、または原材料未入力）"),
+      ok: p.allergensMode === "manual" ? !!p.allergensManual?.trim() : true,
+    },
     { label: p.contaminationEnabled ? (buildContaminationText(p) ? "コンタミネーション表示が設定されています" : "コンタミネーションの内容が未設定です") : "コンタミネーション：表示しない設定", ok: p.contaminationEnabled ? !!buildContaminationText(p) : true },
     { label: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) ? "JANコードの桁数が正しい" : "JANコードは8桁または13桁にしてください", ok: !p.janCode || [8, 13].includes(normalizedJan(p.janCode).length) },
   ];

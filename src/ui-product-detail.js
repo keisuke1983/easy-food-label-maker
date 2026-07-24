@@ -25,13 +25,20 @@ function karteTabHtml(p, d) {
       <div class="kh-name">${escapeHtml(p.internalName || p.name || "（名称未設定）")}</div>
       ${p.internalName && p.name ? `<div class="kh-sub">${escapeHtml(p.name)}</div>` : ""}
       <div class="kh-meta-row">
+        ${!isReleased ? `<span class="kh-tag kh-tag--dev">🔬 開発中</span>` : ""}
         ${p.category ? `<span class="kh-tag">${escapeHtml(p.category)}</span>` : ""}
         ${statusChip}
-        ${p.specResponsible ? `<span class="kh-tag kh-tag--user">👤 ${escapeHtml(p.specResponsible)}</span>` : ""}
+        <span class="kh-tag kh-tag--user kh-inline-wrap">
+          👤 <input class="kh-inline-input" data-master-field="specResponsible" list="dl-spec-responsible"
+              value="${escapeHtml(p.specResponsible||"")}"
+              placeholder="担当者を入力" style="width:${Math.max(60, (p.specResponsible||"担当者を入力").length * 13)}px">
+        </span>
         ${isReleased && p.releasedAt ? `<span class="kh-tag">🚀 ${escapeHtml(p.releasedAt)}</span>` : ""}
-        ${p.updatedAt ? `<span class="kh-tag kh-tag--dim">更新 ${escapeHtml(p.updatedAt)}</span>` : ""}
+        ${p.updatedAt ? `<span class="kh-tag kh-tag--dim">更新 ${escapeHtml(formatDate(p.updatedAt))}</span>` : ""}
       </div>
-      ${p.productMemo?.trim() ? `<p class="kh-memo">${escapeHtml(p.productMemo)}</p>` : `<p class="kh-memo kh-memo--empty">商品概要が未記入です <button class="kh-memo-link" data-open-and-jump="${escapeHtml(p.id)}:商品概要">追加する →</button></p>`}
+      <textarea class="kh-memo-input" data-master-field="productMemo"
+        placeholder="商品概要を入力（例：糖質オフの機能性表示食品。小容量で携帯しやすいデザイン）"
+        rows="2">${escapeHtml(p.productMemo||"")}</textarea>
     </div>
     <div class="kh-health-mini">
       <div class="kh-health-score" style="color:${health.color}">${health.total}</div>
@@ -41,6 +48,19 @@ function karteTabHtml(p, d) {
   </div>`;
 
   // ── 商品健康診断 ──
+  const KH_NAV = {
+    "商品画像未登録":   { tab: "basic",       field: "#image-drop-zone" },
+    "商品概要未記入":   { tab: "karte",       field: "[data-master-field='productMemo']" },
+    "JANコード未登録":  { tab: "basic",       field: "[data-master-field='janCode']" },
+    "担当者未設定":     { tab: "karte",       field: "[data-master-field='specResponsible']" },
+    "原価未入力":       { tab: "ingredients", field: null },
+    "販売価格未設定":   { tab: "basic",       field: "[data-master-field='price']" },
+    "AIレビュー未実施": { tab: "ai",          field: null },
+  };
+  const khNav = i => {
+    for (const [k, v] of Object.entries(KH_NAV)) { if (i.includes(k)) return v; }
+    return i.includes("表示") ? { tab: "ai", field: null } : null;
+  };
   const healthSectionsHtml = health.sections.map(sec => {
     const pct = Math.round(sec.score / sec.max * 100);
     const secColor = pct >= 90 ? "#16a34a" : pct >= 60 ? "#2563eb" : pct >= 40 ? "#ca8a04" : "#dc2626";
@@ -50,25 +70,49 @@ function karteTabHtml(p, d) {
         <span style="font-weight:700;color:${secColor}">${sec.score}<span style="font-weight:400;font-size:10px;color:#94a3b8">/${sec.max}</span></span>
       </div>
       <div class="kh-diag-bar"><div class="kh-diag-bar-fill" style="width:${pct}%;background:${secColor}"></div></div>
-      ${sec.issues.length ? `<div class="kh-diag-issues">${sec.issues.map(i=>`<span class="kh-diag-issue">⚠ ${escapeHtml(i)}</span>`).join("")}</div>` : ""}
+      ${sec.issues.length ? `<div class="kh-diag-issues">${sec.issues.map(i => {
+        const n = khNav(i);
+        return n
+          ? `<button class="kh-diag-issue kh-diag-issue--nav" data-detail-tab="${n.tab}"${n.field ? ` data-ps-field="${n.field}"` : ""}>⚠ ${escapeHtml(i)} →</button>`
+          : `<span class="kh-diag-issue">⚠ ${escapeHtml(i)}</span>`;
+      }).join("")}</div>` : ""}
     </div>`;
   }).join("");
 
-  const healthPanel = `<div class="kh-diag-panel" style="border-color:${health.borderColor};background:${health.bg}">
-    <div class="kh-diag-hd">
+  const _hpOpen = typeof healthPanelOpen !== "undefined" ? healthPanelOpen : false;
+  const _hpIssueCount = health.sections.reduce((s, sec) => s + sec.issues.length, 0);
+  const healthPanel = `<div class="kh-diag-panel${_hpOpen ? "" : " kh-diag-panel--collapsed"}" style="border-color:${health.borderColor};background:${health.bg}">
+    <button class="kh-diag-hd kh-diag-hd--toggle" data-action="toggle-health-panel" aria-expanded="${_hpOpen}">
       <span style="font-weight:700;font-size:13px">🩺 商品健康診断</span>
       <div class="kh-diag-score-wrap">
-        <span class="kh-diag-total" style="color:${health.color}">${health.total}</span>
+        <span class="kh-diag-total" style="color:${health.color}">${health.total}<span style="font-size:10px;font-weight:400;color:#94a3b8">/100</span></span>
         <span class="kh-diag-grade" style="color:${health.color}">${health.gradeLabel}</span>
         <span class="kh-diag-stars" style="color:${health.color}">${starsHtml}</span>
+        ${!_hpOpen && _hpIssueCount > 0 ? `<span class="kh-diag-issue-badge">${_hpIssueCount}件の課題</span>` : ""}
+        <span class="kh-diag-chevron">${_hpOpen ? "▲" : "▼"}</span>
       </div>
-    </div>
-    <div class="kh-diag-secs">${healthSectionsHtml}</div>
-    ${health.total < 90 ? `<button class="karte-link" data-detail-tab="ai" style="margin-top:6px">💡 AIの改善提案を見る →</button>` : `<p style="font-size:12px;color:#16a34a;margin-top:8px">✅ すべての項目が優秀な状態です</p>`}
+    </button>
+    ${_hpOpen ? `<div class="kh-diag-secs">${healthSectionsHtml}</div>
+    ${(() => {
+      if (health.total >= 90) return `<p style="font-size:12px;color:#16a34a;margin-top:8px">✅ すべての項目が優秀な状態です</p>`;
+      const _sugs = (typeof generateProactiveSuggestions === "function") ? generateProactiveSuggestions(p, d) : [];
+      const _top = _sugs.find(s => s.priority === "high") || _sugs[0];
+      if (!_top) return `<button class="karte-link" data-detail-tab="ai" style="margin-top:6px">💡 AIの改善提案を見る →</button>`;
+      return `<div class="kh-top-sug">
+        <div class="kh-top-sug-hd"><span class="kh-top-sug-badge">最優先</span>${_top.icon} ${escapeHtml(_top.title)}</div>
+        <div class="kh-top-sug-desc">${escapeHtml(_top.fix || _top.desc)}</div>
+        <div class="kh-top-sug-foot">
+          ${_top.fixAction?.type === "field-fix"
+            ? `<button class="kh-top-sug-apply" data-ps-field="${escapeHtml(_top.fixAction.field)}" data-ps-value="${escapeHtml(_top.fixAction.value)}">✓ 自動適用</button>`
+            : ""}
+          <button class="karte-link" data-detail-tab="ai">全 ${_sugs.length} 件の提案 →</button>
+        </div>
+      </div>`;
+    })()}` : ""}
   </div>`;
 
-  // ── タイムライン（最新6件）──
-  const tlEvents = loadTimeline(p.id).slice(0, 6);
+  // ── タイムライン（最新10件・イベントのみ）──
+  const tlEvents = loadTimeline(p.id).slice(0, 10);
   const tlHtml = tlEvents.length
     ? `<div class="karte-tl-list">${tlEvents.map(ev => {
         const dotColor = (typeof TIMELINE_EVENT_COLORS !== "undefined" && TIMELINE_EVENT_COLORS[ev.eventType]) || "#94a3b8";
@@ -111,21 +155,6 @@ function karteTabHtml(p, d) {
   const apInfo = apMap[p.approvalStatus];
   const approvalChip = apInfo ? `<span class="karte-chip karte-chip--ap-${apInfo.cls}">${apInfo.txt}</span>` : `<span class="karte-none">未申請</span>`;
 
-  // ── 基本情報行 ──
-  const infoRows = [
-    ["商品名", p.name],
-    ["品番", p.code],
-    ["内容量", p.volume],
-    ["賞味期限", p.bestBefore],
-    ["保存方法", p.storage],
-    ["カテゴリ", p.category],
-    ["JANコード", p.janCode],
-    ["原産地", p.originCountry],
-    isReleased ? ["発売日", p.releasedAt] : ["開発担当", p.specResponsible],
-  ].filter(([, v]) => v).map(([lbl, val]) =>
-    `<div class="karte-info-row"><span class="karte-info-lbl">${lbl}</span><span class="karte-info-val">${escapeHtml(val)}</span></div>`
-  ).join("");
-
   // ── 関連商品 ──
   const relatedIds = p.relatedProductIds || [];
   const relatedProds = typeof products !== "undefined"
@@ -138,12 +167,71 @@ function karteTabHtml(p, d) {
       </button>`).join("")
     : "";
 
+  // ── アクションバー（クイックアクション + 主要ボタン）──
+  const _needsApproval = (!p.approvalStatus || p.approvalStatus === "rejected" || p.approvalStatus === "none") && !isReleased;
+  const _canRelease = p.productStatus === "approved" && p.approvalStatus === "approved" && !isReleased;
+  const actionBarHtml = `<div class="karte-action-bar">
+    <div class="karte-action-bar-quick">
+      <button class="karte-qa-btn" data-label-from="${escapeHtml(p.id)}">✏️ ラベル編集</button>
+      <button class="karte-qa-btn" data-action="open-print-preview">🖨 印刷・PDF</button>
+      <button class="karte-qa-btn" data-spec-from="${escapeHtml(p.id)}">📄 規格書</button>
+      <button class="karte-qa-btn" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談</button>
+      <button class="karte-qa-btn" data-ai-from="${escapeHtml(p.id)}">✨ AI説明文</button>
+      <button class="karte-qa-btn" data-detail-tab="ai">🔍 AIレビュー</button>
+    </div>
+    <div class="karte-action-bar-btns">
+      ${_needsApproval ? `<button class="karte-ap-quick-btn" data-action="request-approval" data-pid="${escapeHtml(p.id)}">${p.approvalStatus === "rejected" ? "↩ 再申請" : "📤 承認申請"}</button>` : ""}
+      ${_canRelease ? `<button class="action primary" style="font-size:12px" data-action="release-product" data-pid="${escapeHtml(p.id)}">🚀 発売する</button>` : ""}
+    </div>
+  </div>`;
+
+  // ── 栄養成分 + アレルゲン 統合パネル ──
+  const nutrAllergenPanel = `<div class="karte-panel">
+    <div class="karte-panel-hd">🔬 栄養成分・アレルゲン</div>
+    ${nutrHtml}
+    <div class="karte-chips-row" style="margin-top:${nutr && nutr.kcal > 0 ? "10px" : "0"}">${allergenHtml}</div>
+    <button class="karte-link" data-detail-tab="ingredients">原材料・栄養成分を編集 →</button>
+  </div>`;
+
+  // ── 食品表示チェックバナー ──
+  const _lcIssues = typeof checkFoodLabel === "function" ? checkFoodLabel(p, d) : [];
+  const _lcErrors = _lcIssues.filter(i => i.level === "error");
+  const _lcWarns  = _lcIssues.filter(i => i.level === "warn");
+  const labelCheckBanner = _lcErrors.length > 0
+    ? `<button class="karte-lc-banner karte-lc-banner--error" data-detail-tab="check">
+        <span class="karte-lc-banner-ico">⚠️</span>
+        <div class="karte-lc-banner-body">
+          <strong>食品表示 エラー ${_lcErrors.length}件</strong>${_lcWarns.length ? `・警告 ${_lcWarns.length}件` : ""}
+          <span class="karte-lc-banner-items">${_lcErrors.slice(0, 2).map(i => escapeHtml(i.msg || i.label || "")).join("　")}</span>
+        </div>
+        <span class="karte-lc-banner-arrow">→ 確認する</span>
+      </button>`
+    : _lcWarns.length > 0
+    ? `<button class="karte-lc-banner karte-lc-banner--warn" data-detail-tab="check">
+        <span class="karte-lc-banner-ico">🟡</span>
+        <div class="karte-lc-banner-body">
+          <strong>食品表示 警告 ${_lcWarns.length}件</strong>
+          <span class="karte-lc-banner-items">${_lcWarns.slice(0, 2).map(i => escapeHtml(i.msg || i.label || "")).join("　")}</span>
+        </div>
+        <span class="karte-lc-banner-arrow">→ 確認する</span>
+      </button>`
+    : `<div class="karte-lc-banner karte-lc-banner--ok">
+        <span class="karte-lc-banner-ico">✅</span>
+        <span>食品表示チェック：問題なし</span>
+      </div>`;
+
   return `<div class="karte-layout2">
 
     <!-- ヒーローバー -->
     ${heroHtml}
 
-    <!-- 健康診断（全幅） -->
+    <!-- アクションバー（クイックアクション + 承認/発売ボタン）-->
+    ${actionBarHtml}
+
+    <!-- 食品表示チェックバナー -->
+    ${labelCheckBanner}
+
+    <!-- 健康診断（折りたたみ可能）-->
     ${healthPanel}
 
     <!-- 2カラム本体 -->
@@ -155,28 +243,20 @@ function karteTabHtml(p, d) {
           <div class="karte-label-wrap">${basicLabelHtml(p, d)}</div>
           <div style="margin-top:8px">${nutritionLabelHtml(d)}</div>
         </div>
-        <div class="karte-panel">
-          <div class="karte-panel-hd">⚡ クイックアクション</div>
-          <div class="karte-quick-actions">
-            <button class="karte-qa-btn" data-label-from="${escapeHtml(p.id)}">✏️ ラベル編集</button>
-            <button class="karte-qa-btn" data-action="open-print-preview">🖨 印刷・PDF</button>
-            <button class="karte-qa-btn" data-spec-from="${escapeHtml(p.id)}">📄 規格書</button>
-            <button class="karte-qa-btn" data-action="open-ai-consult-for" data-pid="${escapeHtml(p.id)}">💬 AI相談</button>
-            <button class="karte-qa-btn" data-ai-from="${escapeHtml(p.id)}">✨ AI説明文</button>
-            <button class="karte-qa-btn" data-detail-tab="ai">🔍 AIレビュー</button>
-          </div>
-        </div>
       </div>
 
       <!-- 右列 -->
       <div class="karte-col karte-col--right">
 
-        <!-- 基本情報 -->
-        ${infoRows ? `<div class="karte-panel">
-          <div class="karte-panel-hd">ℹ️ 基本情報</div>
-          <div class="karte-info-list">${infoRows}</div>
-          <button class="karte-link" data-detail-tab="basic">詳細を編集 →</button>
-        </div>` : ""}
+        <!-- 承認・発売（最上部）-->
+        <div class="karte-panel karte-panel--approval">
+          <div class="karte-panel-hd">👥 承認・発売ステータス</div>
+          <div class="karte-approval-row">
+            ${approvalChip}
+            <button class="karte-link" data-detail-tab="approval" style="margin-left:auto">詳細 →</button>
+          </div>
+          ${!isReleased ? releaseReadinessHtml(p, d) : ""}
+        </div>
 
         <!-- 原価サマリー -->
         <div class="karte-panel">
@@ -202,20 +282,46 @@ function karteTabHtml(p, d) {
           <button class="karte-link" data-detail-tab="cost">原価を詳しく見る →</button>
         </div>
 
-        <!-- 栄養成分 -->
+        <!-- 栄養成分 + アレルゲン（統合）-->
+        ${nutrAllergenPanel}
+
+        <!-- 基本情報（主要項目のみ）-->
         <div class="karte-panel">
-          <div class="karte-panel-hd">🔬 栄養成分</div>
-          ${nutrHtml}
-          <button class="karte-link" data-detail-tab="ingredients">原材料・栄養成分を編集 →</button>
+          <div class="karte-panel-hd">ℹ️ 基本情報</div>
+          <div class="karte-info-list">
+            ${[
+              `<div class="karte-info-row karte-info-row--inline karte-info-row--wide">
+                <span class="karte-info-lbl">商品名</span>
+                <input type="text" class="karte-inline-val" data-master-field="name"
+                  value="${escapeHtml(p.name||"")}" placeholder="商品名を入力">
+                <button class="karte-copy-field-btn" data-action="copy-field-value" data-copy-field="name" tabindex="-1">📋</button>
+              </div>`,
+              `<div class="karte-info-row karte-info-row--inline">
+                <span class="karte-info-lbl">内容量</span>
+                <input type="text" class="karte-inline-val" data-master-field="volume"
+                  value="${escapeHtml(p.volume||"")}" placeholder="例：100g">
+              </div>`,
+              `<div class="karte-info-row karte-info-row--inline">
+                <span class="karte-info-lbl">賞味期限</span>
+                <input type="text" class="karte-inline-val" data-master-field="bestBefore"
+                  value="${escapeHtml(p.bestBefore||"")}" placeholder="例：製造日より90日">
+              </div>`,
+              `<div class="karte-info-row karte-info-row--inline">
+                <span class="karte-info-lbl">JANコード</span>
+                <input type="text" class="karte-inline-val" data-master-field="janCode"
+                  value="${escapeHtml(p.janCode||"")}" placeholder="13桁">
+              </div>`,
+              `<div class="karte-info-row karte-info-row--inline">
+                <span class="karte-info-lbl">原産地</span>
+                <input type="text" class="karte-inline-val" data-master-field="originCountry"
+                  value="${escapeHtml(p.originCountry||"")}" placeholder="例：国産">
+              </div>`,
+            ].join("")}
+          </div>
+          <button class="karte-link" data-detail-tab="basic">すべての項目を編集 →</button>
         </div>
 
-        <!-- アレルゲン -->
-        <div class="karte-panel">
-          <div class="karte-panel-hd">🥜 アレルゲン</div>
-          <div class="karte-chips-row">${allergenHtml}</div>
-        </div>
-
-        <!-- タイムライン -->
+        <!-- タイムライン（最新10件）-->
         <div class="karte-panel">
           <div class="karte-panel-hd">📜 最近の動き</div>
           ${tlHtml}
@@ -227,15 +333,12 @@ function karteTabHtml(p, d) {
           <div class="karte-related-list">${relatedHtml}</div>
         </div>` : ""}
 
-        <!-- 承認 + 発売準備チェック -->
+        <!-- 社内メモ -->
         <div class="karte-panel">
-          <div class="karte-panel-hd">👥 承認・発売</div>
-          <div>${approvalChip}</div>
-          ${!isReleased ? releaseReadinessHtml(p, d) : ""}
-          ${p.productStatus === "approved" && p.approvalStatus === "approved"
-            ? `<div style="margin-top:8px"><button class="action primary" style="font-size:12px" data-action="release-product" data-pid="${escapeHtml(p.id)}">🚀 発売する</button></div>`
-            : ""}
-          <button class="karte-link" data-detail-tab="approval">チーム承認を管理する →</button>
+          <div class="karte-panel-hd">📝 備考・特記事項 <span class="kh-autosave-hint">自動保存</span></div>
+          <textarea class="kh-memo-input kh-memo-input--tall" data-master-field="memo"
+            placeholder="取引先への伝達事項、製造上の注意点など（規格書の備考欄に表示されます）"
+            rows="3">${escapeHtml(p.memo||"")}</textarea>
         </div>
 
       </div>
@@ -253,6 +356,8 @@ function productDetailHtml() {
   const statusOpts = [["active","公開中"],["draft","下書き"],["inactive","非公開"]].map(([v,l])=>`<option value="${v}"${p.publishStatus===v?" selected":""}>${l}</option>`).join("");
 
   const tab = productDetailTab || "karte";
+  const _responsibleOpts = [...new Set(products.map(x => x.specResponsible||"").filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const responsibleDatalist = `<datalist id="dl-spec-responsible">${_responsibleOpts.map(v=>`<option value="${escapeHtml(v)}">`).join("")}</datalist>`;
   const comp = calcCompletion(p, d);
   const isMissing = (label) => comp.missing.includes(label);
   const compColor = comp.pct >= 100 ? "#16a34a" : comp.pct >= 60 ? "#2563eb" : "#d97706";
@@ -265,7 +370,7 @@ function productDetailHtml() {
     </span>
     ${p.specResponsible ? `<span class="dss-item"><span class="dss-label">担当者</span><span class="dss-value">${escapeHtml(p.specResponsible)}</span></span>` : ""}
     ${(p.phase === "released" && p.releasedAt) ? `<span class="dss-item"><span class="dss-label">発売日</span><span class="dss-value">${escapeHtml(p.releasedAt)}</span></span>` : ""}
-    <span class="dss-item"><span class="dss-label">更新日</span><span class="dss-value">${escapeHtml(p.updatedAt||"—")}</span></span>
+    <span class="dss-item"><span class="dss-label">更新日</span><span class="dss-value">${escapeHtml(formatDate(p.updatedAt)||"—")}</span></span>
   </div>`;
   const completionBanner = `<div class="detail-comp-banner">
     <div class="dcb-bar-wrap"><div class="dcb-bar-fill" style="width:${comp.pct}%;background:${compColor}"></div></div>
@@ -279,28 +384,35 @@ function productDetailHtml() {
     karte: [],
     basic:       ["名称","内容量","賞味期限","保存方法","製造者名","製造者住所"],
     ingredients: ["原材料名"],
-    cost: [], label: [], spec: [], ai: [], history: [], approval: [],
+    cost: [], label: [], spec: [], history: [], approval: [],
   };
+  const _lcIssuesForTab = typeof checkFoodLabel === "function" ? checkFoodLabel(p, d) : [];
+  const _lcErrCount = _lcIssuesForTab.filter(i => i.level === "error").length;
   const tabBadge = (id) => {
     const n = (TAB_FIELDS[id]||[]).filter(f => comp.missing.includes(f)).length;
+    if (id === "ai" && _lcErrCount > 0) {
+      return `<span class="tab-badge tab-badge--error">${_lcErrCount}</span>`;
+    }
     return n > 0 ? `<span class="tab-badge">${n}</span>` : "";
   };
   const tlCount = loadTimeline(p.id).length + loadHistory(p.id).length;
   const approvalDot = p.approvalStatus && p.approvalStatus !== "none" ? ` <span class="tab-approval-dot ${p.approvalStatus}"></span>` : "";
-  // "check" → "ai" にリダイレクト（旧タブ名との後方互換）
-  const _tab = (tab === "check") ? "ai" : tab;
+  // "check" → "ai"、"timeline" → "history" にリダイレクト（旧タブ名との後方互換）
+  const _tab = (tab === "check") ? "ai" : (tab === "timeline") ? "history" : tab;
   const tabs = [
-    { id:"karte",       label:"📋 カルテ" },
-    { id:"basic",       label:"基本情報" },
-    { id:"ingredients", label:"原材料" },
-    { id:"label",       label:"🏷 ラベル" },
-    { id:"spec",        label:"📄 規格書" },
-    { id:"cost",        label:"💴 原価" },
-    { id:"ai",          label:"🤖 AI・チェック" },
-    { id:"history",     label:`📜 履歴${tlCount>0?` (${tlCount})`:""}` },
-    { id:"approval",    label:`👥 承認${approvalDot}` },
+    { id:"karte",       label:"📋 カルテ",       primary:true },
+    { id:"basic",       label:"✏️ 基本情報",     primary:true },
+    { id:"ingredients", label:"🌿 原材料",       primary:true },
+    { id:"ai",          label:"🤖 AI・チェック",  primary:true },
+    { id:"label",       label:"🏷 ラベル",       primary:false },
+    { id:"cost",        label:"💴 原価",         primary:false },
+    { id:"spec",        label:"📄 規格書",       primary:false },
+    { id:"history",     label:`📜 履歴${tlCount>0?` (${tlCount})`:""}`   , primary:false },
+    { id:"approval",    label:`👥 承認${approvalDot}`, primary:false },
   ];
-  const tabNav = `${completionBanner}<div class="detail-tabs">${tabs.map(t=>`<button class="detail-tab${_tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div>`;
+  const _isSecondary = !tabs.find(t=>t.id===_tab)?.primary;
+  const _moreLabel = _isSecondary ? (tabs.find(t=>t.id===_tab)?.label || "⋯") : "⋯";
+  const tabNav = `${completionBanner}<div class="detail-tabs-row"><div class="detail-tabs">${tabs.filter(t=>t.primary).map(t=>`<button class="detail-tab${_tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div><div class="detail-tab-more${_isSecondary?" detail-tab-more--active":""}"><button class="detail-tab detail-tab-more-btn${_isSecondary?" active":""}" data-action="detail-more-toggle">${_moreLabel}</button><div class="detail-tab-more-panel">${tabs.filter(t=>!t.primary).map(t=>`<button class="detail-tab${_tab===t.id?" active":""}" data-detail-tab="${t.id}">${t.label}${tabBadge(t.id)}</button>`).join("")}</div></div></div>`;
 
   // ── タブコンテンツ ──
   let tabContent = "";
@@ -338,8 +450,8 @@ function productDetailHtml() {
             <div class="field">
               <span>JANコード <span class="field-opt">任意</span></span>
               <div class="jan-input-row">
-                <input data-master-field="janCode" value="${escapeHtml(p.janCode||"")}" placeholder="13桁の数字" maxlength="13" inputmode="numeric">
-                ${p.janCode ? `<span class="jan-check ${p.janCode.length===13?"jan-ok":"jan-ng"}">${p.janCode.length===13?"✓ 13桁":p.janCode.length+"桁"}</span>` : ""}
+                <input data-master-field="janCode" value="${escapeHtml(p.janCode||"")}" placeholder="8桁または13桁" maxlength="13" inputmode="numeric">
+                ${p.janCode ? (() => { const _jl = p.janCode.replace(/\D/g,"").length; const _ok = _jl===8||_jl===13; return `<span class="jan-check ${_ok?"jan-ok":"jan-ng"}">${_ok?`✓ ${_jl}桁`:_jl+"桁（8か13桁）"}</span>`; })() : ""}
               </div>
               <p class="field-hint">バーコード管理をしている場合に入力。</p>
             </div>
@@ -373,7 +485,7 @@ function productDetailHtml() {
           ${p.productStatus === "discontinued" ? `<label class="field full"><span>終売理由</span><input data-master-field="discontinuedReason" value="${escapeHtml(p.discontinuedReason||"")}" placeholder="例：後継品発売のため"></label>` : ""}
           <div class="field"><span class="field-label">販売チャネル</span><div class="check-group">${channelChks}</div></div>
           <label class="field full"><span>商品概要 <span class="field-opt">カルテ・検索に表示</span></span><textarea data-master-field="productMemo" rows="2" placeholder="例：糖質オフの機能性表示食品。小容量で携帯しやすいデザイン">${escapeHtml(p.productMemo||"")}</textarea></label>
-          <label class="field full"><span>メモ <span class="field-opt">社内用</span></span><textarea data-master-field="memo" rows="2">${escapeHtml(p.memo||"")}</textarea></label>
+          <label class="field full"><span>備考・特記事項 <span class="field-opt">規格書に表示</span></span><textarea data-master-field="memo" rows="2" placeholder="取引先への伝達事項、製造上の注意点など">${escapeHtml(p.memo||"")}</textarea></label>
         </div>
         <div class="detail-section">
           <h3 class="detail-section-title">製造者情報</h3>
@@ -387,7 +499,7 @@ function productDetailHtml() {
           <h3 class="detail-section-title">規格書・出荷情報</h3>
           <div class="field-grid">
             <label class="field"><span>版数（Rev）</span><input data-master-field="specVersion" value="${escapeHtml(p.specVersion||"1")}" placeholder="例：1"></label>
-            <label class="field"><span>担当者</span><input data-master-field="specResponsible" value="${escapeHtml(p.specResponsible||"")}" placeholder="例：田中 太郎"></label>
+            <label class="field"><span>担当者</span><input data-master-field="specResponsible" list="dl-spec-responsible" value="${escapeHtml(p.specResponsible||"")}" placeholder="例：田中 太郎"></label>
             <label class="field"><span>荷姿</span><input data-master-field="packaging" value="${escapeHtml(p.packaging||"")}" placeholder="例：段ボール箱"></label>
             <label class="field"><span>ケース入数</span><input data-master-field="caseCount" value="${escapeHtml(p.caseCount||"")}" placeholder="例：12個"></label>
             <label class="field full"><span>製品サイズ</span><input data-master-field="productSize" value="${escapeHtml(p.productSize||"")}" placeholder="例：W120×D80×H40mm / 150g"></label>
@@ -443,16 +555,19 @@ function productDetailHtml() {
       <h3 class="detail-section-title">📄 商品規格書</h3>
       <p class="notice" style="margin-bottom:16px">この商品の規格書（A4）を生成・PDF印刷できます。規格書バージョン: <strong>v${escapeHtml(p.specVersion||"1")}</strong></p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-        <button class="action primary" data-spec-from="${escapeHtml(p.id)}">📋 規格書を開く</button>
+        <button class="action primary" data-action="save-then-spec" data-pid="${escapeHtml(p.id)}">💾 保存して出力</button>
+        <button class="action" data-spec-from="${escapeHtml(p.id)}">📋 規格書を開く</button>
         <button class="action" data-action="karte-spec-version-up" data-pid="${escapeHtml(p.id)}">📈 バージョンアップ (v${escapeHtml(p.specVersion||"1")} → v${parseInt(p.specVersion||"1")+1})</button>
       </div>
       <div class="detail-grid">
         <div class="field-grid">
           <label class="field"><span>版数（Rev）</span><input data-master-field="specVersion" value="${escapeHtml(p.specVersion||"1")}" placeholder="例：1"></label>
-          <label class="field"><span>担当者</span><input data-master-field="specResponsible" value="${escapeHtml(p.specResponsible||"")}" placeholder="例：田中 太郎"></label>
+          <label class="field"><span>担当者</span><input data-master-field="specResponsible" list="dl-spec-responsible" value="${escapeHtml(p.specResponsible||"")}" placeholder="例：田中 太郎"></label>
+          <label class="field"><span>規格書作成日</span><input data-master-field="specCreatedAt" value="${escapeHtml(p.specCreatedAt||"")}" placeholder="例：2026/07/01"></label>
           <label class="field"><span>荷姿</span><input data-master-field="packaging" value="${escapeHtml(p.packaging||"")}" placeholder="例：段ボール箱"></label>
           <label class="field"><span>ケース入数</span><input data-master-field="caseCount" value="${escapeHtml(p.caseCount||"")}" placeholder="例：12個"></label>
           <label class="field full"><span>製品サイズ</span><input data-master-field="productSize" value="${escapeHtml(p.productSize||"")}" placeholder="例：W120×D80×H40mm / 150g"></label>
+          <label class="field full"><span>備考・特記事項</span><textarea data-master-field="memo" rows="3" placeholder="取引先への伝達事項、製造上の注意点など">${escapeHtml(p.memo||"")}</textarea></label>
         </div>
       </div>
     </div>`;
@@ -559,8 +674,9 @@ function productDetailHtml() {
     const hist = loadHistory(p.id);
     const tl   = loadTimeline(p.id);
     // タイムラインイベントと変更履歴スナップショットをマージして時系列表示
-    const tlItems = tl.map(ev => ({
+    const tlItems = tl.map((ev, idx) => ({
       type: "event",
+      tlIdx: idx,
       eventType: ev.eventType || "label_edited",
       icon: ev.icon || "📌",
       label: ev.label,
@@ -594,6 +710,7 @@ function productDetailHtml() {
       { id:"released", label:"🚀 発売" },
       { id:"approval", label:"👥 承認" },
       { id:"field",    label:"✏️ 変更" },
+      { id:"comment",  label:"💬 メモ" },
     ];
     const curFilter = typeof timelineFilter !== "undefined" ? timelineFilter : "all";
     const filterChipsHtml = `<div class="tl2-filter-chips">${TL_FILTERS.map(f =>
@@ -608,6 +725,7 @@ function productDetailHtml() {
       if (curFilter === "released") return et.includes("release") || lbl.includes("発売");
       if (curFilter === "approval") return et.includes("approval") || lbl.includes("承認") || lbl.includes("差し戻");
       if (curFilter === "field")    return item.type === "snap" || (item.changedFields && item.changedFields.length > 0);
+      if (curFilter === "comment")  return et === "comment";
       return true;
     });
 
@@ -642,10 +760,18 @@ function productDetailHtml() {
         ].filter(Boolean).join("");
 
         if (item.type === "event") {
+          const isComment = item.eventType === "comment";
+          const canDelete = isComment && item.tlIdx != null;
           const changesHtml = renderChanges(item.changes);
           const fieldsHtml = !changesHtml && item.changedFields.length
             ? `<div class="tl-fields">${item.changedFields.map(f=>`<span class="tl-field-chip">${escapeHtml(f)}</span>`).join("")}</div>` : "";
-          return `<div class="tl2-row">
+          const commentHtml = item.comment
+            ? `<div class="${isComment ? "tl2-memo-body" : "tl2-comment"}">${escapeHtml(item.comment)}</div>`
+            : "";
+          const deleteBtn = canDelete
+            ? `<button class="tl2-memo-delete" data-action="delete-timeline-event" data-pid="${escapeHtml(p.id)}" data-tl-idx="${item.tlIdx}" title="このメモを削除">×</button>`
+            : "";
+          return `<div class="tl2-row${isComment ? " tl2-row--comment" : ""}">
             <div class="tl2-dot-col">
               <span class="tl2-dot" style="background:${dotColor};border-color:${dotColor}">${item.icon}</span>
               <span class="tl2-line"></span>
@@ -653,9 +779,9 @@ function productDetailHtml() {
             <div class="tl2-body">
               <div class="tl2-meta">
                 <span class="tl2-label">${escapeHtml(item.label)}</span>
-                <span class="tl2-meta-right">${metaRight}</span>
+                <span class="tl2-meta-right">${metaRight}${deleteBtn}</span>
               </div>
-              ${item.comment ? `<div class="tl2-comment">${escapeHtml(item.comment)}</div>` : ""}
+              ${commentHtml}
               ${changesHtml}${fieldsHtml}
             </div>
           </div>`;
@@ -689,11 +815,16 @@ function productDetailHtml() {
 
       const totalEvents = tlItems.length;
       const totalSnaps  = snapItems.length;
+      const addMemoHtml = `<div class="tl2-add-memo">
+        <textarea class="tl2-memo-input" id="tl-memo-text" rows="2" placeholder="チームへのメモ・経緯を記録… （例：製造ラインの変更に伴い原材料を見直し）"></textarea>
+        <button class="action primary tl2-memo-btn" data-action="add-timeline-memo" data-pid="${escapeHtml(p.id)}">📝 メモを追加</button>
+      </div>`;
       tabContent = `<div class="detail-section">
         <div class="tl2-header">
           <h3 class="detail-section-title" style="margin-bottom:0">📜 商品タイムライン</h3>
           <span class="tl2-summary">イベント ${totalEvents}件 / スナップショット ${totalSnaps}件</span>
         </div>
+        ${addMemoHtml}
         ${filterChipsHtml}
         <div class="tl2-groups">${groupsHtml}</div>
       </div>`;
@@ -758,23 +889,43 @@ function productDetailHtml() {
     tabContent = approvalTabHtml(p);
   }
 
-  // 前後移動ナビゲーション
-  const sortedForNav = [...products].sort((a,b) => {
+  // 前後移動ナビゲーション（ui-products.js と同じフィルター/ソートを適用）
+  const _navTodayIso = new Date().toISOString().split("T")[0];
+  const _navSoonIso  = new Date(Date.now()+30*24*60*60*1000).toISOString().split("T")[0];
+  const _navStaleIso = new Date(Date.now()-180*24*60*60*1000).toISOString().split("T")[0];
+  const sortedForNav = [...products].filter(x => {
+    if (x.phase !== (p.phase || "released")) return false;
+    if (masterSearch) { const _ms=masterSearch.toLowerCase(); if(!(x.internalName||"").toLowerCase().includes(_ms)&&!(x.name||"").toLowerCase().includes(_ms)&&!(x.code||"").toLowerCase().includes(_ms)&&!(x.category||"").toLowerCase().includes(_ms)&&!(x.janCode||"").includes(_ms)&&!(x.specResponsible||"").toLowerCase().includes(_ms)&&!derive(x).allergens.join(" ").includes(_ms)) return false; }
+    if (masterFilter==="starred"       && !x.starred) return false;
+    if (masterFilter==="review"        && x.approvalStatus!=="review") return false;
+    if (masterFilter==="approved"      && x.approvalStatus!=="approved") return false;
+    if (masterFilter==="incomplete"    && calcCompletion(x,derive(x)).pct>=100) return false;
+    if (masterFilter==="noBestBefore"  && x.bestBefore?.trim()) return false;
+    if (masterFilter==="noIngredients" && (x.ingredients||[]).some(i=>i.name?.trim())) return false;
+    if (masterFilter==="noMfr"         && x.manufacturerName?.trim()) return false;
+    if (masterFilter==="noJan"         && x.janCode?.trim()) return false;
+    if (masterFilter==="expired"       && !(x.expiryDate&&x.expiryDate<_navTodayIso)) return false;
+    if (masterFilter==="expiringSoon"  && !(x.expiryDate&&x.expiryDate>=_navTodayIso&&x.expiryDate<=_navSoonIso)) return false;
+    if (masterFilter==="noImage"       && x.imageDataUrl) return false;
+    if (masterFilter==="noStock"       && !(x.currentStock==null||x.currentStock===""||parseFloat(x.currentStock)===0)) return false;
+    if (masterFilter==="stale"         && !(x.updatedAt&&x.updatedAt<_navStaleIso)) return false;
+    if (masterPipelineFilter && (x.productStatus||"draft")!==masterPipelineFilter) return false;
+    if (masterCategoryFilter && (x.category||"")!==masterCategoryFilter) return false;
+    if (masterResponsibleFilter && (x.specResponsible||"")!==masterResponsibleFilter) return false;
+    if (masterAllergenFilter && !derive(x).allergens.includes(masterAllergenFilter)) return false;
+    if (masterIngFilter) { const _mi=masterIngFilter.toLowerCase(); if (!(x.ingredients||[]).some(i=>(i.name||"").toLowerCase().includes(_mi))) return false; }
+    if (masterCompletionFilter==="lt100" && calcCompletion(x,derive(x)).pct>=100) return false;
+    if (masterCompletionFilter==="lt60"  && calcCompletion(x,derive(x)).pct>=60)  return false;
+    if (masterCompletionFilter==="lt30"  && calcCompletion(x,derive(x)).pct>=30)  return false;
+    return true;
+  }).sort((a,b) => {
     if (masterSort === "name") return (a.internalName||a.name||"").localeCompare(b.internalName||b.name||"", "ja");
     if (masterSort === "completion") { const da=derive(a),db=derive(b); return calcCompletion(b,db).pct-calcCompletion(a,da).pct; }
-    if (masterSort === "expiryDate") {
-      if (!a.expiryDate && !b.expiryDate) return 0;
-      if (!a.expiryDate) return 1; if (!b.expiryDate) return -1;
-      return a.expiryDate.localeCompare(b.expiryDate);
-    }
+    if (masterSort === "expiryDate") { if (!a.expiryDate&&!b.expiryDate) return 0; if (!a.expiryDate) return 1; if (!b.expiryDate) return -1; return a.expiryDate.localeCompare(b.expiryDate); }
     if (masterSort === "releasedAt") return new Date(b.releasedAt||0) - new Date(a.releasedAt||0);
+    if (masterSort === "currentStock") { const av=a.currentStock!=null&&a.currentStock!==""?parseFloat(a.currentStock):Infinity; const bv=b.currentStock!=null&&b.currentStock!==""?parseFloat(b.currentStock):Infinity; return av-bv; }
+    if (masterSort === "labelErrors") { const ea=typeof checkFoodLabel==="function"?checkFoodLabel(a,derive(a)).filter(i=>i.level==="error").length:0; const eb=typeof checkFoodLabel==="function"?checkFoodLabel(b,derive(b)).filter(i=>i.level==="error").length:0; return eb-ea; }
     return (b.updatedAt||"").localeCompare(a.updatedAt||"");
-  }).filter(x => {
-    if (x.phase !== (p.phase || "released")) return false;
-    if (masterSearch && !(x.internalName||"").includes(masterSearch) && !(x.name||"").includes(masterSearch) && !(x.code||"").includes(masterSearch) && !(x.category||"").includes(masterSearch)) return false;
-    if (masterPipelineFilter && x.productStatus !== masterPipelineFilter) return false;
-    if (masterCategoryFilter && x.category !== masterCategoryFilter) return false;
-    return true;
   });
   const navIdx = sortedForNav.findIndex(x => x.id === p.id);
   const prevProd = navIdx > 0 ? sortedForNav[navIdx-1] : null;
@@ -794,6 +945,7 @@ function productDetailHtml() {
         <span class="detail-nav-pos">${escapeHtml(navPosLabel)}</span>
         <button class="detail-nav-btn" aria-label="${nextProd?`次の商品: ${escapeHtml(nextProd.name||"次の商品")}`:"次の商品（なし）"}" ${nextProd?`data-nav-product-detail="${escapeHtml(nextProd.id)}" title="${escapeHtml(nextProd.name||"次の商品")}"`:`disabled`}>▶</button>
       </div>` : ""}
+      <button class="detail-share-btn" data-action="copy-product-url" data-pid="${escapeHtml(p.id)}" title="この商品ページのURLをクリップボードにコピー（チーム共有用）">🔗 URLコピー</button>
     </div>
     <div class="detail-header-actions">
       <span id="master-autosave-status" class="autosave-status${masterAutoSaveStatus==="saved"?" autosave-ok":masterAutoSaveStatus==="editing"?" autosave-editing":""}">${masterAutoSaveStatus==="saved"?"保存済み":masterAutoSaveStatus==="editing"?"編集中…":""}</span>
@@ -805,6 +957,7 @@ function productDetailHtml() {
     ${summaryStrip}
     ${tabNav}
     <div class="kbd-hints kbd-hints--detail"><kbd>1</kbd>〜<kbd>8</kbd> タブ切替 &nbsp;·&nbsp; <kbd>Ctrl</kbd>+<kbd>S</kbd> 保存 &nbsp;·&nbsp; <kbd>Esc</kbd> 一覧へ戻る</div>
+    ${responsibleDatalist}
     ${tabContent}
     <button class="fab-save" data-action="save-master">保存する</button>
   `);
@@ -855,9 +1008,9 @@ function approvalTabHtml(p) {
     <h3 class="detail-section-title">承認ステータス</h3>
     <div class="approval-status-banner" style="background:${stateInfo.bg};border:1px solid ${stateInfo.border};border-radius:10px;padding:16px 20px;margin-bottom:16px">
       <div style="font-size:22px;margin-bottom:4px">${stateInfo.icon} <strong style="color:${stateInfo.color}">${stateInfo.label}</strong></div>
-      ${p.assignedTo ? `<div style="font-size:12px;color:#64748b">依頼者：${escapeHtml(p.assignedTo)}</div>` : ""}
-      ${p.approverName ? `<div style="font-size:12px;color:#64748b">承認者：${escapeHtml(p.approverName)}　${escapeHtml(p.approvalDate||"")}</div>` : ""}
-      ${p.approvalComment ? `<div style="font-size:13px;margin-top:8px;white-space:pre-wrap">${escapeHtml(p.approvalComment)}</div>` : ""}
+      ${p.assignedTo ? `<div style="font-size:12px;color:#64748b">依頼先：${escapeHtml(p.assignedTo)}</div>` : ""}
+      ${p.approverName ? `<div style="font-size:12px;color:#64748b">${st === "rejected" ? "差し戻し：" : "承認者："}${escapeHtml(p.approverName)}　${escapeHtml(p.approvalDate||"")}</div>` : ""}
+      ${p.approvalComment ? `<div style="font-size:13px;margin-top:8px;white-space:pre-wrap;padding:8px;background:rgba(0,0,0,0.04);border-radius:6px">💬 ${escapeHtml(p.approvalComment)}</div>` : ""}
     </div>
     ${cancelSection}
     ${requestSection}
@@ -938,10 +1091,19 @@ function checkFoodLabel(p, d) {
          p.volume.replace(/(\d\s*)ml/g, "$1mL"));
   }
 
-  // ── JANコード桁数 ──
-  if (p.janCode?.trim() && ![8,13].includes(p.janCode.trim().replace(/\D/g,"").length)) {
-    warn(`JANコードは8桁または13桁です（現在 ${p.janCode.trim().replace(/\D/g,"").length} 桁）（JIS X 0502）`, "janCode",
-         "JANコードの桁数を確認してください（EAN-8は8桁、EAN-13は13桁）");
+  // ── JANコード桁数 + 重複チェック ──
+  if (p.janCode?.trim()) {
+    const digits = p.janCode.trim().replace(/\D/g,"");
+    if (![8,13].includes(digits.length)) {
+      warn(`JANコードは8桁または13桁です（現在 ${digits.length} 桁）（JIS X 0502）`, "janCode",
+           "JANコードの桁数を確認してください（EAN-8は8桁、EAN-13は13桁）");
+    }
+    const dupJan = (typeof products !== "undefined" ? products : [])
+      .filter(x => x.id !== p.id && x.janCode?.trim().replace(/\D/g,"") === digits);
+    if (dupJan.length) {
+      err(`JANコードが他の商品「${escapeHtml(dupJan[0].internalName||dupJan[0].name||"名称未入力")}」と重複しています`, "janCode",
+          "JANコードは商品ごとに一意である必要があります。GS1 Japanに正しいコードを確認してください");
+    }
   }
 
   // ── 栄養成分の重量未入力 ──
@@ -1183,6 +1345,25 @@ function generateProactiveSuggestions(p, d) {
     }
   }
 
+  // 栄養成分が全未入力（義務表示）
+  if (d.nutrition.kcal === 0 && d.nutrition.protein === 0 && d.nutrition.fat === 0 && d.nutrition.carbs === 0) {
+    const hasIngs = (p.ingredients||[]).some(i=>i.name?.trim());
+    if (hasIngs) {
+      add("high", "🔬", "栄養成分表示が未入力です",
+        "栄養成分表示（エネルギー・たんぱく質・脂質・炭水化物・食塩相当量）は食品表示基準で義務付けられています。原材料の重量を入力すると自動計算されます。",
+        "「原材料タブ」で各原材料の重量（g）を入力すると栄養成分が自動計算されます",
+        { type: "navigate", tab: "ingredients", field: null });
+    }
+  }
+
+  // JANコード未設定（流通・受発注に影響）
+  if (!p.janCode?.trim() && (p.ingredients||[]).some(i=>i.name?.trim())) {
+    add("low", "🏷️", "JANコードを登録することを提案",
+      "JANコードが未登録です。バーコード発行・流通登録・POSシステム連携にはJANコード（8桁または13桁）が必要です。",
+      "基本情報タブの「JANコード」欄に8桁または13桁コードを入力してください",
+      { type: "navigate", tab: "basic", field: "[data-master-field='janCode']" });
+  }
+
   // 優先度順にソート
   const order = { high: 0, medium: 1, low: 2 };
   return suggestions.sort((a,b) => order[a.priority] - order[b.priority]);
@@ -1219,6 +1400,19 @@ function releaseReadinessHtml(p, d) {
         return diff > 0 ? `目標比 +${diff.toFixed(1)}%` : null;
       })(),
       critical: false,
+    },
+    {
+      label: "食品表示エラーなし",
+      ok: (() => {
+        const issues = typeof checkFoodLabel === "function" ? checkFoodLabel(p, d) : [];
+        return issues.filter(i => i.level === "error").length === 0;
+      })(),
+      detail: (() => {
+        const issues = typeof checkFoodLabel === "function" ? checkFoodLabel(p, d) : [];
+        const errCount = issues.filter(i => i.level === "error").length;
+        return errCount > 0 ? `表示エラー ${errCount}件あり` : null;
+      })(),
+      critical: true,
     },
     {
       label: "チーム承認済み",

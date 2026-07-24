@@ -144,11 +144,11 @@ function devDetailHtml() {
             ? `<label class="devd-ver-tab devd-ver-tab--check${isChecked?" active":""}">
                 <input type="checkbox" class="rcmp-check" data-compare-check="${escapeHtml(v.id)}" ${isChecked?"checked":""} style="display:none">
                 <span class="rcmp-check-box">${isChecked?"✓":""}</span>
-                ${v.label || `Ver.${v.versionNum}`}
+                ${v.label || v.version || `Ver.${v.versionNum || "?"}`}
                 ${isAdopted ? `<span class="devd-ver-adopted">採用中</span>` : `<span class="devd-ver-status devd-ver-status--${v.status||"draft"}">${{draft:"下書き",testing:"試作中",rejected:"却下",adopted:"採用"}[v.status]||v.status}</span>`}
               </label>`
             : `<button class="devd-ver-tab${isActive?" active":""}" data-set-active-version="${escapeHtml(v.id)}">
-                ${v.label || `Ver.${v.versionNum}`}
+                ${v.label || v.version || `Ver.${v.versionNum || "?"}`}
                 ${isAdopted ? `<span class="devd-ver-adopted">採用中</span>` : `<span class="devd-ver-status devd-ver-status--${v.status||"draft"}">${{draft:"下書き",testing:"試作中",rejected:"却下",adopted:"採用"}[v.status]||v.status}</span>`}
               </button>`;
         }).join("")}
@@ -204,6 +204,7 @@ function devDetailHtml() {
                 <div class="devd-stat-item"><div class="devd-stat-val">${verD.nutrition.kcal > 0 ? `${verD.nutrition.kcal}` : "—"}</div><div class="devd-stat-lbl">kcal</div></div>
                 <div class="devd-stat-item"><div class="devd-stat-val">${(verD.allergens||[]).length > 0 ? `${verD.allergens.length}種` : "なし"}</div><div class="devd-stat-lbl">アレルゲン</div></div>
               </div>
+              ${typeof recipeIngCostHtml === "function" ? recipeIngCostHtml(activeVer, p) : ""}
               <h3 class="devd-section-hd" style="margin-top:14px">メモ</h3>
               <textarea class="master-input" rows="3" data-ver-note="${escapeHtml(activeVer.id)}" data-pid="${escapeHtml(p.id)}">${escapeHtml(activeVer.note||"")}</textarea>
               ${activeVer.createdAt ? `<p class="devd-ver-date">作成: ${escapeHtml(activeVer.createdAt)}${activeVer.createdBy ? ` · ${escapeHtml(activeVer.createdBy)}` : ""}</p>` : ""}
@@ -273,6 +274,14 @@ function devDetailHtml() {
         <div class="devd-form-row">
           <label class="devd-lbl">次のアクション</label>
           <input class="master-input" id="tb-next" placeholder="例: 砂糖を20g増量してVer.3を試作">
+        </div>
+        <div class="devd-form-row">
+          <label class="devd-lbl">試作品写真（任意）</label>
+          <div class="tb-image-area">
+            <input type="file" id="tb-image" accept="image/*" style="display:none">
+            <button class="action" type="button" onclick="document.getElementById('tb-image').click()">📷 写真を選択</button>
+            <canvas id="tb-image-preview-canvas" style="display:none;max-width:200px;max-height:160px;border-radius:6px;margin-top:8px;object-fit:contain"></canvas>
+          </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:12px">
           <button class="action primary" data-action="save-trial-batch" data-pid="${escapeHtml(p.id)}">保存する</button>
@@ -414,7 +423,7 @@ function recipeCompareHtml(p, versions, ids) {
   const headerCells = colData.map(({ v }) => {
     const isAdopted = v.id === p.adoptedRecipeVersionId;
     return `<th class="rcmp-th${isAdopted?" rcmp-adopted-col":""}">
-      <div class="rcmp-th-name">${escapeHtml(v.label || `Ver.${v.versionNum}`)}</div>
+      <div class="rcmp-th-name">${escapeHtml(v.label || v.version || `Ver.${v.versionNum || "?"}`)}</div>
       <div class="rcmp-th-status">
         ${isAdopted
           ? `<span class="devd-ver-adopted">✅ 採用中</span>`

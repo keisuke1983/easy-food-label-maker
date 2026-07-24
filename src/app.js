@@ -1,4 +1,34 @@
-﻿/* ── チュートリアル ── */
+﻿/* ── 週次通知 ── */
+function sendWeeklyNotif(forceRequest) {
+  if (!("Notification" in window)) return;
+  const doSend = () => {
+    const now = new Date();
+    const todayIso = now.toISOString().split("T")[0];
+    if (!forceRequest && lastNotifDate) {
+      const diffDays = (now - new Date(lastNotifDate)) / (1000 * 60 * 60 * 24);
+      if (diffDays < 7) return;
+    }
+    const todos = typeof calcTodo === "function" ? calcTodo(products.map(p => ({ p, d: derive(p) }))) : [];
+    const urgentCount = todos.reduce((s, t) => s + (t.count || 0), 0);
+    if (urgentCount === 0 && !forceRequest) return;
+    const body = urgentCount > 0
+      ? `対応が必要なタスクが ${urgentCount} 件あります。\n${todos.slice(0, 3).map(t => `・${t.label}（${t.count}件）`).join("\n")}`
+      : "今週のタスクはすべて対応済みです！";
+    try {
+      new Notification("FoodPilot 週次サマリー", { body, icon: "./assets/app-icon.svg" });
+      lastNotifDate = todayIso;
+      safeSet("fp-last-notif-date", todayIso);
+      if (forceRequest) render();
+    } catch {}
+  };
+  if (Notification.permission === "granted") {
+    doSend();
+  } else if (Notification.permission !== "denied" && forceRequest) {
+    Notification.requestPermission().then(perm => { if (perm === "granted") doSend(); render(); });
+  }
+}
+
+/* ── チュートリアル ── */
 const TUTORIAL_STEPS = [
   {
     icon: "🎉", color: "#2563eb", bg: "#eff6ff",
@@ -2541,7 +2571,7 @@ function startDemo() {
     createdAt: tmpl.createdAt || now,
     // ラベル完成度チェックに使われるフィールド名を補完
     volume:      tmpl.volume      || (tmpl.netWeight ? `${tmpl.netWeight}${tmpl.netWeightUnit || ""}` : ""),
-    bestBefore:  tmpl.bestBefore  || tmpl.expiryDate || "",
+    bestBefore:  tmpl.bestBefore  || formatDate(tmpl.expiryDate) || "",
     storage:     tmpl.storage     || tmpl.storageMethod || "",
     productStatus: tmpl.productStatus === "active" ? "on_sale" : (tmpl.productStatus || "on_sale"),
   }));
@@ -3958,12 +3988,31 @@ function specSheetHtml() {
     </div>
   </div>`;
 
+  // ── 更新履歴 ──
+  const _specTimeline = loadTimeline(p.id).filter(ev =>
+    ["spec_updated", "pdf_exported", "approved", "label_edited", "field_changed"].includes(ev.eventType)
+  );
+  const _historyHtml = _specTimeline.length ? `
+    <div class="spec-history">
+      <div class="spec-history-hd">📋 規格書 更新履歴</div>
+      <table class="spec-history-table">
+        <thead><tr><th>版数</th><th>日時</th><th>担当者</th><th>内容</th></tr></thead>
+        <tbody>${_specTimeline.slice(0, 20).map(ev => `<tr>
+          <td class="spec-history-ver">${ev.eventType === "spec_updated" ? `Rev.${escapeHtml(p.specVersion||"?")}` : "—"}</td>
+          <td class="spec-history-date">${escapeHtml(ev.savedAt||"")}</td>
+          <td class="spec-history-by">${escapeHtml(ev.savedBy||"—")}</td>
+          <td class="spec-history-label">${escapeHtml(ev.label||"")}${ev.comment ? `<span class="spec-history-comment">（${escapeHtml(ev.comment)}）</span>` : ""}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>` : "";
+
   const selectOpts = productList.map(px=>`<option value="${escapeHtml(px.id)}"${px.id===p.id?" selected":""}>${escapeHtml(px.internalName||px.name)}</option>`).join("");
   return saasLayout("商品規格書", `
     <div class="spec-controls">
       <select class="spec-select" data-spec-select>${selectOpts}</select>
       <button class="action primary" data-action="print-spec">🖨 印刷・PDF</button>
       <button class="action" data-action="copy-spec">📋 テキストでコピー</button>
+      <button class="action" data-action="spec-bump-version" title="版数を上げて更新履歴に記録">📋 版数を更新</button>
       <label class="spec-cost-toggle">
         <input type="checkbox" id="spec-show-cost" ${specShowCost ? "checked" : ""}>
         原価率を印刷に含める
@@ -3974,6 +4023,7 @@ function specSheetHtml() {
       </label>
     </div>
     ${specHtml}
+    ${_historyHtml}
   `);
 }
 
@@ -4275,7 +4325,7 @@ function teamApprovalHtml() {
       <button class="approval-product-main" data-nav-product-detail="${escapeHtml(p.id)}" title="クリックで詳細を開く">
         <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
         ${p.assignedTo ? `<span class="approval-product-meta">依頼：${escapeHtml(p.assignedTo)}</span>` : ""}
-        <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+        <span class="approval-product-date">${escapeHtml(formatDate(p.approvalDate||p.updatedAt||""))}</span>
       </button>
       <div class="approval-quick-actions" onclick="event.stopPropagation()">
         <button class="approval-quick-approve" data-action="quick-approve" data-pid="${escapeHtml(p.id)}" title="承認する">✓ 承認</button>
@@ -4288,14 +4338,14 @@ function teamApprovalHtml() {
       <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
       ${p.assignedTo ? `<span class="approval-product-meta">依頼：${escapeHtml(p.assignedTo)}</span>` : ""}
       ${p.approverName ? `<span class="approval-product-meta">承認：${escapeHtml(p.approverName)}</span>` : ""}
-      <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+      <span class="approval-product-date">${escapeHtml(formatDate(p.approvalDate||p.updatedAt||""))}</span>
     </div>`;
 
   const rejectedRow = (p) => `
     <div class="approval-product-row approval-product-row--rejected" data-nav-product-detail="${escapeHtml(p.id)}" role="button" tabindex="0">
       <span class="approval-product-name">${escapeHtml(p.name||"（名称未入力）")}</span>
       ${p.approverName ? `<span class="approval-product-meta">差し戻し：${escapeHtml(p.approverName)}</span>` : ""}
-      <span class="approval-product-date">${escapeHtml(p.approvalDate||p.updatedAt||"")}</span>
+      <span class="approval-product-date">${escapeHtml(formatDate(p.approvalDate||p.updatedAt||""))}</span>
       ${p.approvalComment ? `<span class="approval-reject-reason">💬 ${escapeHtml(p.approvalComment)}</span>` : ""}
     </div>`;
 
@@ -5882,6 +5932,7 @@ initTrial();       // トライアル開始日を記録（初回のみ）
 render();
 setupDelegation(); // ⑨ デリゲーション登録（起動時1回）
 initCloudSync();   // ☁ クラウドから最新データをマージ（非同期・バックグラウンド）
+queueMicrotask(() => sendWeeklyNotif(false)); // 🔔 週次通知チェック（許可済みのみ）
 initImageStorage(); // 🖼 IndexedDB画像の移行・復元（非同期）
 
 // ── Stripe決済完了検出 (?stripe_session=cs_xxx で着地したとき) ────────

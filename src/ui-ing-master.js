@@ -372,6 +372,7 @@ function rawMaterialEditHtml() {
             const rateStr = costs.costRate !== null ? `<span style="color:${costs.costRate<=30?"#16a34a":costs.costRate<=60?"#d97706":"#ef4444"};font-weight:700">${costs.costRate}%</span>` : `<span style="color:#94a3b8">未計算</span>`;
             return `<div class="rm-impact-row"><span class="rm-impact-name">${escapeHtml(p.internalName||p.name||"名称未設定")}</span><span class="rm-impact-rate">現在: ${rateStr}</span></div>`;
           }).join("")}${affected.length>5?`<div class="rm-impact-more">他${affected.length-5}件</div>`:""}</div>
+          <div id="rm-ai-analysis" class="rm-ai-analysis rm-ai-analysis--hint">仕入価格を変更するとAI分析が表示されます</div>
         </div>` : ""}
       </div>
 

@@ -143,7 +143,7 @@ function productsListHtml() {
             ${p.releasedAt?`<span class="meta-item">🚀 ${escapeHtml(p.releasedAt)}</span>`:""}
             ${(isDiscontinued&&p.discontinuedAt)?`<span class="meta-item">🔴 終売：${escapeHtml(p.discontinuedAt)}</span>`:""}
             ${(isDiscontinued&&p.discontinuedReason)?`<span class="meta-item meta-discontinued-reason">${escapeHtml(p.discontinuedReason)}</span>`:""}
-            <span class="meta-item">更新：${escapeHtml(p.updatedAt||"")}</span>
+            <span class="meta-item">更新：${escapeHtml(formatDate(p.updatedAt))}</span>
             ${(p.currentStock!=null&&p.currentStock!=="") ? `<span class="meta-item meta-stock">📦 在庫：${escapeHtml(String(p.currentStock))}${escapeHtml(p.stockUnit||"")}</span>` : ""}
             ${expiryChip}
             ${staleBadge}
@@ -201,7 +201,7 @@ function productsListHtml() {
         : p.expiryDate && p.expiryDate <= soonIso ? "mt-expiry-soon" : "";
       const expiryHtml = `<button class="mt-expiry-edit-btn" data-inline-expiry="${escapeHtml(p.id)}" title="クリックして賞味期限を更新">${
         p.expiryDate
-          ? `<span class="mt-expiry-date ${expiryClass}">${escapeHtml(p.expiryDate)}</span>`
+          ? `<span class="mt-expiry-date ${expiryClass}">${escapeHtml(formatDate(p.expiryDate))}</span>`
           : `<span class="mt-expiry-none">—</span>`
       }✏️</button>`;
       const _lcIssues = typeof checkFoodLabel === "function" ? checkFoodLabel(p, d) : [];
@@ -224,10 +224,10 @@ function productsListHtml() {
         <td class="mt-col-comp"><div class="mt-comp-wrap"><div class="mt-comp-bar"><div class="mt-comp-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div><span class="mt-comp-pct" style="color:${pctColor}">${comp.pct}%</span></div></td>
         <td class="mt-col-status" onclick="event.stopPropagation()"><select class="pipeline-chip-select" data-quick-status-select="${escapeHtml(p.id)}" style="color:${ps.color};background:${ps.bg};border-color:${ps.color}">${releasedStatuses.map(s=>`<option value="${s.id}"${(p.productStatus||"on_sale")===s.id?" selected":""}>${s.label}</option>`).join("")}</select></td>
         <td onclick="event.stopPropagation()">${statusBadge(p)}${p.approvalStatus==="review"?`<span class="mt-approval-actions"><button class="btn-approval-quick btn-approval-approve" data-action="approve-product" data-pid="${escapeHtml(p.id)}" title="承認する">✓</button><button class="btn-approval-quick btn-approval-reject" data-action="reject-product" data-pid="${escapeHtml(p.id)}" title="差し戻す">↩</button></span>`:approvalBadge(p)}</td>
-        <td class="mt-col-release">${escapeHtml(p.releasedAt||"—")}</td>
+        <td class="mt-col-release">${escapeHtml(formatDate(p.releasedAt)||"—")}</td>
         <td class="mt-col-expiry" onclick="event.stopPropagation()">${expiryHtml}</td>
         <td class="mt-col-stock" onclick="event.stopPropagation()"><button class="mt-stock-edit-btn" data-inline-stock="${escapeHtml(p.id)}" title="クリックして在庫を更新">${(p.currentStock!=null&&p.currentStock!=="")?`<span class="mt-stock-val${parseFloat(p.currentStock)<=0?" mt-stock-zero":parseFloat(p.currentStock)<=5?" mt-stock-low":""}">${escapeHtml(String(p.currentStock))}${escapeHtml(p.stockUnit||"")}</span>`:`<span class="mt-stock-none">—</span>`}✏️</button></td>
-        <td class="mt-col-date">${escapeHtml(p.updatedAt||"")}</td>
+        <td class="mt-col-date">${escapeHtml(formatDate(p.updatedAt))}</td>
         <td class="mt-col-cat">${escapeHtml(p.category||"")}</td>
         <td class="mt-col-responsible">${p.specResponsible ? `<button class="mt-responsible-chip" data-set-responsible-filter="${escapeHtml(p.specResponsible)}" onclick="event.stopPropagation()" title="この担当者で絞り込む">${escapeHtml(p.specResponsible)}</button>` : `<span class="mt-responsible-none">—</span>`}</td>
         <td class="mt-col-allergen" onclick="event.stopPropagation()">${d.allergens.length ? d.allergens.slice(0,4).map(a=>`<button class="mt-allergen-chip" data-set-allergen-filter="${escapeHtml(a)}" title="${escapeHtml(a)}で絞り込む">${escapeHtml(a)}</button>`).join("")+(d.allergens.length>4?`<span class="mt-allergen-more">+${d.allergens.length-4}</span>`:"") : `<span class="mt-responsible-none">なし</span>`}</td>
@@ -518,7 +518,7 @@ function devProductsHtml() {
           ${deadlineBadge}
           ${devLabelBadge}
           ${(p.devProject?.projectManager || p.specResponsible) ? `<span class="dev-responsible-chip">👤 ${escapeHtml(p.devProject?.projectManager || p.specResponsible)}</span>` : ""}
-          ${p.updatedAt ? `<span class="dev-updated-at">更新: ${escapeHtml(p.updatedAt)}</span>` : ""}
+          ${p.updatedAt ? `<span class="dev-updated-at">更新: ${escapeHtml(formatDate(p.updatedAt))}</span>` : ""}
         </div>
         <div class="dev-comp-bar" title="入力完成度 ${comp.pct}%">
           <div class="dev-comp-fill" style="width:${comp.pct}%;background:${compColor}"></div>

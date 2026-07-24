@@ -2,6 +2,12 @@
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 function escapeHtml(s = "") { return String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
+function formatDate(str) {
+  if (!str) return "";
+  const m = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (!m) return str;
+  return `${m[1]}/${parseInt(m[2])}/${parseInt(m[3])}`;
+}
 function safeGet(key) {
   try { return localStorage.getItem(key); }
   catch { return ""; }
@@ -84,20 +90,26 @@ function estimateNutrition(name) {
   return { data: { kcal: 320, protein: 5, fat: 8, carbs: 55, salt: 0.3 }, estimated: true, key: "一般加工食品" };
 }
 function isAdditive(name) { return getAdditiveKw().some((k) => name.includes(k)); }
-function calcNutrition(ingredients) {
+// masterLookup(masterId) → {kcal,protein,fat,carbs,salt} or null
+function calcNutrition(ingredients, masterLookup) {
   const sum = { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0 };
   let total = 0, hasEst = false;
   ingredients.forEach((i) => {
     const w = parseFloat(i.weight) || 0;
     if (!i.name.trim() || w === 0) return;
-    const est = estimateNutrition(i.name);
+    let nutrData = null;
+    if (masterLookup && i.masterId) nutrData = masterLookup(i.masterId);
+    if (!nutrData) {
+      const est = estimateNutrition(i.name);
+      nutrData = est.data;
+      if (est.estimated) hasEst = true;
+    }
     total += w;
-    if (est.estimated) hasEst = true;
-    sum.kcal += est.data.kcal * w / 100;
-    sum.protein += est.data.protein * w / 100;
-    sum.fat += est.data.fat * w / 100;
-    sum.carbs += est.data.carbs * w / 100;
-    sum.salt += est.data.salt * w / 100;
+    sum.kcal    += nutrData.kcal    * w / 100;
+    sum.protein += nutrData.protein * w / 100;
+    sum.fat     += nutrData.fat     * w / 100;
+    sum.carbs   += nutrData.carbs   * w / 100;
+    sum.salt    += nutrData.salt    * w / 100;
   });
   if (!total) return { kcal: 0, protein: 0, fat: 0, carbs: 0, salt: 0, hasEst };
   const f = 100 / total;

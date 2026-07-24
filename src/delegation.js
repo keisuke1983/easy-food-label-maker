@@ -716,6 +716,12 @@ function setupDelegation() {
         case "copy-ai-prompt": { const ta=document.getElementById("ai-prompt-text"); if(ta) navigator.clipboard?.writeText(ta.value).then(()=>showStatus("プロンプトをコピーしました")).catch(()=>{ta.select();document.execCommand("copy");showStatus("コピーしました");}); return; }
         case "download-image": downloadImageLabel(); return;
         case "batch-print": batchPrint(); return;
+        case "setup-notif": sendWeeklyNotif(true); return;
+        case "detail-more-toggle": {
+          const _dp = document.querySelector('.detail-tab-more-panel');
+          if (_dp) { _dp.style.display = _dp.style.display === 'flex' ? '' : 'flex'; }
+          return;
+        }
         case "export-csv": exportCsv(false); return;
         case "export-csv-filtered": exportCsv(true); return;
         case "export-allergen-csv": exportAllergenCsv(); return;
@@ -730,6 +736,29 @@ function setupDelegation() {
           doPrintSpec();
           const _sp = products.find(x => x.id === (typeof specSheetId !== "undefined" ? specSheetId : productDetailId));
           if (_sp) saveTimelineEvent(_sp.id, "pdf_exported", "📄 規格書を出力", "", []);
+          return;
+        }
+        case "spec-bump-version": {
+          const _bv = products.find(x => x.id === (specSheetId || productDetailId));
+          if (!_bv) return;
+          const _newVer = String((parseInt(_bv.specVersion) || 1) + 1);
+          showModal({
+            message: `規格書を Rev.${_bv.specVersion||"1"} → Rev.${_newVer} に更新します。\n変更内容・理由を入力してください（省略可）。`,
+            hasInput: true,
+            inputPlaceholder: "例：原材料配合変更、表示修正 など",
+            confirmLabel: "版数を更新",
+            cancelLabel: "キャンセル",
+            onConfirm: (comment) => {
+              const today = new Date().toISOString().split("T")[0];
+              _bv.specVersion = _newVer;
+              _bv.updatedAt = today;
+              products = products.map(x => x.id === _bv.id ? _bv : x);
+              saveProducts();
+              saveTimelineEvent(_bv.id, "spec_updated", `📋 規格書 Rev.${_newVer} に更新`, comment || "", ["specVersion"]);
+              render();
+              showStatus(`Rev.${_newVer} に更新しました`);
+            },
+          });
           return;
         }
         case "copy-spec": { const area=document.getElementById("spec-print-area"); if(!area)return; const text=[...area.querySelectorAll("tr")].map(tr=>{const th=tr.querySelector("th")?.textContent?.trim()||"";const td=tr.querySelector("td")?.textContent?.trim()||"";return th&&td?`${th}：${td}`:""}).filter(Boolean).join("\n"); copyPlainText(text); return; }
@@ -1508,6 +1537,12 @@ function setupDelegation() {
     const dtEl = t.closest("[data-detail-tab]");
     if (dtEl) { productDetailTab=dtEl.dataset.detailTab; render(); document.querySelector(".saas-content")?.scrollTo(0,0); return; }
 
+    // 詳細ドロップダウンの外クリックで閉じる
+    if (!t.closest(".detail-tab-more")) {
+      const _openPanel = document.querySelector('.detail-tab-more-panel[style*="flex"]');
+      if (_openPanel) { _openPanel.style.display = ""; }
+    }
+
     // [data-dev-tab] — 開発詳細タブ切替
     const devTabEl = t.closest("[data-dev-tab]");
     if (devTabEl) { devDetailTab=devTabEl.dataset.devTab; render(); document.querySelector(".saas-content")?.scrollTo(0,0); return; }
@@ -1587,6 +1622,7 @@ function setupDelegation() {
     if (todoEl) {
       const tk = todoEl.dataset.todoKey;
       if (tk === "review") { saasView="team-approval"; view="saas"; safeSet("fmcc-view",saasView); render(); return; }
+      if (tk === "devStale") { saasView="dev-products"; view="saas"; safeSet("fmcc-view",saasView); render(); return; }
       saasView="products"; view="saas"; masterFilter=tk; safeSet("fmcc-view",saasView); render(); return;
     }
 
@@ -1954,7 +1990,10 @@ function setupDelegation() {
       if (impactRows && rawMaterialEditId && rawMaterialEditId !== "__new__" && perG !== null) {
         const affNow = findAffectedProducts(rawMaterialEditId);
         const html = affNow.slice(0, 5).map(p => {
-          const ings = (p.ingredients||[]).filter(i => i.name?.trim());
+          const _bi = (p.ingredients||[]).some(i => i.masterId === rawMaterialEditId)
+            ? p.ingredients
+            : (p.recipeVersions||[]).find(v => (v.ingredients||[]).some(i => i.masterId === rawMaterialEditId))?.ingredients || p.ingredients;
+          const ings = (_bi||[]).filter(i => i.name?.trim());
           let ingCost = 0;
           for (const i of ings) {
             const w = parseFloat(i.weight) || 0;
@@ -1974,6 +2013,74 @@ function setupDelegation() {
           return `<div class="rm-impact-row"><span class="rm-impact-name">${escapeHtml(p.internalName||p.name||"名称未設定")}</span><span class="rm-impact-rate">→ ${rateHtml}</span></div>`;
         }).join("");
         impactRows.innerHTML = html + (affNow.length > 5 ? `<div class="rm-impact-more">他${affNow.length-5}件</div>` : "");
+
+        // AI分析パネル更新
+        const aiPanel = document.getElementById("rm-ai-analysis");
+        if (aiPanel) {
+          const origRm = rawMaterials.find(r => r.id === rawMaterialEditId);
+          const origPerG = origRm ? calcUnitPrices(origRm).perG : null;
+          const analyses = affNow.map(p => {
+            // masterId リンクは p.ingredients または recipeVersions のいずれかにある
+            const baseIngs = (p.ingredients||[]).some(i => i.masterId === rawMaterialEditId)
+              ? p.ingredients
+              : (p.recipeVersions||[]).find(v => (v.ingredients||[]).some(i => i.masterId === rawMaterialEditId))?.ingredients || p.ingredients;
+            const ings = (baseIngs||[]).filter(i=>i.name?.trim());
+            let origCost = 0, newCost = 0;
+            for (const i of ings) {
+              const w = parseFloat(i.weight) || 0;
+              if (!w) continue;
+              if (i.masterId === rawMaterialEditId) {
+                if (origPerG !== null) origCost += w * origPerG;
+                newCost += w * perG;
+              } else {
+                const rm2 = rawMaterials.find(r => r.id === i.masterId);
+                if (rm2) { const pg2 = calcUnitPrices(rm2).perG; if (pg2) { origCost += w * pg2; newCost += w * pg2; } }
+              }
+            }
+            const pr = parseFloat(p.price) || 0;
+            const origRate = pr > 0 && origCost > 0 ? Math.round(origCost / pr * 100) : null;
+            const newRate  = pr > 0 && newCost  > 0 ? Math.round(newCost  / pr * 100) : null;
+            const diff = (origRate !== null && newRate !== null) ? newRate - origRate : null;
+            const costDiff = newCost > 0 ? newCost - origCost : null;
+            const costDiffPct = origCost > 0 && costDiff !== null ? Math.round(costDiff / origCost * 100) : null;
+            return { p, origRate, newRate, diff, origCost, newCost, costDiff, costDiffPct };
+          });
+
+          const redZone    = analyses.filter(a => a.newRate !== null && a.newRate > 60);
+          const worsening  = analyses.filter(a => a.diff !== null && a.diff > 0 && (a.newRate||0) <= 60);
+          const improving  = analyses.filter(a => a.diff !== null && a.diff < 0);
+          const noChange   = analyses.filter(a => a.diff === 0);
+          const priceDiff  = origPerG !== null ? Math.round((perG - origPerG) / origPerG * 100) : null;
+          const noPriceSet = analyses.filter(a => a.newRate === null && a.newCost > 0);
+
+          if (analyses.length === 0) {
+            aiPanel.className = "rm-ai-analysis rm-ai-analysis--hint";
+            aiPanel.textContent = "原材料マスタ連携商品がないため分析できません";
+          } else {
+            const lines = [];
+            if (priceDiff !== null) lines.push(`<div class="rm-ai-diff ${priceDiff>0?"rm-ai-diff--up":priceDiff<0?"rm-ai-diff--dn":"rm-ai-diff--eq"}">仕入価格 ${priceDiff>0?"▲":"▼"}${Math.abs(priceDiff)}% の変更（${origPerG!==null?origPerG.toFixed(3):"—"}円/g → ${perG.toFixed(3)}円/g）</div>`);
+            if (redZone.length)   lines.push(`<div class="rm-ai-item rm-ai-item--red">🚨 <strong>${redZone.length}件</strong>が原価率60%超え（赤字リスク）: ${redZone.slice(0,3).map(a=>`${escapeHtml(a.p.internalName||a.p.name||"—")} ${a.newRate}%`).join("・")}${redZone.length>3?`他${redZone.length-3}件`:""}</div>`);
+            if (worsening.length) lines.push(`<div class="rm-ai-item rm-ai-item--warn">⚠️ <strong>${worsening.length}件</strong>の原価率が上昇: ${worsening.slice(0,2).map(a=>`${escapeHtml(a.p.internalName||a.p.name||"—")} ${a.origRate}%→${a.newRate}%`).join("・")}</div>`);
+            if (improving.length) lines.push(`<div class="rm-ai-item rm-ai-item--ok">✅ <strong>${improving.length}件</strong>の原価率が改善</div>`);
+            if (noChange.length && !worsening.length && !redZone.length && !noPriceSet.length) lines.push(`<div class="rm-ai-item rm-ai-item--ok">✅ 影響なし（全商品の原価率は変化しません）</div>`);
+            if (noPriceSet.length) lines.push(`<div class="rm-ai-item rm-ai-item--warn">📋 <strong>${noPriceSet.length}件</strong>の商品は販売価格未設定のため原価率計算不可。${noPriceSet.slice(0,2).map(a=>{const cd=a.costDiff;const cdp=a.costDiffPct;return `${escapeHtml(a.p.internalName||a.p.name||"—")}（原材料費 ${cd!==null?(cd>0?"+":"")+Math.round(cd)+"円"+(cdp!==null?`/${cdp>0?"+":""}${cdp}%`:""):"+?"}`}).join("・")})</div>`);
+
+            // 推奨アクション
+            if (redZone.length) {
+              const worst = redZone.sort((a,b)=>(b.newRate||0)-(a.newRate||0))[0];
+              const suggestedPrice = worst.newRate && parseFloat(worst.p.price) > 0
+                ? Math.ceil(parseFloat(worst.p.price) * worst.newRate / 60 / 10) * 10 : null;
+              lines.push(`<div class="rm-ai-action">💡 推奨: 「${escapeHtml(worst.p.internalName||worst.p.name||"—")}」など${redZone.length}件の販売価格見直し${suggestedPrice?`（例: ¥${suggestedPrice.toLocaleString()}以上に設定で原価率60%以下）`:""}、または仕入先との価格交渉を検討してください。</div>`);
+            } else if (worsening.length && priceDiff !== null && priceDiff > 5) {
+              lines.push(`<div class="rm-ai-action">💡 推奨: 仕入価格が${priceDiff}%上昇しますが、現時点で赤字商品はありません。次回の価格改定時に反映を検討してください。</div>`);
+            } else if (improving.length) {
+              lines.push(`<div class="rm-ai-action">💡 コスト削減が実現します。差益を品質向上や価格競争力強化に活用できます。</div>`);
+            }
+
+            aiPanel.className = `rm-ai-analysis ${redZone.length?"rm-ai-analysis--alert":(worsening.length||noPriceSet.length)?"rm-ai-analysis--warn":"rm-ai-analysis--ok"}`;
+            aiPanel.innerHTML = `<div class="rm-ai-hd">✦ AI影響分析</div>${lines.join("")}`;
+          }
+        }
       }
       return;
     }

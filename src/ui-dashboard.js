@@ -9,18 +9,25 @@ function calcTodo(derivedAll) {
   const relDa = da.filter(({p}) => (p.phase || "released") === "released");
   const todayIso  = new Date().toISOString().split("T")[0];
   const soonIso   = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const staleIso  = new Date(Date.now() - 180*24*60*60*1000).toISOString().split("T")[0];
+  const devStaleIso = new Date(Date.now() - 90*24*60*60*1000).toISOString().split("T")[0];
   return [
-    { key:"expired",       label:"🚨 賞味期限切れ",         count: rel.filter(p=>p.expiryDate&&p.expiryDate<todayIso).length },
-    { key:"expiringSoon",  label:"⏰ 30日以内に賞味期限切れ", count: rel.filter(p=>p.expiryDate&&p.expiryDate>=todayIso&&p.expiryDate<=soonIso).length },
-    { key:"incomplete",    label:"完成度100%未満の商品",     count: relDa.filter(({p,d})=>calcCompletion(p,d).pct<100).length },
-    { key:"noBestBefore",  label:"賞味期限未設定",           count: rel.filter(p=>!p.bestBefore?.trim()).length },
-    { key:"noIngredients", label:"原材料未入力",              count: rel.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim())).length },
-    { key:"noMfr",         label:"製造者未設定",              count: rel.filter(p=>!p.manufacturerName?.trim()).length },
-    { key:"noJan",         label:"JANコード未登録",           count: rel.filter(p=>!p.janCode?.trim()).length },
-    { key:"noImage",       label:"商品画像未登録",            count: rel.filter(p=>!p.imageDataUrl).length },
-    { key:"noCost",        label:"原価未設定",                count: rel.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
-    { key:"noStock",       label:"📦 在庫なし・未設定",        count: rel.filter(p=>p.currentStock==null||p.currentStock===""||parseFloat(p.currentStock)===0).length },
-    { key:"review",        label:"👥 承認待ちの商品",          count: products.filter(p=>p.approvalStatus==="review").length },
+    { key:"expired",        label:"🚨 賞味期限切れ",                  count: rel.filter(p=>p.expiryDate&&p.expiryDate<todayIso).length },
+    { key:"expiringSoon",   label:"⏰ 30日以内に賞味期限切れ",         count: rel.filter(p=>p.expiryDate&&p.expiryDate>=todayIso&&p.expiryDate<=soonIso).length },
+    { key:"hasLabelErrors", label:"🚫 食品表示エラーあり",              count: typeof checkFoodLabel==="function" ? rel.filter(p=>{ const d=derive(p); return checkFoodLabel(p,d).some(i=>i.level==="error"); }).length : 0 },
+    { key:"review",         label:"👥 承認待ちの商品",                  count: products.filter(p=>p.approvalStatus==="review").length },
+    { key:"highCost",       label:"📊 原価率60%超（赤字リスク）",       count: rel.filter(p=>{ const c=calcCosts(p); return c.costRate!==null&&c.costRate>60; }).length },
+    { key:"noStock",        label:"📦 在庫ゼロ",                       count: rel.filter(p=>p.currentStock!=null&&p.currentStock!==""&&parseFloat(p.currentStock)===0).length },
+    { key:"noIngredients",  label:"原材料未入力",                      count: rel.filter(p=>!(p.ingredients||[]).some(i=>i.name?.trim())).length },
+    { key:"noMfr",          label:"製造者未設定",                      count: rel.filter(p=>!p.manufacturerName?.trim()).length },
+    { key:"noCost",         label:"原価未設定",                        count: rel.filter(p=>(p.costMode||"direct")==="direct"?!parseFloat(p.directCost):!(p.costItems||[]).length).length },
+    { key:"incomplete",     label:"完成度60%未満の商品",                count: relDa.filter(({p,d})=>calcCompletion(p,d).pct<60).length },
+    { key:"noMasterLink",   label:"🔗 原材料マスタ未連携",              count: rel.filter(p=>(p.ingredients||[]).some(i=>i.name?.trim())&&!(p.ingredients||[]).some(i=>i.masterId)).length },
+    { key:"devStale",       label:"🔬 開発が90日以上停滞",              count: products.filter(p=>p.phase==="development"&&p.updatedAt&&p.updatedAt<devStaleIso).length },
+    { key:"stale",          label:"⏳ 6ヶ月以上更新なし",               count: rel.filter(p=>p.updatedAt&&p.updatedAt<staleIso).length },
+    { key:"noBestBefore",   label:"賞味期限未設定",                    count: rel.filter(p=>!p.bestBefore?.trim()).length },
+    { key:"noJan",          label:"JANコード未登録",                    count: rel.filter(p=>!p.janCode?.trim()).length },
+    { key:"noImage",        label:"商品画像未登録",                    count: rel.filter(p=>!p.imageDataUrl).length },
   ].filter(t=>t.count>0);
 }
 
@@ -67,7 +74,6 @@ function generateAiSuggestions(derivedAll) {
   const sugs = [];
   const todayIso  = new Date().toISOString().split("T")[0];
   const soonIso   = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
-  const staleDate = new Date(Date.now() - 30*24*60*60*1000).toLocaleDateString("ja-JP");
 
   const pname = p => p.name || p.internalName || "名称未設定";
   // 食品表示法コンプライアンスは発売後商品のみ対象（開発中商品は作業中のため除外）
@@ -78,12 +84,32 @@ function generateAiSuggestions(derivedAll) {
   const expired = rel.filter(p => p.expiryDate && p.expiryDate < todayIso);
   if (expired.length) sugs.push({ level:"critical", icon:"🚨", title:"賞味期限切れの商品があります", msg:`${expired.length}件が賞味期限切れです（例：${pname(expired[0])}）。ラベルを早急に更新してください。`, action:"確認する", filterKey:"expired", topProductId:expired[0].id, topProductName:pname(expired[0]) });
 
+  const zeroStock = rel.filter(p => p.currentStock != null && p.currentStock !== "" && parseFloat(p.currentStock) === 0);
+  if (zeroStock.length) sugs.push({ level:"critical", icon:"📦", title:"在庫0件の発売商品があります", msg:`${zeroStock.length}件が在庫0です（例：${pname(zeroStock[0])}）。早急に補充または販売停止を検討してください。`, action:"確認する", filterKey:"noStock", topProductId:zeroStock[0].id, topProductName:pname(zeroStock[0]) });
+
   const noIng = rel.filter(p => !(p.ingredients||[]).some(i => i.name?.trim()));
   if (noIng.length) sugs.push({ level:"critical", icon:"⚠️", title:"原材料が未入力の発売商品があります", msg:`${noIng.length}件で原材料名が未入力です（例：${pname(noIng[0])}）。食品表示法の必須項目です。`, action:"確認する", filterKey:"noIngredients", topProductId:noIng[0].id, topProductName:pname(noIng[0]) });
+
+  // 食品表示エラーがある発売商品（コンプライアンスリスク = critical）
+  if (typeof checkFoodLabel === "function") {
+    const labelErrProds = relDerived.filter(({p, d}) => checkFoodLabel(p, d).some(i => i.level === "error"));
+    if (labelErrProds.length) sugs.push({ level:"critical", icon:"🏷", title:"食品表示エラーがある発売商品があります", msg:`${labelErrProds.length}件に食品表示基準エラーがあります（例：${pname(labelErrProds[0].p)}）。法的リスクがあります。早急に修正してください。`, action:"確認する", filterKey:"hasLabelErrors", topProductId:labelErrProds[0].p.id, topProductName:pname(labelErrProds[0].p) });
+  }
 
   // High
   const reviewProd = products.filter(p => p.approvalStatus === "review");
   if (reviewProd.length) sugs.push({ level:"high", icon:"👥", title:"承認待ちの商品があります", msg:`${reviewProd.length}件が確認待ちです（${pname(reviewProd[0])} ほか）。速やかに確認してください。`, action:"承認画面へ", nav:"team-approval", topProductId:reviewProd[0].id, topProductName:pname(reviewProd[0]) });
+
+  // 発売予定日が過ぎた開発商品
+  const overdueRelease = products.filter(p => p.phase === "development" && p.devProject?.targetReleaseDate && p.devProject.targetReleaseDate < todayIso);
+  if (overdueRelease.length) sugs.push({ level:"high", icon:"🎯", title:"発売予定日を超過した開発商品があります", msg:`${overdueRelease.length}件が発売予定日を過ぎています（例：${pname(overdueRelease[0])}）。スケジュールを見直してください。`, action:"確認する", filterKey:"development", topProductId:overdueRelease[0].id, topProductName:pname(overdueRelease[0]) });
+
+  // 発売予定日が30日以内の開発商品
+  const nearRelease = products.filter(p => p.phase === "development" && p.devProject?.targetReleaseDate && p.devProject.targetReleaseDate >= todayIso && p.devProject.targetReleaseDate <= soonIso);
+  if (nearRelease.length) sugs.push({ level:"high", icon:"📅", title:"発売予定日が近い開発商品があります", msg:`${nearRelease.length}件の発売予定日が30日以内です（例：${pname(nearRelease[0])}）。準備状況を確認してください。`, action:"確認する", filterKey:"development", topProductId:nearRelease[0].id, topProductName:pname(nearRelease[0]) });
+
+  const lowStock = rel.filter(p => p.currentStock != null && p.currentStock !== "" && parseFloat(p.currentStock) > 0 && parseFloat(p.currentStock) <= 5);
+  if (lowStock.length) sugs.push({ level:"high", icon:"📉", title:"在庫が残り少ない商品があります", msg:`${lowStock.length}件の在庫が残り5個以下です（例：${pname(lowStock[0])}）。発注・補充計画を立てください。`, action:"確認する", filterKey:"noStock", topProductId:lowStock[0].id, topProductName:pname(lowStock[0]) });
 
   const highCost = relDerived.filter(({c}) => c.costRate !== null && c.costRate > 60);
   if (highCost.length) sugs.push({ level:"high", icon:"📉", title:"原価率が高い商品があります", msg:`${highCost.length}件で原価率が60%超です（例：${pname(highCost[0].p)}）。価格設定を見直してください。`, action:"確認する", filterKey:"noCost", topProductId:highCost[0].p.id, topProductName:pname(highCost[0].p) });
@@ -105,8 +131,9 @@ function generateAiSuggestions(derivedAll) {
   const noJan = rel.filter(p => !p.janCode?.trim());
   if (noJan.length) sugs.push({ level:"low", icon:"📊", title:"JANコードが未登録の発売商品があります", msg:`${noJan.length}件でJANコードが未登録です（例：${pname(noJan[0])}）。在庫管理・EC連携に必要です。`, action:"確認する", filterKey:"noJan", topProductId:noJan[0].id, topProductName:pname(noJan[0]) });
 
-  const stale = rel.filter(p => p.updatedAt && p.updatedAt < staleDate);
-  if (stale.length) sugs.push({ level:"low", icon:"🕐", title:"長期間更新されていない商品があります", msg:`${stale.length}件が30日以上更新されていません（例：${pname(stale[0])}）。内容が最新か確認してください。`, action:"確認する", filterKey:"all", topProductId:stale[0].id, topProductName:pname(stale[0]) });
+  const staleIso2 = new Date(Date.now() - 180*24*60*60*1000).toISOString().split("T")[0];
+  const stale = rel.filter(p => p.updatedAt && p.updatedAt < staleIso2);
+  if (stale.length) sugs.push({ level:"low", icon:"🕐", title:"長期間更新されていない商品があります", msg:`${stale.length}件が6ヶ月以上更新されていません（例：${pname(stale[0])}）。内容が最新か確認してください。`, action:"確認する", filterKey:"stale", topProductId:stale[0].id, topProductName:pname(stale[0]) });
 
   return sugs.slice(0, 7);
 }
@@ -142,6 +169,7 @@ function dashboardHtml() {
   const now     = new Date();
   const todayIso = now.toISOString().split("T")[0];
   const soonIso  = new Date(Date.now() + 30*24*60*60*1000).toISOString().split("T")[0];
+  const staleIso = new Date(Date.now() - 180*24*60*60*1000).toISOString().split("T")[0];
   const ym       = `${now.getFullYear()}/${now.getMonth()+1}`;
 
   const derivedAll = products.map(p => ({ p, d: derive(p), c: calcCosts(p) }));
@@ -152,11 +180,32 @@ function dashboardHtml() {
   const approvedForRelease  = products.filter(p => p.phase === "development" && p.productStatus === "approved").length;
   const reviewCount         = products.filter(p => p.approvalStatus === "review").length;
 
+  // ── 前月比（releasedAt を使って先月の発売数を推定）──
+  const _lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
+  const _lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().split("T")[0];
+  const _releasedThisMonth = rel.filter(p => p.releasedAt && p.releasedAt >= _lastMonthEnd.substring(0,7)+"-01" && p.releasedAt <= todayIso).length;
+  const _releasedLastMonth = rel.filter(p => p.releasedAt && p.releasedAt >= _lastMonthStart && p.releasedAt <= _lastMonthEnd).length;
+  const _relDiff = _releasedThisMonth - _releasedLastMonth;
+  const _relDiffHtml = _releasedLastMonth > 0 || _releasedThisMonth > 0
+    ? `<span class="kpi-mom${_relDiff > 0 ? " kpi-mom--up" : _relDiff < 0 ? " kpi-mom--dn" : ""}">${_relDiff > 0 ? "▲" : _relDiff < 0 ? "▼" : "—"}${Math.abs(_relDiff)}</span>`
+    : "";
+  const _devDiffHtml = ""; // 開発数は変動が少ないので省略
+
   const suggestions = generateAiSuggestions(derivedAll);
 
   const expiredCount      = rel.filter(p => p.expiryDate && p.expiryDate < todayIso).length;
   const expiringSoonCount = rel.filter(p => p.expiryDate && p.expiryDate >= todayIso && p.expiryDate <= soonIso).length;
+  const lowStockCount     = rel.filter(p => p.currentStock != null && p.currentStock !== "" && parseFloat(p.currentStock) > 0 && parseFloat(p.currentStock) <= 5).length;
+  const zeroStockCount    = rel.filter(p => p.currentStock != null && p.currentStock !== "" && parseFloat(p.currentStock) === 0).length;
+  const staleCount        = rel.filter(p => p.updatedAt && p.updatedAt < staleIso).length;
   const stg = getStorageInfo();
+
+  // ── コンプライアンス率（食品表示エラーゼロの発売商品比率）──
+  const _complianceTotal = rel.length;
+  const _complianceOkCount = typeof checkFoodLabel === "function"
+    ? rel.filter(p => checkFoodLabel(p, derive(p)).every(i => i.level !== "error")).length
+    : _complianceTotal;
+  const complianceRate = _complianceTotal > 0 ? Math.round(_complianceOkCount / _complianceTotal * 100) : null;
 
   // ── コスト統計（KPI + 統計パネル で共用）──
   const relDerivedAll  = derivedAll.filter(({p}) => (p.phase || "released") === "released");
@@ -199,7 +248,17 @@ function dashboardHtml() {
         if (issues.length)
           _addTask(person, { icon:"🚫", label:`表示エラー ${issues.length}件`, cls:"urgent", priority:2, pid:p.id, pname });
       }
+      // 高原価率チェック
+      const _costs = calcCosts(p);
+      if (_costs.costRate !== null && _costs.costRate > 60)
+        _addTask(person, { icon:"📊", label:`原価率超過 ${_costs.costRate}%`, cls:"urgent", priority:2, pid:p.id, pname });
     }
+    // 在庫ゼロ（発売商品のみ）
+    if ((p.phase||"released")==="released" && p.currentStock!=null && p.currentStock!=="" && parseFloat(p.currentStock)===0)
+      _addTask(person, { icon:"📦", label:"在庫ゼロ", cls:"urgent", priority:1, pid:p.id, pname });
+    // 開発90日停滞
+    if (p.phase==="development" && p.updatedAt && p.updatedAt < new Date(Date.now()-90*24*60*60*1000).toISOString().split("T")[0])
+      _addTask(person, { icon:"🔬", label:"開発が90日以上停滞", cls:"warn", priority:3, pid:p.id, pname });
   });
   const _personEntries = Object.entries(_personTasks).sort((a,b) => {
     const ap = Math.min(...a[1].map(t=>t.priority));
@@ -235,6 +294,36 @@ function dashboardHtml() {
     </div>
   </div>` : "";
 
+  // ── パーソナライズ: 自分のタスク ──
+  const _myName = typeof currentUserName !== "undefined" ? currentUserName : "";
+  const _myTasks = _myName ? (_personTasks[_myName] || []) : [];
+  const myTasksHtml = _myName && _myTasks.length > 0 ? (() => {
+    const sorted = [..._myTasks].sort((a,b)=>a.priority-b.priority);
+    const urgentCount = sorted.filter(t=>t.priority===1).length;
+    const hourStr = now.getHours() < 12 ? "おはようございます" : now.getHours() < 18 ? "こんにちは" : "お疲れ様です";
+    return `<div class="db2-my-tasks">
+      <div class="db2-my-tasks-hd">
+        <div class="db2-my-tasks-greeting">
+          <span class="db2-my-tasks-wave">👋</span>
+          <span>${hourStr}、<strong>${escapeHtml(_myName)}</strong>さん</span>
+          ${urgentCount > 0 ? `<span class="db2-my-tasks-urgent-badge">🚨 緊急 ${urgentCount}件</span>` : ""}
+        </div>
+        <span class="db2-my-tasks-count">あなたの担当: ${_myTasks.length}件の対応が必要</span>
+      </div>
+      <div class="db2-my-tasks-list">
+        ${sorted.slice(0, 5).map(t => `<button class="db2-person-task db2-person-task--${t.cls||"info"}" data-nav-product-detail="${escapeHtml(t.pid)}">
+          <span class="db2-person-task-icon">${t.icon}</span>
+          <div class="db2-person-task-body">
+            <span class="db2-person-task-pname">${escapeHtml(t.pname||"名称未入力")}</span>
+            <span class="db2-person-task-label">${escapeHtml(t.label)}</span>
+          </div>
+          <span class="db2-person-task-arrow">›</span>
+        </button>`).join("")}
+        ${_myTasks.length > 5 ? `<button class="db2-my-tasks-more" data-set-responsible-filter="${escapeHtml(_myName)}" data-nav="products">他 ${_myTasks.length-5} 件を確認 →</button>` : ""}
+      </div>
+    </div>`;
+  })() : "";
+
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   const todayStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日（${weekdays[now.getDay()]}）`;
 
@@ -259,9 +348,30 @@ function dashboardHtml() {
     expiringSoonCount > 0
       ? `<div class="db2-alert db2-alert-warn"><span>⏰</span><span><strong>${expiringSoonCount}件</strong>が30日以内に賞味期限を迎えます</span><button class="db2-alert-btn" data-todo-key="expiringSoon">確認する →</button></div>`
       : "",
+    zeroStockCount > 0
+      ? `<div class="db2-alert db2-alert-danger"><span>📦</span><span><strong>${zeroStockCount}件</strong>の発売商品が在庫0です</span><button class="db2-alert-btn" data-todo-key="noStock">確認する →</button></div>`
+      : "",
+    lowStockCount > 0
+      ? `<div class="db2-alert db2-alert-warn"><span>📉</span><span><strong>${lowStockCount}件</strong>の発売商品が残り5個以下です</span><button class="db2-alert-btn" data-todo-key="lowStock">在庫確認 →</button></div>`
+      : "",
+    staleCount > 0
+      ? `<div class="db2-alert db2-alert-info"><span>⏳</span><span><strong>${staleCount}件</strong>の商品が6ヶ月以上更新されていません。成分・法令の見直しを推奨します</span><button class="db2-alert-btn" data-todo-key="stale">確認する →</button></div>`
+      : "",
     stg.pct >= 80
       ? `<div class="db2-alert db2-alert-${stg.pct >= 95 ? "danger" : "warn"}"><span>${stg.pct >= 95 ? "🚨" : "⚠️"}</span><span>保存容量が残りわずかです（${stg.usedMB}MB / 5MB使用中）</span><button class="db2-alert-btn" data-nav="settings-nav">設定 →</button></div>`
       : "",
+    (() => {
+      if (typeof demoMode !== "undefined" && demoMode) return ""; // デモ中は非表示
+      const pi = typeof PLANS !== "undefined" ? (PLANS[typeof currentPlan !== "undefined" ? currentPlan : "free"] || PLANS.free) : null;
+      if (!pi || pi.limit === Infinity) return "";
+      const used = products.length;
+      const pct = Math.round(used / pi.limit * 100);
+      if (pct < 80) return "";
+      const remaining = pi.limit - used;
+      return pct >= 100
+        ? `<div class="db2-alert db2-alert-danger"><span>🚫</span><span><strong>${pi.label}プランの上限（${pi.limit}商品）</strong>に達しました。新しい商品を追加するにはプランのアップグレードが必要です</span><button class="db2-alert-btn" data-nav="settings-nav">アップグレード →</button></div>`
+        : `<div class="db2-alert db2-alert-warn"><span>📊</span><span>${pi.label}プランの残り枠は<strong>${remaining}件</strong>です（${used}/${pi.limit}件使用中）</span><button class="db2-alert-btn" data-nav="settings-nav">プランを確認 →</button></div>`;
+    })(),
   ].filter(Boolean).join("");
 
   const headerHtml = `
@@ -276,12 +386,21 @@ function dashboardHtml() {
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <div class="db2-today-badge">${todayStr}</div>
+        ${(() => {
+          const hasPerm = typeof Notification !== "undefined" && Notification.permission === "granted";
+          const lastN = typeof lastNotifDate !== "undefined" ? lastNotifDate : null;
+          const lastLabel = lastN ? `最終: ${lastN}` : "未設定";
+          return hasPerm
+            ? `<button class="db2-notif-btn db2-notif-btn--on" data-action="setup-notif" title="${lastLabel}">🔔 通知ON</button>`
+            : `<button class="db2-notif-btn" data-action="setup-notif" title="週次サマリー通知を設定">🔔 週次通知</button>`;
+        })()}
         <button class="demo-start-btn demo-start-btn--sm" data-action="demo-start">🎯 デモ</button>
+        <button class="db2-export-btn" data-action="export-csv" title="全商品データをExcel対応CSVでダウンロード">📥 CSV出力</button>
       </div>
     </div>
     <div class="db2-kpi-row">
       <button class="db2-kpi-card db2-kpi-green" data-nav="products" data-set-filter="all">
-        <div class="db2-kpi-val">${onSaleCount}</div>
+        <div class="db2-kpi-val">${onSaleCount}${_relDiffHtml}</div>
         <div class="db2-kpi-lbl">✅ 発売中</div>
       </button>
       <button class="db2-kpi-card db2-kpi-muted" data-nav="products" data-set-pipeline-filter="discontinued">
@@ -292,6 +411,10 @@ function dashboardHtml() {
         <div class="db2-kpi-val">${inDevCount}</div>
         <div class="db2-kpi-lbl">🔬 開発中</div>
       </button>
+      ${reviewCount > 0 ? `<button class="db2-kpi-card db2-kpi-red" data-nav="team-approval">
+        <div class="db2-kpi-val">${reviewCount}</div>
+        <div class="db2-kpi-lbl">👥 承認待ち</div>
+      </button>` : ""}
       <button class="db2-kpi-card ${approvedForRelease > 0 ? "db2-kpi-purple" : "db2-kpi-muted"}" data-nav="dev-products">
         <div class="db2-kpi-val">${approvedForRelease}</div>
         <div class="db2-kpi-lbl">🚀 発売準備完了</div>
@@ -308,6 +431,17 @@ function dashboardHtml() {
         <div class="db2-kpi-val">${avgProfitRate}%</div>
         <div class="db2-kpi-lbl">💹 平均粗利率</div>
       </div>` : ""}
+      ${(zeroStockCount + lowStockCount) > 0 ? `<button class="db2-kpi-card ${zeroStockCount > 0 ? "db2-kpi-red" : "db2-kpi-amber"}" data-nav="products" data-set-filter="noStock">
+        <div class="db2-kpi-val">${zeroStockCount + lowStockCount}</div>
+        <div class="db2-kpi-lbl">📦 在庫要確認</div>
+      </button>` : ""}
+      ${complianceRate !== null ? (complianceRate < 100 ? `<button class="db2-kpi-card ${complianceRate >= 80 ? "db2-kpi-amber" : "db2-kpi-red"}" data-nav="products" data-set-filter="hasLabelErrors" title="表示エラーのある商品を確認する">
+        <div class="db2-kpi-val">${complianceRate}%</div>
+        <div class="db2-kpi-lbl">🏷 表示適合率</div>
+      </button>` : `<div class="db2-kpi-card db2-kpi-green" title="食品表示エラーがない発売商品の割合">
+        <div class="db2-kpi-val">${complianceRate}%</div>
+        <div class="db2-kpi-lbl">🏷 表示適合率</div>
+      </div>`) : ""}
     </div>
   </div>`;
 
@@ -327,8 +461,10 @@ function dashboardHtml() {
       </div>
       ${aiBriefingLoading
         ? `<div class="db2-ai-loading"><span class="ai-briefing-spinner"></span>AIが今日の状況を分析中...</div>`
+        : aiBriefingText === "__offline__"
+        ? `<div class="db2-ai-offline"><span>⚡</span><span>AIサーバーに接続できませんでした。</span><button class="action" data-action="fetch-ai-briefing">↺ 再試行</button></div>`
         : aiBriefingText
-        ? `<p class="db2-ai-text">${escapeHtml(aiBriefingText)}</p>`
+        ? `<div class="db2-ai-text">${typeof renderMarkdown === "function" ? renderMarkdown(aiBriefingText) : escapeHtml(aiBriefingText)}</div>`
         : `<div class="db2-ai-empty">
             <button class="action primary db2-ai-gen-btn" data-action="fetch-ai-briefing">✦ 今日のブリーフィングを生成</button>
             <span class="db2-ai-hint">商品データをAIが分析し、今日の優先タスクを提案します</span>
@@ -466,7 +602,7 @@ function dashboardHtml() {
       ? `<img class="recent-prod-thumb" src="${p.imageDataUrl}" alt="" onerror="this.onerror=null;this.outerHTML='<div class=\\'recent-prod-thumb-ph recent-prod-thumb-err\\'>⚠️</div>'">`
       : `<div class="recent-prod-thumb-ph">📦</div>`;
     const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || ((p.phase||"released") === "development" ? "draft" : "on_sale"))) || PRODUCT_STATUSES[0];
-    const updStr = (p.updatedAt||"").substring(0, 10);
+    const updStr = formatDate(p.updatedAt||"");
     // 健康バッジ: 軽量版（完成度 % を色付きバッジとして表示、calcProductHealthは呼ばない）
     const badgeColor = pctColor;
     const urgentTask = _personTasks[p.specResponsible?.trim()]?.find(t=>t.pid===p.id&&t.priority===1);
@@ -556,6 +692,75 @@ function dashboardHtml() {
     </div>
   </div>` : "";
 
+  // ── 開発パイプラインファネル ──
+  const _funnelStages = [
+    { id:"ideation",    label:"💡 企画",  color:"#7c3aed" },
+    { id:"development", label:"🔨 開発",  color:"#2563eb" },
+    { id:"testing",     label:"🧪 試作",  color:"#0891b2" },
+    { id:"review",      label:"👥 審査",  color:"#d97706" },
+    { id:"approved",    label:"✅ 承認",  color:"#16a34a" },
+  ];
+  const _funnelCounts = Object.fromEntries(_funnelStages.map(s => [s.id, 0]));
+  products.filter(p => p.phase === "development").forEach(p => {
+    // approvalStatus=review → 審査ステージとみなす
+    const phase = p.approvalStatus === "review" ? "review"
+                : p.productStatus === "approved" ? "approved"
+                : (p.devProject?.devPhase || "development");
+    const key = _funnelCounts[phase] !== undefined ? phase : "development";
+    _funnelCounts[key]++;
+  });
+  const _maxFunnel = Math.max(...Object.values(_funnelCounts), 1);
+  const devFunnelHtml = inDevCount > 0 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">🔬 開発パイプライン <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:4px">${inDevCount}件</span></div>
+    <div class="dev-funnel">
+      ${_funnelStages.map(s => {
+        const cnt = _funnelCounts[s.id] || 0;
+        const pct = Math.round(cnt / _maxFunnel * 100);
+        return `<div class="dev-funnel-row${cnt === 0 ? " dev-funnel-row--zero" : ""}">
+          <span class="dev-funnel-lbl">${s.label}</span>
+          <div class="dev-funnel-bar-wrap">
+            <div class="dev-funnel-bar" style="width:${pct}%;background:${s.color}"></div>
+          </div>
+          <span class="dev-funnel-cnt${cnt === 0 ? " dev-funnel-cnt--zero" : ""}">${cnt}</span>
+        </div>`;
+      }).join("")}
+      <div class="dev-funnel-arrow-row">
+        <span class="dev-funnel-arrow">↓ 発売</span>
+        <span class="dev-funnel-on-sale">🚀 発売中 ${onSaleCount}件</span>
+      </div>
+    </div>
+  </div>` : "";
+
+  // ── 月次発売トレンド（過去6ヶ月）──
+  const _now = new Date();
+  const _trendMonths = Array.from({length: 6}, (_, i) => {
+    const d = new Date(_now.getFullYear(), _now.getMonth() - (5 - i), 1);
+    return { key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`, label: `${d.getMonth()+1}月` };
+  });
+  const _relByMonth = {};
+  rel.forEach(p => { if (p.releasedAt) { const m = p.releasedAt.substring(0,7); _relByMonth[m] = (_relByMonth[m]||0)+1; } });
+  const _trendData = _trendMonths.map(m => ({ ...m, count: _relByMonth[m.key]||0 }));
+  const _maxTrend = Math.max(..._trendData.map(m => m.count), 1);
+  const _devByMonth = {};
+  products.filter(p => p.phase === "development" && p.updatedAt).forEach(p => {
+    const m = (p.updatedAt||"").substring(0,7);
+    if (_trendMonths.some(t => t.key === m)) _devByMonth[m] = (_devByMonth[m]||0)+1;
+  });
+  const trendHtml = _trendData.some(m => m.count > 0 || _devByMonth[m.key]) ? `<div class="dash-panel">
+    <div class="dash-panel-hd">📈 月次トレンド <span style="font-size:10px;font-weight:400;color:var(--text-sub);margin-left:4px">過去6ヶ月</span></div>
+    <div class="trend-chart">
+      ${_trendData.map(m => `<div class="trend-col">
+        <div class="trend-bars">
+          <div class="trend-bar trend-bar--dev" style="height:${_devByMonth[m.key]?Math.max(4,Math.round((_devByMonth[m.key]||0)/_maxTrend*56)):0}px" title="開発中更新:${_devByMonth[m.key]||0}件"></div>
+          <div class="trend-bar trend-bar--rel" style="height:${m.count?Math.max(4,Math.round(m.count/_maxTrend*56)):0}px" title="発売:${m.count}件"></div>
+        </div>
+        <div class="trend-val">${m.count||(_devByMonth[m.key]?"·":"")}</div>
+        <div class="trend-lbl">${m.label}</div>
+      </div>`).join("")}
+    </div>
+    <div class="trend-legend"><span class="trend-legend-dot trend-legend-dot--rel"></span>発売 <span class="trend-legend-dot trend-legend-dot--dev" style="margin-left:8px"></span>開発</div>
+  </div>` : "";
+
   const catCounts = {};
   rel.forEach(p => { if (p.category) catCounts[p.category] = (catCounts[p.category]||0)+1; });
   const catEntries = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
@@ -590,6 +795,136 @@ function dashboardHtml() {
     <div class="dash-panel-hd">💰 原価サマリー</div>
     <div class="dash-panel-empty">原価を登録すると利益率サマリーが表示されます<br><button class="dash-panel-empty-btn" data-nav="products">商品に原価を登録する →</button></div>
   </div>`;
+
+  // 収益性ランキング TOP5
+  const _profitRanked = relDerivedAll
+    .filter(({c}) => c.profitRate !== null && c.profitRate !== undefined)
+    .sort((a, b) => b.c.profitRate - a.c.profitRate).slice(0, 5);
+  const profitRankHtml = _profitRanked.length >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">🏆 粗利率 TOP ${_profitRanked.length}</div>
+    <div class="cat-chart-list">
+      ${_profitRanked.map(({p, c}, i) => {
+        const pct = Math.round(c.profitRate);
+        const barColor = pct >= 60 ? "#16a34a" : pct >= 40 ? "#2563eb" : "#d97706";
+        return `<button class="cat-chart-row" data-nav-product-detail="${escapeHtml(p.id)}">
+          <span class="profit-rank-num">${i+1}</span>
+          <span class="cat-chart-label">${escapeHtml(p.internalName||p.name||"—")}</span>
+          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.min(100,pct)}%;background:${barColor}"></div></div>
+          <span class="cat-chart-count" style="color:${barColor}">${pct}%</span>
+        </button>`;
+      }).join("")}
+    </div>
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
+  // ④b 食品表示チェック全件サマリー
+  // ─────────────────────────────────────────────────
+  const _lcSummary = (() => {
+    if (typeof checkFoodLabel !== "function") return null;
+    let errCount = 0, warnCount = 0, okCount = 0;
+    const errProds = [];
+    relDerivedAll.forEach(({p, d}) => {
+      const issues = checkFoodLabel(p, d);
+      const errs = issues.filter(i => i.level === "error").length;
+      const warns = issues.filter(i => i.level === "warn").length;
+      if (errs > 0) { errCount++; errProds.push({ p, errs }); }
+      else if (warns > 0) warnCount++;
+      else okCount++;
+    });
+    return { errCount, warnCount, okCount, errProds: errProds.sort((a,b)=>b.errs-a.errs).slice(0,3) };
+  })();
+  const labelCheckSummaryHtml = _lcSummary && ((_lcSummary.errCount + _lcSummary.warnCount) > 0) ? `<div class="dash-panel">
+    <div class="dash-panel-hd">🏷 食品表示チェック</div>
+    <div class="lcs-row">
+      <div class="lcs-chip lcs-chip--error"><span class="lcs-num">${_lcSummary.errCount}</span><span class="lcs-lbl">エラーあり</span></div>
+      <div class="lcs-chip lcs-chip--warn"><span class="lcs-num">${_lcSummary.warnCount}</span><span class="lcs-lbl">警告あり</span></div>
+      <div class="lcs-chip lcs-chip--ok"><span class="lcs-num">${_lcSummary.okCount}</span><span class="lcs-lbl">問題なし</span></div>
+    </div>
+    ${_lcSummary.errProds.length ? `<div class="lcs-err-list">${_lcSummary.errProds.map(({p, errs}) => `<button class="lcs-err-item" data-nav-product-detail="${escapeHtml(p.id)}">
+      <span class="lcs-err-name">${escapeHtml(p.internalName||p.name||"—")}</span>
+      <span class="lcs-err-count">エラー${errs}件</span>
+    </button>`).join("")}</div>` : ""}
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
+  // ⑤0 販売チャネル別商品数
+  // ─────────────────────────────────────────────────
+  const _chMap = new Map();
+  rel.forEach(p => {
+    (p.salesChannels || []).forEach(ch => {
+      _chMap.set(ch, (_chMap.get(ch) || 0) + 1);
+    });
+  });
+  const _chRanked = [..._chMap.entries()].sort((a, b) => b[1] - a[1]);
+  const _maxCh = _chRanked.reduce((m, [, v]) => Math.max(m, v), 1);
+  const channelDistHtml = _chRanked.length >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">🛒 販売チャネル別商品数</div>
+    <div class="cat-chart-list">
+      ${_chRanked.map(([name, count]) => `<div class="cat-chart-row">
+        <span class="cat-chart-label">${escapeHtml(name)}</span>
+        <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(count/_maxCh*100)}%"></div></div>
+        <span class="cat-chart-count">${count}</span>
+      </div>`).join("")}
+    </div>
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
+  // ⑤a アレルゲン分布
+  // ─────────────────────────────────────────────────
+  const _allergenMap = new Map();
+  relDerivedAll.forEach(({p, d}) => {
+    (d.allergens || []).forEach(a => {
+      _allergenMap.set(a, (_allergenMap.get(a) || 0) + 1);
+    });
+  });
+  const _allergenRanked = [..._allergenMap.entries()].sort((a, b) => b[1] - a[1]);
+  const _maxAllergen = _allergenRanked.reduce((m, [, v]) => Math.max(m, v), 1);
+  const allergenDistHtml = _allergenRanked.length >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">🥜 アレルゲン含有商品数</div>
+    <div class="cat-chart-list">
+      ${_allergenRanked.map(([name, count]) => {
+        const pct = Math.round(count / _maxAllergen * 100);
+        const relPct = Math.round(count / Math.max(rel.length, 1) * 100);
+        const barColor = relPct >= 50 ? "#dc2626" : relPct >= 30 ? "#d97706" : "#64748b";
+        return `<button class="cat-chart-row" data-set-allergen-filter="${escapeHtml(name)}" title="${escapeHtml(name)}を含む商品を絞り込む">
+          <span class="cat-chart-label">${escapeHtml(name)}</span>
+          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${pct}%;background:${barColor}"></div></div>
+          <span class="cat-chart-count" style="color:${barColor}">${count}</span>
+        </button>`;
+      }).join("")}
+    </div>
+    <p style="font-size:11px;color:var(--text-sub,#94a3b8);margin:8px 0 0">クリックで対象商品を絞り込み</p>
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
+  // ⑤b 担当者別商品数
+  // ─────────────────────────────────────────────────
+  const _respMap = new Map();
+  relDerivedAll.forEach(({p, d}) => {
+    const r = p.specResponsible || "";
+    if (!r) return;
+    if (!_respMap.has(r)) _respMap.set(r, { total: 0, done: 0 });
+    const entry = _respMap.get(r);
+    entry.total++;
+    if (calcCompletion(p, d).pct >= 100) entry.done++;
+  });
+  const _respRanked = [..._respMap.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 6);
+  const _maxResp = _respRanked.reduce((m, [, v]) => Math.max(m, v.total), 1);
+  const responsibleHtml = _respRanked.length >= 2 ? `<div class="dash-panel">
+    <div class="dash-panel-hd">👤 担当者別 商品数</div>
+    <div class="cat-chart-list">
+      ${_respRanked.map(([name, v]) => {
+        const doneRate = Math.round(v.done / v.total * 100);
+        const barColor = doneRate >= 100 ? "#16a34a" : doneRate >= 60 ? "#2563eb" : "#d97706";
+        return `<button class="cat-chart-row" data-set-responsible-filter="${escapeHtml(name)}" data-nav="products" title="クリックで絞り込み">
+          <span class="cat-chart-label">${escapeHtml(name)}</span>
+          <div class="cat-chart-bar-wrap"><div class="cat-chart-bar" style="width:${Math.round(v.total/_maxResp*100)}%;background:${barColor}"></div></div>
+          <span class="cat-chart-count">${v.total}</span>
+          <span style="font-size:10px;color:${barColor};flex-shrink:0;width:36px;text-align:right">${doneRate}%完</span>
+        </button>`;
+      }).join("")}
+    </div>
+  </div>` : "";
 
   // ─────────────────────────────────────────────────
   // ⑥ システム状況
@@ -660,7 +995,7 @@ function dashboardHtml() {
         const daysStr = daysLeft !== null
           ? (daysLeft < 0 ? `<span class="db2-devproj-late">⚠ ${Math.abs(daysLeft)}日超過</span>`
              : daysLeft <= 30 ? `<span class="db2-devproj-soon">${daysLeft}日後</span>`
-             : `<span class="db2-devproj-date">${targetDate}</span>`)
+             : `<span class="db2-devproj-date">${formatDate(targetDate)}</span>`)
           : "";
         const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || "draft")) || PRODUCT_STATUSES[0];
         return `<button class="db2-devproj-card" data-nav-product-detail="${escapeHtml(p.id)}">
@@ -693,7 +1028,11 @@ function dashboardHtml() {
       activityItems.push({ p, ev });
     });
   });
-  activityItems.sort((a, b) => (b.ev.savedAt || "").localeCompare(a.ev.savedAt || ""));
+  const _parseActivityDate = (s) => {
+    if (!s) return 0;
+    try { return new Date(s.replace(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s/, "$1-$2-$3T")).getTime(); } catch { return 0; }
+  };
+  activityItems.sort((a, b) => _parseActivityDate(b.ev.savedAt) - _parseActivityDate(a.ev.savedAt));
   const topActivity = activityItems.slice(0, 10);
   const activityFeedHtml = topActivity.length > 0 ? `
   <div class="db2-section-wrap">
@@ -743,27 +1082,112 @@ function dashboardHtml() {
   </div>` : "";
 
   // ─────────────────────────────────────────────────
+  // ⑧ 今月の発売予定商品（開発中）
+  // ─────────────────────────────────────────────────
+  const _thisMonthEnd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-31`;
+  const _thisMonthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const upcomingReleases = products.filter(p =>
+    p.phase === "development" &&
+    p.devProject?.targetReleaseDate &&
+    p.devProject.targetReleaseDate >= todayIso &&
+    p.devProject.targetReleaseDate <= _thisMonthEnd
+  ).sort((a, b) => a.devProject.targetReleaseDate.localeCompare(b.devProject.targetReleaseDate));
+  const upcomingReleasesHtml = upcomingReleases.length > 0 ? `
+  <div class="db2-section-wrap">
+    <div class="db2-section-hd">📅 今月の発売予定 <span class="db2-section-hd-sub">${now.getMonth()+1}月中</span></div>
+    <div class="db2-released-list">
+      ${upcomingReleases.map(p => {
+        const d = p.devProject.targetReleaseDate;
+        const dLeft = Math.ceil((new Date(d) - new Date(todayIso)) / 86400000);
+        const cls = dLeft <= 7 ? "db2-upcoming--urgent" : dLeft <= 14 ? "db2-upcoming--warn" : "";
+        const ps = PRODUCT_STATUSES.find(s => s.id === (p.productStatus || "draft"));
+        return `<button class="db2-released-row" data-nav-product-detail="${escapeHtml(p.id)}">
+          <span class="db2-released-date ${cls}">${escapeHtml(d)}</span>
+          <span class="db2-released-name">${escapeHtml(p.internalName || p.name || "（名称未入力）")}</span>
+          ${ps ? `<span class="dps-chip" style="background:${ps.bg};color:${ps.color};border:1px solid ${ps.color}40;font-size:10px;padding:1px 6px">${ps.label}</span>` : ""}
+          <span class="db2-released-arrow">›</span>
+        </button>`;
+      }).join("")}
+    </div>
+  </div>` : "";
+
+  // ─────────────────────────────────────────────────
+  // ⑨ 月次発売トレンドグラフ
+  // ─────────────────────────────────────────────────
+  const trendChartHtml = (() => {
+    const MONTHS = 12;
+    const months = [];
+    for (let i = MONTHS - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({ year: d.getFullYear(), month: d.getMonth() + 1, label: `${d.getMonth()+1}月` });
+    }
+    // releasedAt は ja-JP ロケール (例: "2026/7/18" or "2026年7月18日")
+    const parseReleasedAt = (s) => {
+      if (!s) return null;
+      const m = s.match(/(\d{4})[\/年](\d{1,2})/);
+      return m ? { year: parseInt(m[1]), month: parseInt(m[2]) } : null;
+    };
+    const counts = months.map(({ year, month }) => {
+      return products.filter(p => {
+        const r = parseReleasedAt(p.releasedAt);
+        return r && r.year === year && r.month === month && p.productStatus !== "discontinued";
+      }).length;
+    });
+    const maxC = Math.max(...counts, 1);
+    const totalReleased = counts.reduce((s, c) => s + c, 0);
+    if (totalReleased === 0) return "";
+    const W = 320, H = 72, PAD = 4;
+    const barW = Math.floor((W - PAD * 2) / MONTHS) - 2;
+    const bars = months.map(({ label }, i) => {
+      const h = Math.max(2, Math.round((counts[i] / maxC) * (H - 20)));
+      const x = PAD + i * ((W - PAD * 2) / MONTHS);
+      const y = H - h - 16;
+      const isThisMonth = i === MONTHS - 1;
+      const fill = isThisMonth ? "#2563eb" : counts[i] > 0 ? "#93c5fd" : "#e2e8f0";
+      const labelY = H - 2;
+      const showLabel = i === 0 || i === MONTHS - 1 || i === Math.floor(MONTHS / 2);
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${fill}" rx="2"/>
+        ${counts[i] > 0 ? `<text x="${x + barW/2}" y="${y - 2}" text-anchor="middle" font-size="8" fill="#64748b">${counts[i]}</text>` : ""}
+        ${showLabel ? `<text x="${x + barW/2}" y="${labelY}" text-anchor="middle" font-size="8" fill="#94a3b8">${label}</text>` : ""}`;
+    }).join("");
+    return `<div class="db2-section-wrap db2-trend-wrap">
+      <div class="db2-section-hd">📈 月次発売トレンド <span class="db2-section-hd-sub">直近12ヶ月 計${totalReleased}件</span></div>
+      <svg viewBox="0 0 ${W} ${H}" class="db2-trend-chart" aria-label="月次発売トレンドグラフ">${bars}</svg>
+    </div>`;
+  })();
+
+  // ─────────────────────────────────────────────────
   // 組み立て
   // ─────────────────────────────────────────────────
   return saasLayout("ダッシュボード", `
     ${alertBits}
     ${headerHtml}
+    ${myTasksHtml}
     ${urgentHtml}
-    ${personTodoHtml}
-    ${devProjectsHtml}
-    ${recentHtml}
-    ${activityFeedHtml}
-    ${recentReleasedHtml}
     <div class="db2-top-grid">
       <div class="db2-top-left">${aiTopHtml}</div>
       <div class="db2-top-right">${quickHtml}</div>
     </div>
+    ${activityFeedHtml}
+    ${personTodoHtml}
+    ${devProjectsHtml}
+    ${recentHtml}
+    ${recentReleasedHtml}
+    ${upcomingReleasesHtml}
+    ${trendChartHtml}
     <div class="db2-bottom-grid">
       <div class="db2-bottom-main">${aiRecommHtml}</div>
       <div class="db2-bottom-side">
+        ${devFunnelHtml}
+        ${trendHtml}
         ${compDistHtml}
         ${catHtml}
         ${costHtml}
+        ${profitRankHtml}
+        ${labelCheckSummaryHtml}
+        ${channelDistHtml}
+        ${allergenDistHtml}
+        ${responsibleHtml}
       </div>
     </div>
     ${systemHtml}

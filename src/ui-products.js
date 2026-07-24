@@ -394,11 +394,34 @@ function productsListHtml() {
     ? `<div class="saved-search-row">${savedSearchPresets.map((s,i)=>`<span class="saved-search-chip${currentLabel===s.label?" active":""}"><button class="saved-search-apply" data-apply-search="${i}" title="クリックで適用">${escapeHtml(s.label)}</button><button class="saved-search-del" data-del-search="${i}" title="削除">×</button></span>`).join("")}</div>`
     : "";
 
+  const filterBadge = activeFilterCount > 0 ? `<span class="filter-badge">${activeFilterCount}</span>` : "";
   return saasLayout("商品管理", `
     <div class="master-toolbar">
-      <div class="search-wrap">
-        <input class="search-box" placeholder="商品名・品番・カテゴリ・JAN・担当者・アレルゲンで検索... (/ キー)" data-master-search value="${escapeHtml(masterSearch)}">
-        ${masterSearch ? `<button class="search-clear-btn" data-clear-search title="検索をクリア">✕</button>` : ""}
+      <div class="toolbar-top">
+        <div class="search-wrap">
+          <input class="search-box" placeholder="商品名・品番・カテゴリ・JAN・担当者・アレルゲンで検索... (/ キー)" data-master-search value="${escapeHtml(masterSearch)}">
+          ${masterSearch ? `<button class="search-clear-btn" data-clear-search title="検索をクリア">✕</button>` : ""}
+        </div>
+        <button class="filter-toggle-btn${masterFilterOpen ? " open" : ""}${activeFilterCount > 0 ? " has-active" : ""}" data-toggle-filter title="絞り込み条件を${masterFilterOpen ? "閉じる" : "開く"}">
+          ▼ 絞り込み${filterBadge}
+        </button>
+        <select class="sort-select" data-master-sort title="並び替え">
+          ${Object.entries(SORT_LABELS).map(([v,l])=>`<option value="${v}"${masterSort===v?" selected":""}>${l}</option>`).join("")}
+        </select>
+        <div class="view-toggle" role="group" aria-label="表示切替">
+          <button class="view-toggle-btn${masterView==="card"?" active":""}" data-master-view="card" title="カード表示">⊞ カード</button>
+          <button class="view-toggle-btn${masterView==="table"?" active":""}" data-master-view="table" title="テーブル表示">☰ テーブル</button>
+        </div>
+        ${registerBtnHtml()}
+      </div>
+      <div class="filter-panel${masterFilterOpen ? "" : " filter-panel--closed"}">
+        ${pipelineSelect}
+        ${todoFilterSelect}
+        ${categorySelect}
+        ${completionSelect}
+        ${responsibleSelect}
+        ${isAnyActive ? `<button class="action csv-filtered-btn" data-action="export-csv-filtered" title="現在の絞り込み結果のみCSV出力">↓ 絞込CSV(${list.length}件)</button>` : ""}
+        <button class="action csv-all-btn" data-action="export-csv" title="全商品データをExcel対応CSVでダウンロード">📥 CSV出力</button>
       </div>
       <div class="filter-btns">
         ${["all","starred","active","draft"].map(f=>`<button class="filter-btn${masterFilter===f?" active":""}" data-master-filter="${f}">${{all:"すべて",starred:"★お気に入り",active:"公開中",draft:"下書き"}[f]}</button>`).join("")}
@@ -412,23 +435,6 @@ function productsListHtml() {
         ${resetAllBtn}
         ${saveSearchBtn}
         ${resultCount}
-      </div>
-      <div class="toolbar-right">
-        ${pipelineSelect}
-        ${todoFilterSelect}
-        ${categorySelect}
-        ${completionSelect}
-        ${responsibleSelect}
-        <select class="sort-select" data-master-sort title="並び替え">
-          ${Object.entries(SORT_LABELS).map(([v,l])=>`<option value="${v}"${masterSort===v?" selected":""}>${l}</option>`).join("")}
-        </select>
-${isAnyActive ? `<button class="action csv-filtered-btn" data-action="export-csv-filtered" title="現在の絞り込み結果のみCSV出力">↓ 絞込CSV(${list.length}件)</button>` : ""}
-        <button class="action csv-all-btn" data-action="export-csv" title="全商品データをExcel対応CSVでダウンロード">📥 CSV出力</button>
-        <div class="view-toggle" role="group" aria-label="表示切替">
-          <button class="view-toggle-btn${masterView==="card"?" active":""}" data-master-view="card" title="カード表示">⊞ カード</button>
-          <button class="view-toggle-btn${masterView==="table"?" active":""}" data-master-view="table" title="テーブル表示">☰ テーブル</button>
-        </div>
-        ${registerBtnHtml()}
       </div>
     </div>
     ${presetChips}

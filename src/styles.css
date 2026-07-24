@@ -1344,7 +1344,24 @@ button:disabled {
 .dash-product-actions { display: flex; gap: 6px; }
 
 /* Product Master */
-.master-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+.master-toolbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.toolbar-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filter-toggle-btn {
+  padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-sub); font-size: 13px;
+  cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 5px;
+  transition: background .15s, border-color .15s;
+}
+.filter-toggle-btn:hover { background: var(--bg); }
+.filter-toggle-btn.open { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.filter-toggle-btn.has-active { border-color: #2563eb; color: #1d4ed8; font-weight: 600; }
+.filter-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 4px;
+  background: #2563eb; color: #fff; border-radius: 99px; font-size: 11px; font-weight: 700;
+}
+.filter-panel { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+.filter-panel--closed { display: none; }
 .master-list { display: flex; flex-direction: column; gap: 12px; }
 .master-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.05); cursor: pointer; transition: box-shadow .15s, border-color .15s; text-align: left; width: 100%; display: block; }
 .master-card:hover { box-shadow: 0 4px 12px rgba(37,99,235,.12); border-color: #93c5fd; }
@@ -1543,8 +1560,9 @@ button:disabled {
 
 @media (max-width: 560px) {
   .dash-stats { grid-template-columns: 1fr 1fr; }
-  .master-toolbar { flex-direction: column; align-items: stretch; }
+  .toolbar-top { flex-wrap: wrap; }
   .filter-btns { flex-wrap: wrap; }
+  .filter-panel { flex-wrap: wrap; }
   .saas-content { padding: 12px 10px 80px; }
 
   /* 商品詳細 各セクションの余白削減 */

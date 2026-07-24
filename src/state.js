@@ -78,6 +78,7 @@ let masterResponsibleFilter = ""; // "" | 担当者名
 let masterAllergenFilter   = ""; // "" | アレルゲン名
 let masterIngFilter        = ""; // "" | 原材料名（クロス検索）
 let masterView = safeGet("fmcc-master-view") || "card"; // "card" | "table"
+let masterFilterOpen = safeGet("fmcc-filter-open") === "true"; // 絞り込みパネル開閉
 let masterSelected = new Set(); // テーブルビュー一括操作用選択済み商品ID
 
 // ── AI棚スキャン ────────────────────────────────────────────────────────

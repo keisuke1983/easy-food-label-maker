@@ -1605,6 +1605,9 @@ function setupDelegation() {
     // [data-clear-all-filters]
     if (t.closest("[data-clear-all-filters]")) { masterFilter="all"; masterCategoryFilter=""; masterCompletionFilter=""; masterPipelineFilter=""; masterResponsibleFilter=""; masterAllergenFilter=""; masterIngFilter=""; render(); return; }
 
+    // [data-toggle-filter] — 絞り込みパネル開閉
+    if (t.closest("[data-toggle-filter]")) { masterFilterOpen = !masterFilterOpen; safeSet("fmcc-filter-open", masterFilterOpen ? "true" : "false"); render(); return; }
+
     // [data-master-filter]
     const mfEl = t.closest("[data-master-filter]");
     if (mfEl) { masterFilter=mfEl.dataset.masterFilter; render(); return; }

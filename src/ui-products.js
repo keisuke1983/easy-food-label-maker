@@ -422,12 +422,7 @@ function productsListHtml() {
         <select class="sort-select" data-master-sort title="並び替え">
           ${Object.entries(SORT_LABELS).map(([v,l])=>`<option value="${v}"${masterSort===v?" selected":""}>${l}</option>`).join("")}
         </select>
-        <div class="ing-cross-search-wrap" title="原材料名を入力して、その原材料を使用している商品をすべて検索（サプライヤー変更の影響調査に）">
-          <span class="ing-cross-icon">🌾</span>
-          <input class="ing-cross-input" list="ing-cross-datalist" placeholder="原材料クロス検索..." value="${escapeHtml(masterIngFilter)}" data-master-ing-filter>
-          <datalist id="ing-cross-datalist">${(typeof ingMaster !== "undefined" ? ingMaster : []).slice(0, 200).map(n=>`<option value="${escapeHtml(n)}">`).join("")}</datalist>
-        </div>
-        ${isAnyActive ? `<button class="action csv-filtered-btn" data-action="export-csv-filtered" title="現在の絞り込み結果のみCSV出力">↓ 絞込CSV(${list.length}件)</button>` : ""}
+${isAnyActive ? `<button class="action csv-filtered-btn" data-action="export-csv-filtered" title="現在の絞り込み結果のみCSV出力">↓ 絞込CSV(${list.length}件)</button>` : ""}
         <button class="action csv-all-btn" data-action="export-csv" title="全商品データをExcel対応CSVでダウンロード">📥 CSV出力</button>
         <div class="view-toggle" role="group" aria-label="表示切替">
           <button class="view-toggle-btn${masterView==="card"?" active":""}" data-master-view="card" title="カード表示">⊞ カード</button>

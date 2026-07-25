@@ -6008,3 +6008,85 @@ body.fp-demo-active [class*='spec-body'] {
 :root[data-theme="dark"] .demo-select-flow { background: #0f172a; }
 :root[data-theme="dark"] .demo-type-badge--manage  { background: #1e3a6e; color: #93c5fd; }
 :root[data-theme="dark"] .demo-type-badge--develop { background: #064e3b; color: #6ee7b7; }
+
+/* ── ダッシュボード UI/UX 改善 (2026-07-25) ─────────────────────────────── */
+
+/* シンプルオンボーディング */
+.onboarding-simple {
+  max-width: 480px; margin: 60px auto; padding: 40px 24px;
+  text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 16px;
+}
+.onboarding-simple-icon { font-size: 52px; line-height: 1; }
+.onboarding-simple-title {
+  font-size: 22px; font-weight: 800; color: var(--text, #0f172a);
+  margin: 0; letter-spacing: -.4px;
+}
+.onboarding-simple-sub {
+  font-size: 14px; color: var(--text-sub, #64748b); margin: 0;
+  line-height: 1.7; max-width: 340px;
+}
+.onboarding-simple-actions {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin-top: 8px;
+}
+.onboarding-demo-link {
+  font-size: 13px; color: var(--text-sub, #64748b);
+  background: none; border: none; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+  padding: 0; margin-top: 4px;
+}
+.onboarding-demo-link:hover { color: var(--accent, #2563eb); }
+
+/* スマホ専用クイックアクション */
+.db2-mobile-quick {
+  display: none; gap: 8px; padding: 4px 0 12px;
+  flex-wrap: wrap;
+}
+.db2-mq-btn {
+  flex: 1; min-width: 100px; padding: 13px 10px;
+  border-radius: 10px; border: 1px solid var(--border, #e2e8f0);
+  background: var(--bg-card, #fff); font-size: 14px; font-weight: 600;
+  cursor: pointer; color: var(--text, #0f172a); text-align: center;
+  transition: background .15s;
+}
+.db2-mq-btn:hover { background: var(--bg-sub, #f8fafc); }
+
+/* 管理・コストセクション — デスクトップは両列グリッド */
+.db2-admin-section,
+.db2-cost-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+/* 担当者タスクのシンプルヘッダー */
+.db2-my-tasks-count {
+  font-size: 14px; font-weight: 700; color: var(--text, #0f172a);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+
+/* スマホ: KPI行・管理・コストを非表示、モバイルクイックを表示 */
+@media (max-width: 640px) {
+  .db2-mobile-quick { display: flex; }
+  .db2-kpi-row { display: none; }
+  .db2-header-top .db2-today-badge,
+  .db2-header-top .db2-notif-btn,
+  .db2-header-top .demo-start-btn--sm,
+  .db2-header-top .db2-export-btn,
+  .db2-brand-sub { display: none; }
+  .db2-admin-section,
+  .db2-cost-section { display: none; }
+  .db2-admin-section .db2-section-wrap,
+  .db2-cost-section .dash-panel { display: none; }
+  .db2-quick-section { display: none; }
+}
+
+/* ダークモード */
+@media (prefers-color-scheme: dark) {
+  .db2-mq-btn { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+  .onboarding-simple-title { color: #f1f5f9; }
+}
+:root[data-theme="dark"] .db2-mq-btn { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+:root[data-theme="dark"] .onboarding-simple-title { color: #f1f5f9; }

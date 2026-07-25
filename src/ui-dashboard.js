@@ -32,41 +32,16 @@ function calcTodo(derivedAll) {
 }
 
 function dashboardEmptyHtml() {
-  const STEPS = [
-    { ico: "📦", title: "商品を登録", desc: "商品名・原材料・製造者情報を入力" },
-    { ico: "🏷", title: "ラベルを自動生成", desc: "食品表示法に沿ったラベルをリアルタイム作成" },
-    { ico: "🤖", title: "AIが法令チェック", desc: "未入力項目の指摘・改善提案を自動実行" },
-  ];
-  return `<div class="onboarding-wrap">
-    <div class="onboarding-hero">
-      <img src="./assets/app-icon.svg" alt="" class="onboarding-icon">
-      <h1 class="onboarding-title">FoodPilot へようこそ</h1>
-      <p class="onboarding-sub">食品メーカーの商品ライフサイクルを一元管理する<br>AI搭載プラットフォーム</p>
+  return `<div class="onboarding-simple">
+    <div class="onboarding-simple-icon">📦</div>
+    <h2 class="onboarding-simple-title">最初の商品を登録しましょう</h2>
+    <p class="onboarding-simple-sub">商品名・原材料・製造者情報を入力するだけで、食品表示ラベルが自動生成されます。</p>
+    <div class="onboarding-simple-actions">
       ${registerBtnHtml()}
-      <button class="action demo-start-btn" data-action="demo-start">🎯 デモを開始（10分で価値を体感）</button>
-      <button class="action" data-nav="ai-consult-nav" style="margin-top:8px">💬 AI相談 — 食品表示・法令をAIに相談</button>
+      <button class="action" data-nav="reg-photo">📷 写真から登録</button>
+      <button class="action" data-nav="reg-ai-chat">🤖 AIで登録</button>
     </div>
-    <div class="onboarding-steps">
-      ${STEPS.map((s, i) => `
-        <div class="onboarding-step">
-          <div class="onboarding-step-num">${i + 1}</div>
-          <div class="onboarding-step-ico">${s.ico}</div>
-          <div class="onboarding-step-title">${s.title}</div>
-          <div class="onboarding-step-desc">${s.desc}</div>
-        </div>`).join('<div class="onboarding-arrow">→</div>')}
-    </div>
-    <div class="onboarding-features">
-      <div class="onboarding-feat"><span class="feat-ico">✓</span>食品表示法チェックリスト自動生成</div>
-      <div class="onboarding-feat"><span class="feat-ico">✓</span>原材料重量から栄養成分を自動計算</div>
-      <div class="onboarding-feat"><span class="feat-ico">✓</span>アレルゲン自動検出（28品目対応）</div>
-      <div class="onboarding-feat"><span class="feat-ico">✓</span>商品規格書・AI商品説明文の一括生成</div>
-      <div class="onboarding-feat"><span class="feat-ico">✓</span>原価・粗利管理ダッシュボード</div>
-      <div class="onboarding-feat"><span class="feat-ico">✓</span>ラベルPDF印刷・画像エクスポート</div>
-    </div>
-    <div class="onboarding-import">
-      <p>既存データをお持ちの場合：</p>
-      <button class="action" data-nav="saved">保存済みラベルを開く（CSV/JSONインポート）</button>
-    </div>
+    <button class="onboarding-demo-link demo-start-btn" data-action="demo-start">まず使い方を見る（デモ）→</button>
   </div>`;
 }
 
@@ -149,22 +124,6 @@ function dashboardHtml() {
     if (!_compCache.has(p.id)) _compCache.set(p.id, calcCompletion(p, d));
     return _compCache.get(p.id);
   };
-
-  // ── AIブリーフィング: sessionStorageキャッシュ確認 → なければ自動フェッチ ──
-  if (!aiBriefingText && !aiBriefingLoading) {
-    try {
-      const cached = JSON.parse(sessionStorage.getItem("fp-ai-briefing") || "null");
-      if (cached && cached.exp > Date.now()) {
-        aiBriefingText = cached.text;
-      } else {
-        aiBriefingLoading = true;
-        queueMicrotask(() => typeof fetchAiBriefingNow === "function" && fetchAiBriefingNow(true));
-      }
-    } catch {
-      aiBriefingLoading = true;
-      queueMicrotask(() => typeof fetchAiBriefingNow === "function" && fetchAiBriefingNow(true));
-    }
-  }
 
   const now     = new Date();
   const todayIso = now.toISOString().split("T")[0];
@@ -300,15 +259,9 @@ function dashboardHtml() {
   const myTasksHtml = _myName && _myTasks.length > 0 ? (() => {
     const sorted = [..._myTasks].sort((a,b)=>a.priority-b.priority);
     const urgentCount = sorted.filter(t=>t.priority===1).length;
-    const hourStr = now.getHours() < 12 ? "おはようございます" : now.getHours() < 18 ? "こんにちは" : "お疲れ様です";
     return `<div class="db2-my-tasks">
       <div class="db2-my-tasks-hd">
-        <div class="db2-my-tasks-greeting">
-          <span class="db2-my-tasks-wave">👋</span>
-          <span>${hourStr}、<strong>${escapeHtml(_myName)}</strong>さん</span>
-          ${urgentCount > 0 ? `<span class="db2-my-tasks-urgent-badge">🚨 緊急 ${urgentCount}件</span>` : ""}
-        </div>
-        <span class="db2-my-tasks-count">あなたの担当: ${_myTasks.length}件の対応が必要</span>
+        <span class="db2-my-tasks-count">👤 ${escapeHtml(_myName)} の担当: ${_myTasks.length}件${urgentCount > 0 ? ` <span class="db2-my-tasks-urgent-badge">🚨 緊急 ${urgentCount}件</span>` : ""}</span>
       </div>
       <div class="db2-my-tasks-list">
         ${sorted.slice(0, 5).map(t => `<button class="db2-person-task db2-person-task--${t.cls||"info"}" data-nav-product-detail="${escapeHtml(t.pid)}">
@@ -419,18 +372,6 @@ function dashboardHtml() {
         <div class="db2-kpi-val">${approvedForRelease}</div>
         <div class="db2-kpi-lbl">🚀 発売準備完了</div>
       </button>
-      <div class="db2-kpi-card ${suggestions.length > 0 ? "db2-kpi-red" : "db2-kpi-muted"}">
-        <div class="db2-kpi-val">${suggestions.length}</div>
-        <div class="db2-kpi-lbl">✦ AI提案</div>
-      </div>
-      ${avgCostRate !== null ? `<div class="db2-kpi-card ${avgCostRate > 40 ? "db2-kpi-red" : avgCostRate > 30 ? "db2-kpi-amber" : "db2-kpi-green"}">
-        <div class="db2-kpi-val">${avgCostRate}%</div>
-        <div class="db2-kpi-lbl">📊 平均原価率</div>
-      </div>` : ""}
-      ${avgProfitRate !== null ? `<div class="db2-kpi-card db2-kpi-green">
-        <div class="db2-kpi-val">${avgProfitRate}%</div>
-        <div class="db2-kpi-lbl">💹 平均粗利率</div>
-      </div>` : ""}
       ${(zeroStockCount + lowStockCount) > 0 ? `<button class="db2-kpi-card ${zeroStockCount > 0 ? "db2-kpi-red" : "db2-kpi-amber"}" data-nav="products" data-set-filter="noStock">
         <div class="db2-kpi-val">${zeroStockCount + lowStockCount}</div>
         <div class="db2-kpi-lbl">📦 在庫要確認</div>
@@ -445,68 +386,6 @@ function dashboardHtml() {
     </div>
   </div>`;
 
-  // ─────────────────────────────────────────────────
-  // ② AIサマリー（最優先表示）
-  // ─────────────────────────────────────────────────
-  const topSug = suggestions[0];
-  const aiTopHtml = `
-  <div class="db2-ai-section">
-    <div class="db2-ai-briefing">
-      <div class="db2-ai-briefing-hd">
-        <span class="db2-ai-star">✦</span>
-        <span class="db2-ai-briefing-title">今日のAIブリーフィング</span>
-        ${aiBriefingText && !aiBriefingLoading
-          ? `<button class="db2-ai-refresh" data-action="refresh-ai-briefing" title="再生成">↺ 更新</button>`
-          : ""}
-      </div>
-      ${aiBriefingLoading
-        ? `<div class="db2-ai-loading"><span class="ai-briefing-spinner"></span>AIが今日の状況を分析中...</div>`
-        : aiBriefingText === "__offline__"
-        ? `<div class="db2-ai-offline"><span>⚡</span><span>AIサーバーに接続できませんでした。</span><button class="action" data-action="fetch-ai-briefing">↺ 再試行</button></div>`
-        : aiBriefingText
-        ? `<div class="db2-ai-text">${typeof renderMarkdown === "function" ? renderMarkdown(aiBriefingText) : escapeHtml(aiBriefingText)}</div>`
-        : `<div class="db2-ai-empty">
-            <button class="action primary db2-ai-gen-btn" data-action="fetch-ai-briefing">✦ 今日のブリーフィングを生成</button>
-            <span class="db2-ai-hint">商品データをAIが分析し、今日の優先タスクを提案します</span>
-           </div>`}
-    </div>
-    ${topSug ? `
-    <div class="db2-focus-card db2-focus-${topSug.level}">
-      <div class="db2-focus-badge">⚡ 今すぐやること</div>
-      <div class="db2-focus-body">
-        <span class="db2-focus-icon">${topSug.icon}</span>
-        <div>
-          <p class="db2-focus-title">${escapeHtml(topSug.title)}</p>
-          <p class="db2-focus-msg">${escapeHtml(topSug.msg)}</p>
-        </div>
-      </div>
-      <div class="db2-focus-actions">
-        <button class="action primary" style="font-size:12px;padding:6px 14px"
-          ${topSug.nav
-            ? `data-nav="${escapeHtml(topSug.nav)}"`
-            : `data-nav="products" data-todo-key="${escapeHtml(topSug.filterKey||"")}"`}>${escapeHtml(topSug.action)} →</button>
-        ${topSug.topProductId
-          ? `<button class="ai-sug-btn-direct" data-nav-product-detail="${escapeHtml(topSug.topProductId)}">直接開く →</button>`
-          : ""}
-      </div>
-    </div>` : `
-    <div class="db2-all-ok">✅ 現時点で改善が必要な項目はありません。すべての商品が良好な状態です。</div>`}
-    ${suggestions.length > 1 ? `
-    <div class="db2-sug-mini-list">
-      ${suggestions.slice(1, 4).map(s => `
-        <div class="db2-sug-mini ai-sug-item ${levelCls[s.level]||""}">
-          <span class="ai-sug-badge ${levelCls[s.level]||""}">${levelLbl[s.level]||""}</span>
-          <span class="db2-sug-mini-title">${s.icon} ${escapeHtml(s.title)}</span>
-          <button class="db2-sug-mini-btn"
-            ${s.nav
-              ? `data-nav="${escapeHtml(s.nav)}"`
-              : `data-todo-key="${escapeHtml(s.filterKey||"all")}"`}>→</button>
-        </div>`).join("")}
-      ${suggestions.length > 4
-        ? `<div class="db2-sug-more">他 ${suggestions.length - 4} 件の提案あり（↓ AIおすすめ参照）</div>`
-        : ""}
-    </div>` : ""}
-  </div>`;
 
   // ─────────────────────────────────────────────────
   // ② ─ b 要対応商品カード
@@ -1157,38 +1036,46 @@ function dashboardHtml() {
   })();
 
   // ─────────────────────────────────────────────────
-  // 組み立て
+  // スマホ専用クイックアクション
+  // ─────────────────────────────────────────────────
+  const mobileQuickHtml = `
+  <div class="db2-mobile-quick">
+    ${registerBtnHtml()}
+    <button class="db2-mq-btn" data-nav="reg-photo">📷 写真で登録</button>
+    <button class="db2-mq-btn" data-nav="products">🔍 商品を検索</button>
+  </div>`;
+
+  // ─────────────────────────────────────────────────
+  // 組み立て（優先順位: 今日の対応→最近→アクション→管理状況→原価）
   // ─────────────────────────────────────────────────
   return saasLayout("ダッシュボード", `
     ${alertBits}
     ${headerHtml}
-    ${myTasksHtml}
+    ${mobileQuickHtml}
     ${urgentHtml}
-    <div class="db2-top-grid">
-      <div class="db2-top-left">${aiTopHtml}</div>
-      <div class="db2-top-right">${quickHtml}</div>
-    </div>
-    ${activityFeedHtml}
+    ${myTasksHtml}
     ${personTodoHtml}
-    ${devProjectsHtml}
     ${recentHtml}
-    ${recentReleasedHtml}
-    ${upcomingReleasesHtml}
-    ${trendChartHtml}
-    <div class="db2-bottom-grid">
-      <div class="db2-bottom-main">${aiRecommHtml}</div>
-      <div class="db2-bottom-side">
-        ${devFunnelHtml}
-        ${trendHtml}
-        ${compDistHtml}
-        ${catHtml}
-        ${costHtml}
-        ${profitRankHtml}
-        ${labelCheckSummaryHtml}
-        ${channelDistHtml}
-        ${allergenDistHtml}
-        ${responsibleHtml}
-      </div>
+    ${quickHtml}
+    <div class="db2-admin-section">
+      ${devProjectsHtml}
+      ${upcomingReleasesHtml}
+      ${recentReleasedHtml}
+      ${trendChartHtml}
+      ${compDistHtml}
+      ${devFunnelHtml}
+      ${labelCheckSummaryHtml}
+      ${activityFeedHtml}
+    </div>
+    <div class="db2-cost-section">
+      ${costHtml}
+      ${profitRankHtml}
+      ${aiRecommHtml}
+      ${catHtml}
+      ${allergenDistHtml}
+      ${channelDistHtml}
+      ${responsibleHtml}
+      ${trendHtml}
     </div>
     ${systemHtml}
   `);

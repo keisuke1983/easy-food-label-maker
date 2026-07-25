@@ -1120,8 +1120,10 @@ function dashboardHtml() {
   </div>` : "";
 
   // ─────────────────────────────────────────────────
-  // 組み立て（優先順位: 今日の対応→商品概要→管理状況→原価→最近→アクション）
+  // 組み立て
   // ─────────────────────────────────────────────────
+  const _hasDetails = [devProjectsHtml,upcomingReleasesHtml,recentReleasedHtml,trendChartHtml,compDistHtml,devFunnelHtml,labelCheckSummaryHtml,personTodoHtml,activityFeedHtml,costHtml,profitRankHtml,aiRecommHtml,catHtml,allergenDistHtml,channelDistHtml,responsibleHtml,trendHtml].some(s=>s);
+
   return saasLayout("ダッシュボード", `
     ${alertBits}
     ${headerHtml}
@@ -1133,29 +1135,33 @@ function dashboardHtml() {
       ${managementCardHtml}
       ${costSummaryCardHtml}
     </div>
-    ${recentHtml}
-    ${quickHtml}
-    <div class="db2-admin-section">
-      ${devProjectsHtml}
-      ${upcomingReleasesHtml}
-      ${recentReleasedHtml}
-      ${trendChartHtml}
-      ${compDistHtml}
-      ${devFunnelHtml}
-      ${labelCheckSummaryHtml}
-      ${personTodoHtml}
-      ${activityFeedHtml}
-    </div>
-    <div class="db2-cost-section">
-      ${costHtml}
-      ${profitRankHtml}
-      ${aiRecommHtml}
-      ${catHtml}
-      ${allergenDistHtml}
-      ${channelDistHtml}
-      ${responsibleHtml}
-      ${trendHtml}
-    </div>
-    ${systemHtml}
+    ${_hasDetails ? `
+    <details class="db2-details-section">
+      <summary class="db2-details-summary">詳細データ・分析を見る</summary>
+      <div class="db2-admin-section">
+        ${devProjectsHtml}
+        ${upcomingReleasesHtml}
+        ${recentReleasedHtml}
+        ${trendChartHtml}
+        ${compDistHtml}
+        ${devFunnelHtml}
+        ${labelCheckSummaryHtml}
+        ${personTodoHtml}
+        ${activityFeedHtml}
+      </div>
+      <div class="db2-cost-section">
+        ${costHtml}
+        ${profitRankHtml}
+        ${aiRecommHtml}
+        ${catHtml}
+        ${allergenDistHtml}
+        ${channelDistHtml}
+        ${responsibleHtml}
+        ${trendHtml}
+      </div>
+      ${recentHtml}
+      ${quickHtml}
+      ${systemHtml}
+    </details>` : `${systemHtml}`}
   `);
 }

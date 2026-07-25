@@ -330,15 +330,8 @@ function dashboardHtml() {
   const headerHtml = `
   <div class="db2-header">
     <div class="db2-header-top">
-      <div class="db2-brand-row">
-        <img src="./assets/app-icon.svg" alt="" class="db2-brand-icon" onerror="this.style.display='none'">
-        <div>
-          <div class="db2-brand-name">Food<span>Pilot</span></div>
-          <div class="db2-brand-sub">食品メーカーのAI商品管理プラットフォーム</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div class="db2-today-badge">${todayStr}</div>
+      <div class="db2-today-badge">${todayStr}</div>
+      <div style="display:flex;align-items:center;gap:8px">
         ${(() => {
           const hasPerm = typeof Notification !== "undefined" && Notification.permission === "granted";
           const lastN = typeof lastNotifDate !== "undefined" ? lastNotifDate : null;
@@ -356,33 +349,30 @@ function dashboardHtml() {
         <div class="db2-kpi-val">${onSaleCount}${_relDiffHtml}</div>
         <div class="db2-kpi-lbl">✅ 発売中</div>
       </button>
-      <button class="db2-kpi-card db2-kpi-muted" data-nav="products" data-set-pipeline-filter="discontinued">
-        <div class="db2-kpi-val">${discontinuedCount}</div>
-        <div class="db2-kpi-lbl">⬛ 終売</div>
-      </button>
-      <button class="db2-kpi-card db2-kpi-blue" data-nav="dev-products">
+      ${inDevCount > 0 ? `<button class="db2-kpi-card db2-kpi-blue" data-nav="dev-products">
         <div class="db2-kpi-val">${inDevCount}</div>
         <div class="db2-kpi-lbl">🔬 開発中</div>
-      </button>
+      </button>` : ""}
+      ${discontinuedCount > 0 ? `<button class="db2-kpi-card db2-kpi-muted" data-nav="products" data-set-pipeline-filter="discontinued">
+        <div class="db2-kpi-val">${discontinuedCount}</div>
+        <div class="db2-kpi-lbl">⬛ 終売</div>
+      </button>` : ""}
       ${reviewCount > 0 ? `<button class="db2-kpi-card db2-kpi-red" data-nav="team-approval">
         <div class="db2-kpi-val">${reviewCount}</div>
         <div class="db2-kpi-lbl">👥 承認待ち</div>
       </button>` : ""}
-      <button class="db2-kpi-card ${approvedForRelease > 0 ? "db2-kpi-purple" : "db2-kpi-muted"}" data-nav="dev-products">
+      ${approvedForRelease > 0 ? `<button class="db2-kpi-card db2-kpi-purple" data-nav="dev-products">
         <div class="db2-kpi-val">${approvedForRelease}</div>
         <div class="db2-kpi-lbl">🚀 発売準備完了</div>
-      </button>
+      </button>` : ""}
       ${(zeroStockCount + lowStockCount) > 0 ? `<button class="db2-kpi-card ${zeroStockCount > 0 ? "db2-kpi-red" : "db2-kpi-amber"}" data-nav="products" data-set-filter="noStock">
         <div class="db2-kpi-val">${zeroStockCount + lowStockCount}</div>
         <div class="db2-kpi-lbl">📦 在庫要確認</div>
       </button>` : ""}
-      ${complianceRate !== null ? (complianceRate < 100 ? `<button class="db2-kpi-card ${complianceRate >= 80 ? "db2-kpi-amber" : "db2-kpi-red"}" data-nav="products" data-set-filter="hasLabelErrors" title="表示エラーのある商品を確認する">
+      ${complianceRate !== null && complianceRate < 100 ? `<button class="db2-kpi-card ${complianceRate >= 80 ? "db2-kpi-amber" : "db2-kpi-red"}" data-nav="products" data-set-filter="hasLabelErrors" title="表示エラーのある商品を確認する">
         <div class="db2-kpi-val">${complianceRate}%</div>
         <div class="db2-kpi-lbl">🏷 表示適合率</div>
-      </button>` : `<div class="db2-kpi-card db2-kpi-green" title="食品表示エラーがない発売商品の割合">
-        <div class="db2-kpi-val">${complianceRate}%</div>
-        <div class="db2-kpi-lbl">🏷 表示適合率</div>
-      </div>`) : ""}
+      </button>` : ""}
     </div>
   </div>`;
 
@@ -521,7 +511,7 @@ function dashboardHtml() {
   const aiRecommHtml = `
   <div class="dash-panel db2-recomm-panel">
     <div class="db2-panel-hd-row">
-      <span class="db2-panel-title">🤖 AIおすすめ</span>
+      <span class="db2-panel-title">改善提案</span>
       <span class="db2-panel-badge">${suggestions.length}件の改善提案</span>
     </div>
     ${suggestions.length === 0
@@ -1045,16 +1035,104 @@ function dashboardHtml() {
     <button class="db2-mq-btn" data-nav="products">🔍 商品を検索</button>
   </div>`;
 
+  // ── 今日の対応 ──────────────────────────────────────────────────────────
+  const _todoAll = calcTodo(derivedAll);
+  const _priorityKeys = ["expired","expiringSoon","hasLabelErrors","review","highCost","noStock","noIngredients","noMfr","devStale"];
+  const _topTodos = _todoAll.filter(t => _priorityKeys.includes(t.key)).slice(0, 6);
+  const _remainTodoCount = _todoAll.length - _topTodos.length;
+  const todayActionsHtml = `
+  <div class="db2-today-section">
+    <div class="db2-today-hd">今日の対応${_todoAll.length > 0 ? `<span class="db2-today-badge-count">${_todoAll.length}件</span>` : ""}</div>
+    ${_topTodos.length === 0
+      ? `<div class="db2-today-empty">✅ 現在、対応が必要な項目はありません</div>`
+      : `<div class="db2-today-list">
+          ${_topTodos.map(item => `<div class="db2-today-item">
+            <span class="db2-today-item-text">${escapeHtml(item.label)}&ensp;<strong>${item.count}商品</strong></span>
+            <button class="db2-today-item-btn" data-todo-key="${escapeHtml(item.key)}">確認する →</button>
+          </div>`).join("")}
+          ${_remainTodoCount > 0 ? `<div class="db2-today-more">他 ${_remainTodoCount}件の改善提案</div>` : ""}
+        </div>`}
+  </div>`;
+
+  // ── 商品概要カード ──────────────────────────────────────────────────────
+  const productsCardHtml = `
+  <div class="db2-info-card">
+    <div class="db2-info-card-hd">商品</div>
+    <div class="db2-info-stats">
+      <div class="db2-info-stat"><span class="db2-info-num">${products.length}</span><span class="db2-info-lbl">全商品</span></div>
+      ${onSaleCount > 0 ? `<div class="db2-info-stat"><span class="db2-info-num db2-info-num--green">${onSaleCount}</span><span class="db2-info-lbl">発売中</span></div>` : ""}
+      ${inDevCount > 0 ? `<div class="db2-info-stat"><span class="db2-info-num db2-info-num--blue">${inDevCount}</span><span class="db2-info-lbl">開発中</span></div>` : ""}
+      ${discontinuedCount > 0 ? `<div class="db2-info-stat"><span class="db2-info-num db2-info-num--muted">${discontinuedCount}</span><span class="db2-info-lbl">終売</span></div>` : ""}
+    </div>
+    <div class="db2-info-actions">
+      <button class="db2-info-btn-outline" data-nav="products">商品一覧を見る</button>
+      ${registerBtnHtml()}
+    </div>
+  </div>`;
+
+  // ── 管理状況カード ──────────────────────────────────────────────────────
+  const _mgmtLabelOk = _complianceOkCount;
+  const _mgmtCostOk  = rel.length - (_todoAll.find(t=>t.key==="noCost")?.count||0);
+  const _mgmtImageOk = rel.length - (_todoAll.find(t=>t.key==="noImage")?.count||0);
+  const managementCardHtml = rel.length > 0 ? `
+  <div class="db2-info-card">
+    <div class="db2-info-card-hd">管理状況</div>
+    <div class="db2-mgmt-rows">
+      <div class="db2-mgmt-row">
+        <span class="db2-mgmt-lbl">食品表示確認済み</span>
+        <span class="db2-mgmt-val"><strong>${_mgmtLabelOk}</strong> / ${rel.length}商品</span>
+        ${_mgmtLabelOk < rel.length
+          ? `<button class="db2-mgmt-btn" data-nav="products" data-set-filter="hasLabelErrors">あと${rel.length-_mgmtLabelOk}商品 →</button>`
+          : `<span class="db2-mgmt-ok">✓</span>`}
+      </div>
+      <div class="db2-mgmt-row">
+        <span class="db2-mgmt-lbl">原価登録済み</span>
+        <span class="db2-mgmt-val"><strong>${_mgmtCostOk}</strong> / ${rel.length}商品</span>
+        ${_mgmtCostOk < rel.length
+          ? `<button class="db2-mgmt-btn" data-nav="products" data-set-filter="noCost">あと${rel.length-_mgmtCostOk}商品 →</button>`
+          : `<span class="db2-mgmt-ok">✓</span>`}
+      </div>
+      ${_mgmtImageOk < rel.length ? `<div class="db2-mgmt-row">
+        <span class="db2-mgmt-lbl">商品画像登録済み</span>
+        <span class="db2-mgmt-val"><strong>${_mgmtImageOk}</strong> / ${rel.length}商品</span>
+        <button class="db2-mgmt-btn" data-nav="products" data-set-filter="noImage">あと${rel.length-_mgmtImageOk}商品 →</button>
+      </div>` : ""}
+    </div>
+  </div>` : "";
+
+  // ── 原価・利益サマリーカード ────────────────────────────────────────────
+  const costSummaryCardHtml = (avgCostRate !== null || avgProfitRate !== null) ? `
+  <div class="db2-info-card">
+    <div class="db2-info-card-hd">原価・利益</div>
+    <div class="db2-info-stats">
+      ${avgCostRate !== null ? `<div class="db2-info-stat">
+        <span class="db2-info-num${avgCostRate > 60 ? " db2-info-num--warn" : ""}">${avgCostRate}%</span>
+        <span class="db2-info-lbl">平均原価率</span>
+      </div>` : ""}
+      ${avgProfitRate !== null ? `<div class="db2-info-stat">
+        <span class="db2-info-num db2-info-num--green">${avgProfitRate}%</span>
+        <span class="db2-info-lbl">平均粗利率</span>
+      </div>` : ""}
+    </div>
+    <div class="db2-info-actions">
+      <button class="db2-info-btn-outline" data-nav="products">詳しく見る →</button>
+    </div>
+  </div>` : "";
+
   // ─────────────────────────────────────────────────
-  // 組み立て（優先順位: 今日の対応→最近→アクション→管理状況→原価）
+  // 組み立て（優先順位: 今日の対応→商品概要→管理状況→原価→最近→アクション）
   // ─────────────────────────────────────────────────
   return saasLayout("ダッシュボード", `
     ${alertBits}
     ${headerHtml}
     ${mobileQuickHtml}
-    ${urgentHtml}
+    ${todayActionsHtml}
     ${myTasksHtml}
-    ${personTodoHtml}
+    <div class="db2-info-grid">
+      ${productsCardHtml}
+      ${managementCardHtml}
+      ${costSummaryCardHtml}
+    </div>
     ${recentHtml}
     ${quickHtml}
     <div class="db2-admin-section">
@@ -1065,6 +1143,7 @@ function dashboardHtml() {
       ${compDistHtml}
       ${devFunnelHtml}
       ${labelCheckSummaryHtml}
+      ${personTodoHtml}
       ${activityFeedHtml}
     </div>
     <div class="db2-cost-section">

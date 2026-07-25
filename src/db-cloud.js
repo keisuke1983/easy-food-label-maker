@@ -1,29 +1,28 @@
 // ── クラウド同期モジュール (Supabase REST API) ─────────────────────────
-//
-// ■ セットアップ手順:
-//   1. https://supabase.com でプロジェクトを作成
-//   2. SQL Editor で以下を実行:
-//
-//      CREATE TABLE IF NOT EXISTS products (
-//        id          TEXT PRIMARY KEY,
-//        name        TEXT,
-//        updated_at  TEXT,
-//        data        TEXT NOT NULL
-//      );
-//
-//   3. Settings > API から「Project URL」と「anon public」キーをコピー
-//   4. FoodPilot の 設定 > クラウド同期 に貼り付けて保存
-//
 // ■ 依存: safeGet, safeSet, products, cloudSyncStatus, cloudSyncLastAt,
 //         cloudSyncMessage, render (すべてグローバル)
 
+// ── デフォルト接続先（管理者が設定し、顧客はチームコードのみ入力） ──
+const FMCC_DEFAULT_URL = "https://avxerfmhavrvjzphwqb.supabase.co";
+const FMCC_DEFAULT_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2eGVyZm1oYXZydmp6cGh3cWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMDk1NzksImV4cCI6MjA5OTU4NTU3OX0.vpB0ObW3Ed3scy6ZWBJA_P4LJRtOgMwoS0B3BluQjIY";
+
 let _cloudSyncTimer = null;
+
+// ── チームID管理 ───────────────────────────────────────────────────────
+function getTeamId() {
+  let id = safeGet("fmcc-team-id") || "";
+  if (!id) {
+    id = "team-" + Math.random().toString(36).slice(2, 10);
+    safeSet("fmcc-team-id", id);
+  }
+  return id;
+}
 
 // ── 認証情報 ──────────────────────────────────────────────────────────
 function getSupabaseCfg() {
   return {
-    url: (safeGet("fmcc-supabase-url") || "").trim(),
-    key: (safeGet("fmcc-supabase-key") || "").trim(),
+    url: FMCC_DEFAULT_URL || (safeGet("fmcc-supabase-url") || "").trim(),
+    key: FMCC_DEFAULT_KEY || (safeGet("fmcc-supabase-key") || "").trim(),
   };
 }
 
@@ -74,6 +73,7 @@ async function supabaseAutoSync() {
   cloudSyncStatus = "syncing";
   updateCloudSyncIndicator();
 
+  const teamId = getTeamId();
   try {
     // STEP 1: 現在の商品を全件 upsert
     if (products.length > 0) {
@@ -81,6 +81,7 @@ async function supabaseAutoSync() {
         id:         p.id,
         name:       p.name || "",
         updated_at: p.updatedAt || "",
+        team_id:    teamId,
         data:       JSON.stringify(p),
       }));
       const res = await fetch(`${url}/rest/v1/products`, {
@@ -100,7 +101,7 @@ async function supabaseAutoSync() {
     const deletedIds = JSON.parse(safeGet("fmcc-cloud-deleted-ids") || "[]");
     if (deletedIds.length > 0) {
       const idList = deletedIds.join(",");
-      const delRes = await fetch(`${url}/rest/v1/products?id=in.(${idList})`, {
+      const delRes = await fetch(`${url}/rest/v1/products?id=in.(${idList})&team_id=eq.${encodeURIComponent(teamId)}`, {
         method: "DELETE",
         headers: { "apikey": key, "Authorization": "Bearer " + key },
       });
@@ -146,7 +147,7 @@ async function supabasePull() {
   try {
     cloudSyncStatus = "syncing";
     updateCloudSyncIndicator();
-    const res = await fetch(`${url}/rest/v1/products?select=data&order=updated_at.desc`, {
+    const res = await fetch(`${url}/rest/v1/products?select=data&team_id=eq.${encodeURIComponent(getTeamId())}&order=updated_at.desc`, {
       headers: { "apikey": key, "Authorization": "Bearer " + key },
     });
     if (!res.ok) throw new Error(await res.text());
@@ -177,7 +178,7 @@ async function initCloudSync() {
   const key = raw.key;
 
   try {
-    const res = await fetch(`${url}/rest/v1/products?select=id,data,updated_at&order=updated_at.desc`, {
+    const res = await fetch(`${url}/rest/v1/products?select=id,data,updated_at&team_id=eq.${encodeURIComponent(getTeamId())}&order=updated_at.desc`, {
       headers: { "apikey": key, "Authorization": "Bearer " + key },
     });
     if (!res.ok) {

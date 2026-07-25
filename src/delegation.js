@@ -961,6 +961,16 @@ function setupDelegation() {
         }
         case "save-supabase-cfg": { const url=document.getElementById("sb-url-input")?.value?.trim(); const key=document.getElementById("sb-key-input")?.value?.trim(); if(!url||!key){showStatus("接続先アドレスと認証キーを両方入力してください");return;} if(!url.startsWith("https://")){showStatus("接続先アドレスは https:// で始まる必要があります");return;} safeSet("fmcc-supabase-url",url); safeSet("fmcc-supabase-key",key); showStatus("☁ クラウド接続を保存しました"); render(); return; }
         case "disconnect-cloud": { showModal({ message: "クラウド接続を解除しますか？\nデータはこのブラウザにはそのまま残ります。", confirmLabel: "解除する", cancelLabel: "キャンセル", onConfirm: () => { safeDel("fmcc-supabase-url"); safeDel("fmcc-supabase-key"); showStatus("クラウド接続を解除しました"); render(); } }); return; }
+        case "copy-team-id": { navigator.clipboard.writeText(getTeamId()).then(() => showStatus("チームコードをコピーしました")).catch(() => showStatus("コピーに失敗しました")); return; }
+        case "join-team": {
+          const code = document.getElementById("team-id-input")?.value?.trim();
+          if (!code) { showStatus("チームコードを入力してください"); return; }
+          showModal({ message: `チームコード「${code}」に参加しますか？\n現在のローカルデータはそのまま残ります。`, confirmLabel: "参加する", cancelLabel: "キャンセル", onConfirm: () => {
+            safeSet("fmcc-team-id", code);
+            showStatus("チームに参加しました。クラウドからデータを読み込んでいます...");
+            supabasePull().then(() => render());
+          }}); return;
+        }
         case "supabase-push": supabasePush(); return;
         case "supabase-pull": supabasePull(); return;
         case "stripe-checkout": { stripeCheckout(ael.dataset.plan); return; }

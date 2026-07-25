@@ -4528,46 +4528,45 @@ function newSettingsHtml() {
           ? "✅ 商品を保存するたびに自動でクラウドに同期されます。別のパソコン・スマホでも同じデータを使えます。"
           : "💡 クラウドに接続すると、別のパソコン・スマホからも同じデータにアクセスできます。"
         }</p>
-        <details style="margin-top:16px" ${!sbConnected ? "open" : ""}>
-          <summary style="font-size:13px;font-weight:600;cursor:pointer;color:#2563eb">▸ クラウド接続の設定${sbConnected ? "を変更する" : "をする（無料）"}</summary>
-          <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
 
-            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px">
-              <div style="font-weight:600;font-size:13px;margin-bottom:4px">① 無料アカウントを作成する</div>
-              <p style="font-size:12px;color:#374151;margin:0">
-                <a class="field-link" href="https://supabase.com" target="_blank" rel="noopener">supabase.com</a> にアクセスして「Start for free」でアカウントを作り、新しいプロジェクトを作成してください。
-              </p>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">📋 チームコード</div>
+            <p style="font-size:12px;color:#374151;margin:0 0 10px">このコードをメンバーに共有すると、同じデータにアクセスできます。</p>
+            <div style="display:flex;gap:8px;align-items:center">
+              <code id="team-id-display" style="background:#fff;border:1px solid #bbf7d0;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:700;letter-spacing:1px;flex:1;word-break:break-all">${escapeHtml(getTeamId())}</code>
+              <button class="action" data-action="copy-team-id" style="white-space:nowrap">コピー</button>
             </div>
+          </div>
 
-            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px">
-              <div style="font-weight:600;font-size:13px;margin-bottom:4px">② データ保存先を初期設定する（初回のみ）</div>
-              <p style="font-size:12px;color:#374151;margin:0 0 8px">プロジェクト内の「SQL Editor」を開いて、以下のコードを貼り付けて「Run」を押してください：</p>
-              <pre style="background:#1e293b;color:#e2e8f0;padding:10px;border-radius:6px;font-size:10px;overflow-x:auto;margin:0">CREATE TABLE IF NOT EXISTS products (
-  id          TEXT PRIMARY KEY,
-  name        TEXT,
-  updated_at  TEXT,
-  data        TEXT NOT NULL
-);
-ALTER TABLE products DISABLE ROW LEVEL SECURITY;</pre>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">🔗 別のチームに参加する</div>
+            <p style="font-size:12px;color:#374151;margin:0 0 10px">管理者からもらったチームコードを入力してください。</p>
+            <div style="display:flex;gap:8px">
+              <input id="team-id-input" placeholder="team-xxxxxxxx" style="flex:1;font-family:monospace;font-size:12px">
+              <button class="action primary" data-action="join-team">参加する</button>
             </div>
+          </div>
 
-            <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px">
-              <div style="font-weight:600;font-size:13px;margin-bottom:4px">③ 接続情報を入力して保存する</div>
-              <p style="font-size:12px;color:#374151;margin:0 0 10px">プロジェクトの「Settings」→「API」を開き、2つの値をコピーして貼り付けてください：</p>
-              <div class="field" style="margin-bottom:8px">
-                <span style="font-size:12px">接続先アドレス <span style="color:#64748b;font-weight:400">（Settings → API → "Project URL"）</span></span>
+          <details style="margin-top:4px">
+            <summary style="font-size:12px;color:#94a3b8;cursor:pointer">▸ 管理者向け：接続先を変更する</summary>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+              <div class="field">
+                <span style="font-size:12px">接続先アドレス</span>
                 <input id="sb-url-input" placeholder="https://xxxx.supabase.co" value="${escapeHtml(sbUrl)}" style="font-family:monospace;font-size:12px">
               </div>
-              <div class="field" style="margin-bottom:14px">
-                <span style="font-size:12px">認証キー <span style="color:#64748b;font-weight:400">（Settings → API Keys → Legacy → "anon" のeyJで始まる文字列）</span></span>
-                <input id="sb-key-input" type="password" placeholder="eyJで始まる長い文字列" value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
+              <div class="field">
+                <span style="font-size:12px">認証キー（anon key）</span>
+                <input id="sb-key-input" type="password" placeholder="eyJで始まる文字列" value="${escapeHtml(sbKey)}" style="font-family:monospace;font-size:12px">
               </div>
-              <button class="action primary" data-action="save-supabase-cfg">🔗 接続して保存</button>
-              ${sbConnected ? `<button class="action" data-action="disconnect-cloud" style="margin-left:8px;color:#ef4444;border-color:#ef4444">接続を解除</button>` : ""}
+              <div style="display:flex;gap:8px">
+                <button class="action primary" data-action="save-supabase-cfg">保存</button>
+                ${sbConnected ? `<button class="action" data-action="disconnect-cloud" style="color:#ef4444;border-color:#ef4444">接続を解除</button>` : ""}
+              </div>
             </div>
+          </details>
 
-          </div>
-        </details>
+        </div>
       </div>
       <div class="settings-card">
         <h3>📜 バックアップ履歴</h3>

@@ -56,7 +56,7 @@ export default async function handler(req, res) {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        model: "qwen/qwen3.6-27b",
         messages: [{
           role: "user",
           content: [
@@ -64,8 +64,9 @@ export default async function handler(req, res) {
             { type: "image_url", image_url: { url: `data:${mimeType};base64,${pureBase64}` } },
           ],
         }],
-        max_tokens: 1024,
+        max_completion_tokens: 1024,
         temperature: 0.1,
+        reasoning_effort: "none",
       }),
     });
 

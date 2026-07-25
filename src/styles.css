@@ -6221,3 +6221,14 @@ body.fp-demo-active [class*='spec-body'] {
   .db2-today-item { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
 :root[data-theme="dark"] .onboarding-simple-title { color: #f1f5f9; }
+
+/* ── 詳細データ折りたたみ ── */
+.db2-details-section { border: none; margin-top: 4px; }
+.db2-details-summary {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  font-size: 13px; font-weight: 600; color: var(--text-sub, #64748b);
+  padding: 10px 4px; border-top: 1px solid var(--border, #e2e8f0); list-style: none;
+}
+.db2-details-summary::-webkit-details-marker { display: none; }
+.db2-details-summary::before { content: "▸"; font-size: 11px; transition: transform 0.2s; }
+.db2-details-section[open] > .db2-details-summary::before { transform: rotate(90deg); }

@@ -129,35 +129,22 @@ function productsListHtml() {
         <div class="master-card-body">
           <div class="master-card-title-row">
             <span class="master-card-name">${escapeHtml(p.internalName||p.name||"（名称未入力）")}</span>
-            ${p.internalName&&p.name?`<span class="display-name-note">表示名：${escapeHtml(p.name)}</span>`:""}
             ${(() => { const ps = PRODUCT_STATUSES.find(s=>s.id===(p.productStatus||"on_sale"))||PRODUCT_STATUSES.find(s=>s.id==="on_sale")||PRODUCT_STATUSES[0]; return `<select class="pipeline-chip-select" data-quick-status-select="${escapeHtml(p.id)}" style="color:${ps.color};background:${ps.bg};border-color:${ps.color}" onclick="event.stopPropagation()" title="クリックしてステータスを変更">${releasedStatuses.map(s=>`<option value="${s.id}"${(p.productStatus||"on_sale")===s.id?" selected":""}>${s.label}</option>`).join("")}</select>`; })()}
-            ${statusBadge(p)}
             ${approvalBadge(p)}
             <button class="star-btn${p.starred?" on":""}" data-toggle-star="${escapeHtml(p.id)}" onclick="event.stopPropagation()">${p.starred?"★":"☆"}</button>
+            <span class="master-card-comp-inline" style="color:${pctColor}">${comp.pct}%</span>
           </div>
           <div class="master-card-meta">
-            ${p.code?`<span class="meta-item">品番：${escapeHtml(p.code)}</span>`:""}
             ${p.category?`<span class="meta-item">${escapeHtml(p.category)}</span>`:""}
-            ${p.price?`<span class="meta-item">¥${escapeHtml(p.price)}</span>`:""}
             ${costs.costRate !== null ? `<span class="meta-item meta-cost-rate${costs.costRate > 60 ? " meta-cost-rate--warn" : costs.costRate > 40 ? " meta-cost-rate--mid" : " meta-cost-rate--ok"}" title="原価率">原価 ${costs.costRate}%</span>` : ""}
-            ${p.releasedAt?`<span class="meta-item">🚀 ${escapeHtml(p.releasedAt)}</span>`:""}
-            ${(isDiscontinued&&p.discontinuedAt)?`<span class="meta-item">🔴 終売：${escapeHtml(p.discontinuedAt)}</span>`:""}
-            ${(isDiscontinued&&p.discontinuedReason)?`<span class="meta-item meta-discontinued-reason">${escapeHtml(p.discontinuedReason)}</span>`:""}
-            <span class="meta-item">更新：${escapeHtml(formatDate(p.updatedAt))}</span>
-            ${(p.currentStock!=null&&p.currentStock!=="") ? `<span class="meta-item meta-stock">📦 在庫：${escapeHtml(String(p.currentStock))}${escapeHtml(p.stockUnit||"")}</span>` : ""}
+            ${(p.currentStock!=null&&p.currentStock!=="") ? `<span class="meta-item meta-stock">📦 ${escapeHtml(String(p.currentStock))}${escapeHtml(p.stockUnit||"")}</span>` : ""}
             ${expiryChip}
-            ${staleBadge}
             ${labelCheckBadge}
-            ${d.allergens.length > 0 ? `<div class="master-card-allergens">${d.allergens.slice(0,5).map(a=>`<span class="mt-allergen-chip">${escapeHtml(a)}</span>`).join("")}${d.allergens.length>5?`<span class="mt-allergen-more">+${d.allergens.length-5}</span>`:""}</div>` : ""}
+            <span class="meta-item meta-updated">${escapeHtml(formatDate(p.updatedAt))}</span>
           </div>
-          <div class="comp-section">
-            <div class="comp-bar-row">
-              <div class="comp-bar-wrap" style="max-width:160px"><div class="comp-bar-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
-              <span class="comp-pct" style="color:${pctColor}">完成度 ${comp.pct}%</span>
-            </div>
-            ${missingHtml}
+          <div class="comp-bar-row">
+            <div class="comp-bar-wrap" style="max-width:200px"><div class="comp-bar-fill" style="width:${comp.pct}%;background:${pctColor}"></div></div>
           </div>
-          ${productStatusBadges(p, d)}
         </div>
       </div>
       <div class="master-card-actions">
@@ -165,7 +152,6 @@ function productsListHtml() {
         <button class="btn-action" data-spec-from="${escapeHtml(p.id)}">📋 規格書</button>
         <button class="btn-action" data-ai-from="${escapeHtml(p.id)}">✦ AI説明文</button>
         <button class="btn-action" data-dup="${escapeHtml(p.id)}">複製</button>
-        <button class="btn-action" data-action="save-as-template" data-pid="${escapeHtml(p.id)}" onclick="event.stopPropagation()" title="カテゴリ・保存方法・製造者情報をテンプレートとして保存">📋 テンプレ保存</button>
         <button class="btn-action danger" data-del="${escapeHtml(p.id)}">削除</button>
       </div>
     </div>`;

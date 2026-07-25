@@ -3047,8 +3047,8 @@ function planHtml() {
           引き続きご利用いただくにはプランをお選びください。
          </div>`
       : `<div class="plan-trial-banner">
-          🎉 無料トライアル中 — あと <strong>${daysLeft}日</strong> で終了します。
-          終了後は3商品まで無料で使い続けられます。
+          🎉 無料トライアル中 — あと <strong>${daysLeft}日</strong> で終了します。<br>
+          <span style="font-size:12px;opacity:0.9">商品管理・商品開発・全機能が商品数無制限でご利用いただけます。終了後は3商品まで無料で継続利用できます。</span>
          </div>`
     : "";
 

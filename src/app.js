@@ -1038,22 +1038,22 @@ function focusKey(el) {
 }
 // ══ デモモード v2 ═════════════════════════════════════════════════════════
 const DEMO_STEPS_MANAGE = [
-  { step:1, title:"ダッシュボード",   sub:"今日の全商品状況がひと目でわかります",     view:"dashboard" },
-  { step:2, title:"AI で商品登録",    sub:"写真1枚で登録完了 — 入力時間ゼロへ",       view:"product-detail", detailTab:"basic" },
-  { step:3, title:"商品一覧",         sub:"検索・フィルターで目的の商品に即アクセス", view:"products" },
-  { step:4, title:"商品カルテ",       sub:"これだけ見れば商品のすべてがわかります",   view:"product-detail", detailTab:"basic" },
-  { step:5, title:"タイムライン",     sub:"誰が・いつ・何をしたか — 永久に残ります", view:"product-detail", detailTab:"timeline" },
-  { step:6, title:"食品表示ラベル",   sub:"食品表示法準拠ラベルが自動で完成します",   view:"label-nav" },
-  { step:7, title:"A4 商品規格書",    sub:"Excelで何時間もかかった規格書が即完成",    view:"spec-sheet-nav" },
+  { step:1, title:"ダッシュボード",   sub:"毎朝ここを開くだけ — 全商品の「今」が一瞬でわかります",     view:"dashboard" },
+  { step:2, title:"AI で商品登録",    sub:"写真1枚で登録完了 — 担当者の手入力30〜60分がゼロになります", view:"product-detail", detailTab:"basic" },
+  { step:3, title:"商品一覧",         sub:"100品・1000品でも — 探す時間は1秒以下です",                  view:"products" },
+  { step:4, title:"商品カルテ",       sub:"担当者が変わっても、何年後でも — ここを開けば全部わかります", view:"product-detail", detailTab:"basic" },
+  { step:5, title:"タイムライン",     sub:"誰が・いつ・何を変えたか — 商品の履歴書がここにあります",    view:"product-detail", detailTab:"timeline" },
+  { step:6, title:"食品表示ラベル",   sub:"転記ゼロ・手入力ゼロ — 食品表示法準拠ラベルが即完成",        view:"label-nav" },
+  { step:7, title:"A4 商品規格書",    sub:"Excelで半日かかっていた規格書が — ボタン1つで完成します",    view:"spec-sheet-nav" },
 ];
 const DEMO_STEPS_DEVELOP = [
-  { step:1, title:"開発プロジェクト", sub:"開発スタート — ここから新商品の旅が始まります",     view:"dev-products" },
-  { step:2, title:"試作レシピ入力",   sub:"原材料を入れるたびに原価・栄養成分がリアルタイム計算", view:"dev-detail", devTab:"recipe" },
-  { step:3, title:"バージョン比較",   sub:"何が変わったか・どこが改善されたか一目でわかる",     view:"dev-detail", devTab:"recipe", compareMode:true },
-  { step:4, title:"AI レビュー",      sub:"AIが食品表示法のミスを発売前に見つけます",           view:"ai-consult-nav" },
-  { step:5, title:"採用決定",         sub:"ボタン1つで承認ルートが自動で回り始めます",          view:"dev-detail", devTab:"approval" },
-  { step:6, title:"発売",             sub:"最も感動する瞬間 — 全部がつながります",              view:"dev-detail", devTab:"overview" },
-  { step:7, title:"商品管理へ移行",   sub:"この商品の誕生から今日まで一本の線で見えます",       view:"product-detail", detailTab:"timeline", useReleased:true },
+  { step:1, title:"開発プロジェクト", sub:"「米粉ドーナツ」が今日、ここから生まれます",                  view:"dev-products" },
+  { step:2, title:"試作レシピ入力",   sub:"原材料を入れるたびに — 原価率と栄養成分がリアルタイムで動きます", view:"dev-detail", devTab:"recipe" },
+  { step:3, title:"Ver. 比較",        sub:"Ver.1 vs Ver.2 — 数値で「どちらが正解か」が一目でわかります",   view:"dev-detail", devTab:"recipe", compareMode:true },
+  { step:4, title:"AI レビュー",      sub:"発売前にAIが法的ミスとコスト改善を自動で指摘します",           view:"ai-consult-nav" },
+  { step:5, title:"承認フロー",       sub:"書類を回す・催促する — その手間がすべてなくなります",           view:"dev-detail", devTab:"approval" },
+  { step:6, title:"発売処理",         sub:"ボタン1つで — 開発データが商品管理へ自動で引き継がれます",      view:"dev-detail", devTab:"overview" },
+  { step:7, title:"商品の履歴書",     sub:"開発スタートから今日まで — 全記録が一本の線でつながっています", view:"product-detail", detailTab:"timeline", useReleased:true },
 ];
 function currentDemoSteps() { return demoType === "develop" ? DEMO_STEPS_DEVELOP : DEMO_STEPS_MANAGE; }
 
@@ -1688,11 +1688,11 @@ async function _demoAnim_Karte() {
   const root = document.getElementById("root");
   if (!root) return;
   const tabDefs = [
-    { key: "basic",       label: "基本情報",    desc: "商品名・内容量・JANコード・製造者など — 基本情報をひとつに集約" },
-    { key: "ingredients", label: "原材料",      desc: "原材料を入力するだけで — アレルゲンが自動で判定・表示されます" },
-    { key: "label",       label: "ラベル",      desc: "食品表示法準拠のラベルがリアルタイムでプレビューされています" },
-    { key: "spec",        label: "規格書",      desc: "A4規格書もこのタブから — 取引先に配布できる形式で即出力" },
-    { key: "history",     label: "変更履歴",    desc: "誰が・いつ・何を変えたか — すべての変更が自動で記録されています" },
+    { key: "basic",       label: "基本情報",    desc: "商品名・内容量・JAN・製造者 — すべてここに。担当者が変わっても迷いません" },
+    { key: "ingredients", label: "原材料",      desc: "原材料を入力するだけ — アレルゲンが自動判定。表示漏れによる回収リスクがゼロになります" },
+    { key: "label",       label: "食品表示",    desc: "食品表示法準拠ラベルをリアルタイム生成 — 入力した原材料がそのまま反映されます" },
+    { key: "spec",        label: "規格書",      desc: "A4規格書もこのカルテから即出力 — 取引先へそのまま配布できます" },
+    { key: "history",     label: "タイムライン", desc: "誰が・いつ・何を変えたか — この商品の「人生記録」が自動で蓄積されています" },
   ];
   showNarr(tabDefs.map(t => t.label), 0);
   vcShow();
@@ -1733,18 +1733,18 @@ async function _demoAnim_Karte() {
     await demoSleep(200);
   }
   updateNarr(tabDefs.length);
-  await showCalloutAt("この画面ひとつで — 担当者が変わっても・何年後でも・この商品のすべてがわかります", window.innerWidth / 2, window.innerHeight * 0.5, "top");
-  await showCalloutWait(1800);
+  await showCalloutAt("担当者が変わっても・何年後でも — この画面を開けば、この商品のすべてがわかります", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2000);
   hideCallout();
   await demoSleep(300);
-  await showCalloutAt("FoodPilot 最大の強み — 商品カルテです", window.innerWidth / 2, window.innerHeight * 0.5, "top");
-  await showCalloutWait(1800);
+  await showCalloutAt("商品カルテ — これがFoodPilotの核心です。ここに全部あります", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2200);
   hideCallout();
   hideNarr();
 }
 
 async function _demoAnim_Timeline() {
-  showBanner("STEP 5 / 7", "📅 タイムライン", "この商品の「歴史」がすべて自動記録 — 誰が・いつ・何をしたか永久に残ります");
+  showBanner("STEP 5 / 7", "📅 商品タイムライン", "これが商品の「履歴書」です — 登録から今日まで、何も消えません");
   await demoSleep(700);
   const root = document.getElementById("root");
   if (!root) return;
@@ -1789,12 +1789,12 @@ async function _demoAnim_Timeline() {
     await vcSmoothScroll(scrollEl, (scrollEl.scrollHeight - scrollEl.clientHeight) * 0.8, 3500);
     updateNarr(2);
   }
-  await showCalloutAt("「あのとき誰が変えたの？」が一瞬でわかります — 担当者が変わっても安心です", window.innerWidth / 2, window.innerHeight * 0.5, "top");
-  await showCalloutWait(1800);
+  await showCalloutAt("「あのとき誰が変えたの？」が一瞬でわかります — 担当者が10人変わっても、記録は消えません", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2000);
   hideCallout();
   await demoSleep(300);
-  await showCalloutAt("これが商品の「人生記録」です — 登録から今日まで、何もなくなりません", window.innerWidth / 2, window.innerHeight * 0.5, "top");
-  await showCalloutWait(2000);
+  await showCalloutAt("これが商品の「履歴書」です — 商品が生まれた日から今日まで、すべての記録がここにあります", window.innerWidth / 2, window.innerHeight * 0.5, "top");
+  await showCalloutWait(2400);
   hideCallout();
   hideNarr();
 }
@@ -1891,81 +1891,103 @@ async function _demoAnim_Label() {
 }
 
 async function _demoAnim_SpecSheet() {
-  showBanner("STEP 7 / 7", "📄 A4 商品規格書", "Excelで何時間もかかっていた規格書が — ワンクリックで自動完成");
+  showBanner("STEP 7 / 7", "📄 A4 商品規格書", "Excelで半日かかっていた規格書が — ボタン1つで完成します");
   await demoSleep(500);
   const root = document.getElementById("root");
   if (!root) return;
-  const narr = ["規格書を自動生成", "各セクションを確認", "最下部まで確認 ✓"];
+  const narr = ["ボタン1つで規格書を自動生成", "商品情報セクション確認", "原材料・アレルゲン確認", "栄養成分・保存方法確認", "最下部まで確認 ✓"];
   showNarr(narr, 0);
   vcShow();
 
-  await showCalloutAt("A4商品規格書 — 取引先から毎回求められる書類です。Excelで作ると担当者の半日が消えます", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
-  await showCalloutWait(2400);
+  await showCalloutAt("A4商品規格書 — 取引先から毎回求められる書類です。今まで作るたびに担当者の半日が消えていました", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+  await showCalloutWait(2800);
   hideCallout();
 
-  // 生成ボタンがあればクリック
   const genBtn = root.querySelector(
     "[data-action*='spec'],[data-action*='generate'],[class*='spec-gen'],[class*='spec-btn']"
   );
   if (genBtn) {
     showHl(genBtn);
     await vcMoveToEl(genBtn, 0, 0, 450);
-    await showCalloutOnEl("このボタンを1回押すだけです", genBtn, "top");
-    await showCalloutWait(1400);
+    await showCalloutOnEl("FoodPilot なら — このボタンを1回押すだけです", genBtn, "top");
+    await showCalloutWait(1600);
     hideCallout(); hideHl();
     await vcClick(genBtn, 400);
-    await demoSleep(400);
+    await demoSleep(500);
   }
 
   const scrollEl = root.querySelector(".saas-main,[class*='spec-v2'],[class*='spec-sheet'],[class*='spec-wrap']") || root;
   const specArea = root.querySelector(".spec-v2,#spec-print-area,[class*='spec-v2']") || scrollEl;
+  demoScrollTo(specArea, "start");
+  await demoSleep(400);
   showHl(specArea);
   await vcMoveToEl(specArea, 0, -40, 450);
-  await showCalloutAt("A4規格書が完成しました — すべての情報が自動で入力されています", _vcX, _vcY - 30, "right");
+  await showCalloutAt("完成しました — 商品カルテのデータがすべて自動で入力されています", _vcX, _vcY - 30, "right");
   await showCalloutWait(2000);
   hideCallout(); hideHl();
 
   updateNarr(1);
-  // spec-v2-section-label（セクションヘッダー）と直後のテーブルを順にハイライト
-  const sectionMsgs = [
-    "商品の基本情報 — 商品カルテから自動引用されています",
-    "原材料・保存方法・アレルゲンも自動記入 — 手入力不要です",
-    "栄養成分表 — 計算式に基づき自動算出されています",
+
+  // セクションを順番にスクロールして確認
+  const sectionDefs = [
+    { sel: ".spec-v2-section-label,[class*='spec-section-label']", msgs: [
+      "① 商品基本情報 — 商品名・内容量・JANコード・製造者が自動入力されています",
+      "② 原材料・アレルゲン — 重量順に並び替え済み。アレルゲンは太字で自動強調",
+      "③ 栄養成分表 — 入力した原材料から自動で算出されています",
+      "④ 保存方法・製造者情報 — 商品カルテから転記ゼロで完成",
+    ]},
   ];
+
   const sectionLabels = Array.from(root.querySelectorAll(
     ".spec-v2-section-label,[class*='spec-section-label'],[class*='spec-v2-section']"
   ));
   const specTables = Array.from(root.querySelectorAll(
     ".spec-v2-table,[class*='spec-v2-table'],table"
   ));
-  const targets = sectionLabels.length > 0 ? sectionLabels : specTables;
-  for (let i = 0; i < Math.min(targets.length, 3); i++) {
+  const targets = sectionLabels.length >= 2 ? sectionLabels : specTables;
+
+  const allMsgs = [
+    "① 商品基本情報 — 商品カルテから自動引用。転記ミスはここで終わりです",
+    "② 原材料・アレルゲン — 重量順整列済み。アレルゲンは法的要件に従い自動強調",
+    "③ 栄養成分表 — 入力した原材料データから計算式で自動算出",
+    "④ 製造者情報・保存方法 — ここもすべて商品カルテから自動反映",
+  ];
+
+  for (let i = 0; i < Math.min(targets.length, 4); i++) {
     if (!demoMode) break;
     const el = targets[i];
     demoScrollTo(el, "center");
-    await demoSleep(500);
+    await demoSleep(600);
     showHl(el);
     await vcMoveToEl(el, 0, 0, 380);
-    await showCalloutOnEl(sectionMsgs[i] || "各セクションが自動で入力されています", el, "left");
-    await showCalloutWait(2000);
+    await showCalloutOnEl(allMsgs[i] || "各セクションが自動で入力されています", el, "left");
+    if (i === 1) updateNarr(2);
+    if (i === 2) updateNarr(3);
+    const waitMs = i === 0 ? 2200 : 2000;
+    await showCalloutWait(waitMs);
     hideCallout(); hideHl();
-    await demoSleep(200);
+    await demoSleep(300);
   }
 
-  updateNarr(2);
-  // 規格書全体をゆっくりスクロール — 量の多さを見せる
-  await vcSmoothScroll(scrollEl, scrollEl.scrollHeight - scrollEl.clientHeight, 4000);
-  await demoSleep(600);
-  await showCalloutAt("これだけの情報が — ボタン1つで完成しました", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
-  await showCalloutWait(1600);
+  updateNarr(4);
+  // 規格書全体をゆっくり最下部までスクロール — 量の多さを体感させる
+  await showCalloutAt("このあと最下部まで自動スクロールします — 情報の多さを確認してください", window.innerWidth / 2, window.innerHeight * 0.3, "bottom");
+  await showCalloutWait(1800);
   hideCallout();
-  await demoSleep(200);
-  await showCalloutAt("もしExcelで作っていたら — 担当者の丸1日が消えます", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+
+  await vcSmoothScroll(scrollEl, scrollEl.scrollHeight - scrollEl.clientHeight, 5000);
+  await demoSleep(800);
+
+  await showCalloutAt("これだけの情報が — ボタン1つで完成しました", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
   await showCalloutWait(1800);
   hideCallout();
   await demoSleep(200);
-  await showCalloutAt("FoodPilot なら — ワンクリック・数秒で完成します ✓", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+  await showCalloutAt("ExcelとWordで作っていたら — 担当者の半日以上が消えます。何品もあれば何日も", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
   await showCalloutWait(2200);
+  hideCallout();
+  await demoSleep(200);
+  await showCalloutAt("FoodPilot なら — ワンクリック・数秒。何品あっても同じです ✓", window.innerWidth / 2, window.innerHeight * 0.4, "bottom");
+  await showCalloutWait(2400);
   hideCallout();
   hideNarr();
 }
@@ -2417,8 +2439,27 @@ async function _demoAnim_ReleaseAnim() {
   await demoSleep(400);
   const finalEl = document.getElementById("dp-rel-final");
   if (finalEl) finalEl.style.opacity = "1";
-  await demoSleep(1200);
-  await showCalloutAt("ボタン1回で — 開発から管理まで、すべて自動でつながります。もう何も漏れません ✓", window.innerWidth / 2, window.innerHeight * 0.55, "top");
+  await demoSleep(1000);
+
+  // Develop → Manage の引き継ぎ演出
+  const transEl = document.createElement("div");
+  transEl.style.cssText = "margin-top:20px;padding:16px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:12px;text-align:center;opacity:0;transition:opacity .6s";
+  transEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:700;color:#818cf8">🧪 Develop（開発）</div>
+      <div style="font-size:18px;color:#60a5fa;font-weight:800">→</div>
+      <div style="font-size:13px;font-weight:700;color:#4ade80">📦 Manage（管理）</div>
+    </div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.6">
+      開発で入力したすべての情報が、そのまま商品管理へ引き継がれます。<br>
+      転記ゼロ・漏れゼロ — これがFoodPilotのコンセプトです。
+    </div>`;
+  document.querySelector("#dp-rel-overlay .dp-ai-card")?.appendChild(transEl);
+  await demoSleep(100);
+  transEl.style.opacity = "1";
+  await demoSleep(2200);
+
+  await showCalloutAt("ボタン1回で — 開発から管理まで全部つながります。転記ゼロ・情報漏れゼロ ✓", window.innerWidth / 2, window.innerHeight * 0.5, "top");
   await showCalloutWait(2600);
   hideCallout();
   overlay.style.transition = "opacity .5s"; overlay.style.opacity = "0";
@@ -2553,12 +2594,68 @@ function demoModuleSelectHtml() {
       <div class="demo-select-hero">
         <img src="./assets/app-icon.svg" alt="" class="demo-select-hero-icon" onerror="this.style.display='none'">
         <h2 class="demo-select-hero-title">FoodPilot デモ体験へようこそ</h2>
-        <p class="demo-select-hero-sub">貴社の状況に近いデモをお選びください。所要時間は約7〜8分です。</p>
+        <p class="demo-select-hero-sub">1商品の物語をリアルに体験してください。所要時間は約7〜8分です。</p>
       </div>
+      <div class="demo-select-lifecycle">
+        <span class="demo-select-lc-item demo-select-lc-dev">🧪 Develop<br><small>試作 → 比較 → 承認</small></span>
+        <span class="demo-select-lc-arrow">→</span>
+        <span class="demo-select-lc-item demo-select-lc-rel">🚀 発売</span>
+        <span class="demo-select-lc-arrow">→</span>
+        <span class="demo-select-lc-item demo-select-lc-mng">📦 Manage<br><small>カルテ → ラベル → 規格書</small></span>
+      </div>
+      <p class="demo-select-lifecycle-note">FoodPilot は「試作から終売まで」を1本の線でつなぎます</p>
       <div class="demo-select-cards">${cardsHtml}</div>
       <p class="demo-select-note">デモデータは本番データに一切影響しません。いつでも終了・再開できます。</p>
     </div>
   `);
+}
+
+async function showDemoIntroOverlay() {
+  const prev = document.getElementById("demo-intro-overlay");
+  if (prev) prev.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "demo-intro-overlay";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:9990;background:rgba(8,12,24,0.97);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .5s;";
+  const isDev = demoType === "develop";
+  overlay.innerHTML = `
+    <div style="max-width:720px;width:100%;padding:32px 20px;text-align:center">
+      <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#60a5fa;font-weight:700;margin-bottom:10px">FoodPilot で、こう変わります</div>
+      <div style="display:grid;grid-template-columns:1fr 40px 1fr;gap:12px;align-items:start;margin:20px 0 24px">
+        <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:18px 14px;text-align:left">
+          <div style="font-size:12px;font-weight:700;color:#f87171;margin-bottom:10px">❌ 今まで</div>
+          <div style="font-size:12px;color:#94a3b8;line-height:1.9">
+            📊 商品台帳をExcelで管理<br>
+            📧 規格書をメールで添付・送受信<br>
+            🏷️ Wordでラベルを手入力<br>
+            💬 試作状況をLINEで連絡<br>
+            📁 担当者ごとにファイルが散在<br>
+            🔍 「あの商品の原材料、どこだっけ？」
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;padding-top:36px;font-size:22px;color:#60a5fa">→</div>
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:12px;padding:18px 14px;text-align:left">
+          <div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:10px">✅ FoodPilot</div>
+          <div style="font-size:12px;color:#e2e8f0;line-height:1.9">
+            📸 写真1枚でAIが自動登録<br>
+            📄 ボタン1つで規格書が即完成<br>
+            🏷️ 食品表示法準拠ラベルを自動生成<br>
+            ✅ チームで承認・全記録が自動保存<br>
+            🗂️ 全情報が商品カルテに集約<br>
+            🤖 AIが発売前に表示ミスを検知
+          </div>
+        </div>
+      </div>
+      <div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:8px;letter-spacing:-.01em">
+        「なるほど、商品情報がすべてつながっているのか」
+      </div>
+      <div style="font-size:12px;color:#64748b">— ${isDev ? "試作から発売まで" : "登録から規格書まで"}、1商品の物語を体験してください</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => { overlay.style.opacity = "1"; });
+  await new Promise(r => setTimeout(r, 3800));
+  overlay.style.opacity = "0";
+  await new Promise(r => setTimeout(r, 500));
+  overlay.remove();
 }
 
 function startDemo() {
@@ -2629,7 +2726,11 @@ function startDemo() {
   requestAnimationFrame(() => {
     document.querySelectorAll(".saas-main,.saas-content").forEach(el => { el.scrollTop = 0; });
   });
-  setTimeout(demoPresAnimateStep, 600);
+  setTimeout(async () => {
+    if (!demoMode) return;
+    await showDemoIntroOverlay();
+    if (demoMode) demoPresAnimateStep();
+  }, 400);
 }
 
 function endDemo() {
@@ -2712,38 +2813,39 @@ function applyDemoStep() {
 }
 
 function demoEndHtml() {
-  const FEATURES = [
-    { icon: "📷", title: "AI 商品登録", desc: "写真1枚で原材料・栄養成分まで自動入力" },
-    { icon: "🗂️", title: "商品カルテ", desc: "1商品のすべての情報がひとつの画面に集約" },
-    { icon: "🏷️", title: "食品表示ラベル", desc: "食品表示法準拠のラベルをリアルタイム生成" },
-    { icon: "📄", title: "A4 規格書", desc: "ワンクリックで取引先向け規格書が自動完成" },
-    { icon: "🧪", title: "商品開発管理", desc: "試作・レシピ比較・採用から発売まで一元管理" },
-    { icon: "🤖", title: "AI レビュー", desc: "表示法違反・コスト改善をAIが自動チェック" },
-  ];
   return `
     <div class="demo-overlay demo-fullscreen demo-end-overlay" id="demo-overlay">
       <div class="demo-end-inner">
         <div class="demo-end-check-wrap" style="animation:demo-pop .5s ease-out"><div class="demo-end-check">✓</div></div>
         <h2 class="demo-end-title">デモ体験が完了しました</h2>
-        <p class="demo-end-subtitle">FoodPilot でできること</p>
-        <div class="demo-end-features">
-          ${FEATURES.map(f => `
-            <div class="demo-end-feature">
-              <span class="demo-end-feature-icon">${f.icon}</span>
-              <div>
-                <div class="demo-end-feature-title">${f.title}</div>
-                <div class="demo-end-feature-desc">${f.desc}</div>
-              </div>
-            </div>`).join("")}
+
+        <div class="demo-end-insight">
+          <p class="demo-end-insight-main">「なるほど。ExcelとメールとLINEに散らばっていた商品情報が、FoodPilotだと全部つながるんだ。」</p>
+          <p class="demo-end-insight-sub">商品が生まれてから終売するまで — すべての情報とプロセスが、ひとつの場所に。</p>
         </div>
-        <div class="demo-end-tagline">
-          <p class="demo-end-tagline-main">ExcelとLINEでバラバラだった商品情報を、ひとつに。</p>
-          <p class="demo-end-tagline-sub">FoodPilot は、商品の企画から終売まで、すべての情報とプロセスを一元管理します。</p>
+
+        <div class="demo-end-plan-row">
+          <div class="demo-end-plan-card">
+            <div class="demo-end-plan-free-badge">30日間 無料</div>
+            <div class="demo-end-plan-name">トライアルプラン</div>
+            <div class="demo-end-plan-desc">商品管理・商品開発・全機能を<br>商品数無制限でお試しいただけます</div>
+          </div>
+          <div class="demo-end-plan-card demo-end-plan-card--paid">
+            <div class="demo-end-plan-free-badge" style="background:rgba(99,102,241,.2);color:#818cf8">有料プラン</div>
+            <div class="demo-end-plan-name">¥9,800 〜 / 月</div>
+            <div class="demo-end-plan-desc">トライアル終了後もそのまま継続<br>3商品まで永久無料プランあり</div>
+          </div>
         </div>
+
         <div class="demo-end-cta-box">
-          <div class="demo-nav-row" style="margin-top:16px;justify-content:center;flex-wrap:wrap">
+          <div class="demo-nav-row" style="margin-top:8px;justify-content:center;flex-wrap:wrap;gap:12px">
             <button class="demo-btn-sec" data-action="demo-restart">← 別のデモを見る</button>
-            <button class="demo-btn-cta" data-action="demo-end">FoodPilotをはじめる →</button>
+            <button class="demo-btn-cta" data-action="demo-end">30日間 無料で試す →</button>
+          </div>
+          <div style="text-align:center;margin-top:14px">
+            <a href="mailto:info@foodpilot.jp" style="font-size:12px;color:#64748b;text-decoration:underline;cursor:pointer">
+              資料請求・導入相談はこちら（無料）
+            </a>
           </div>
         </div>
       </div>

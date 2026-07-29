@@ -1443,6 +1443,7 @@ async function showCascade(msgs) {
 
 function _demoCleanup() {
   vcHide(); hideCallout(); hideHl(); hideNarr(); hideBanner();
+  document.getElementById("demo-intro-overlay")?.remove();
   document.getElementById("dp-ai-overlay")?.remove();
   document.getElementById("dp-recipe-overlay")?.remove();
   document.getElementById("dp-ai-review-overlay")?.remove();
@@ -2615,47 +2616,52 @@ async function showDemoIntroOverlay() {
   if (prev) prev.remove();
   const overlay = document.createElement("div");
   overlay.id = "demo-intro-overlay";
-  overlay.style.cssText = "position:fixed;inset:0;z-index:9990;background:rgba(8,12,24,0.97);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .5s;";
+  // z-index を 8998 にして demo-topbar(9001)/dp-bottom(9000) は操作可能に保つ
+  overlay.style.cssText = "position:fixed;inset:52px 0 100px 0;z-index:8998;background:rgba(8,12,24,0.96);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s;cursor:pointer;";
   const isDev = demoType === "develop";
   overlay.innerHTML = `
-    <div style="max-width:720px;width:100%;padding:32px 20px;text-align:center">
-      <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#60a5fa;font-weight:700;margin-bottom:10px">FoodPilot で、こう変わります</div>
-      <div style="display:grid;grid-template-columns:1fr 40px 1fr;gap:12px;align-items:start;margin:20px 0 24px">
-        <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:18px 14px;text-align:left">
-          <div style="font-size:12px;font-weight:700;color:#f87171;margin-bottom:10px">❌ 今まで</div>
-          <div style="font-size:12px;color:#94a3b8;line-height:1.9">
+    <div style="max-width:680px;width:100%;padding:24px 20px;text-align:center;pointer-events:none">
+      <div style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#60a5fa;font-weight:700;margin-bottom:8px">FoodPilot で、こう変わります</div>
+      <div style="display:grid;grid-template-columns:1fr 32px 1fr;gap:10px;align-items:start;margin:14px 0 18px">
+        <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:14px 12px;text-align:left">
+          <div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:8px">❌ 今まで</div>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.85">
             📊 商品台帳をExcelで管理<br>
             📧 規格書をメールで添付・送受信<br>
             🏷️ Wordでラベルを手入力<br>
             💬 試作状況をLINEで連絡<br>
-            📁 担当者ごとにファイルが散在<br>
-            🔍 「あの商品の原材料、どこだっけ？」
+            📁 ファイルが担当者ごとに散在
           </div>
         </div>
-        <div style="display:flex;align-items:center;justify-content:center;padding-top:36px;font-size:22px;color:#60a5fa">→</div>
-        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:12px;padding:18px 14px;text-align:left">
-          <div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:10px">✅ FoodPilot</div>
-          <div style="font-size:12px;color:#e2e8f0;line-height:1.9">
+        <div style="display:flex;align-items:center;justify-content:center;padding-top:30px;font-size:20px;color:#60a5fa">→</div>
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:10px;padding:14px 12px;text-align:left">
+          <div style="font-size:11px;font-weight:700;color:#4ade80;margin-bottom:8px">✅ FoodPilot</div>
+          <div style="font-size:11px;color:#e2e8f0;line-height:1.85">
             📸 写真1枚でAIが自動登録<br>
             📄 ボタン1つで規格書が即完成<br>
             🏷️ 食品表示法準拠ラベルを自動生成<br>
             ✅ チームで承認・全記録が自動保存<br>
-            🗂️ 全情報が商品カルテに集約<br>
-            🤖 AIが発売前に表示ミスを検知
+            🗂️ 全情報が商品カルテに集約
           </div>
         </div>
       </div>
-      <div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:8px;letter-spacing:-.01em">
-        「なるほど、商品情報がすべてつながっているのか」
-      </div>
-      <div style="font-size:12px;color:#64748b">— ${isDev ? "試作から発売まで" : "登録から規格書まで"}、1商品の物語を体験してください</div>
+      <div style="font-size:13px;font-weight:800;color:#f8fafc;margin-bottom:6px">「商品情報がすべてつながっているのか」— を体験してください</div>
+      <div style="font-size:11px;color:#475569;margin-top:10px">画面をクリックするか、次へ → で進めます</div>
     </div>`;
   document.body.appendChild(overlay);
+  let dismissed = false;
+  const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
+    overlay.style.opacity = "0";
+    setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 400);
+  };
+  overlay.addEventListener("click", dismiss);
   requestAnimationFrame(() => { overlay.style.opacity = "1"; });
-  await new Promise(r => setTimeout(r, 3800));
-  overlay.style.opacity = "0";
-  await new Promise(r => setTimeout(r, 500));
-  overlay.remove();
+  // 2秒後に自動で消える
+  await new Promise(r => setTimeout(r, 2000));
+  dismiss();
+  await new Promise(r => setTimeout(r, 420));
 }
 
 function startDemo() {

@@ -2741,11 +2741,9 @@ function demoEndHtml() {
           <p class="demo-end-tagline-sub">FoodPilot は、商品の企画から終売まで、すべての情報とプロセスを一元管理します。</p>
         </div>
         <div class="demo-end-cta-box">
-          <p class="demo-end-cta-title">「うちでも使いたい」と思っていただけましたか？</p>
-          <p class="demo-end-cta-sub">まずは無料30分、貴社の課題をお聞かせください。導入サポートも充実しています。</p>
           <div class="demo-nav-row" style="margin-top:16px;justify-content:center;flex-wrap:wrap">
             <button class="demo-btn-sec" data-action="demo-restart">← 別のデモを見る</button>
-            <button class="demo-btn-cta" data-action="demo-contact">📞 導入を相談する（無料）</button>
+            <button class="demo-btn-cta" data-action="demo-end">FoodPilotをはじめる →</button>
           </div>
         </div>
       </div>

@@ -2830,28 +2830,36 @@ function demoEndHtml() {
           <p class="demo-end-insight-sub">商品が生まれてから終売するまで — すべての情報とプロセスが、ひとつの場所に。</p>
         </div>
 
-        <div class="demo-end-plan-row">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;text-align:center">あなたの会社に合ったプラン</div>
+
+        <div class="demo-end-plan-row demo-end-plan-row--3">
           <div class="demo-end-plan-card">
-            <div class="demo-end-plan-free-badge">30日間 無料</div>
-            <div class="demo-end-plan-name">トライアルプラン</div>
-            <div class="demo-end-plan-desc">商品管理・商品開発・全機能を<br>商品数無制限でお試しいただけます</div>
+            <div class="demo-end-plan-icon">📦</div>
+            <div class="demo-end-plan-name">Manage</div>
+            <div class="demo-end-plan-price">¥4,980 〜 / 月</div>
+            <div class="demo-end-plan-desc">商品管理を効率化<br><span style="color:#64748b;font-size:10px">豆腐屋・菓子店・小規模メーカー</span></div>
           </div>
-          <div class="demo-end-plan-card demo-end-plan-card--paid">
-            <div class="demo-end-plan-free-badge" style="background:rgba(99,102,241,.2);color:#818cf8">有料プラン</div>
-            <div class="demo-end-plan-name">¥9,800 〜 / 月</div>
-            <div class="demo-end-plan-desc">トライアル終了後もそのまま継続<br>3商品まで永久無料プランあり</div>
+          <div class="demo-end-plan-card demo-end-plan-card--dev">
+            <div class="demo-end-plan-icon">🧪</div>
+            <div class="demo-end-plan-name">Manage + Develop</div>
+            <div class="demo-end-plan-price">¥9,800 〜 / 月</div>
+            <div class="demo-end-plan-desc">商品開発から発売後まで<br><span style="color:#64748b;font-size:10px">OEM・製菓・開発部門がある企業</span></div>
+          </div>
+          <div class="demo-end-plan-card demo-end-plan-card--ent">
+            <div class="demo-end-plan-icon">🏢</div>
+            <div class="demo-end-plan-name">Enterprise</div>
+            <div class="demo-end-plan-price">¥19,800 〜 / 要相談</div>
+            <div class="demo-end-plan-desc">複数部署・大規模運用<br><span style="color:#64748b;font-size:10px">中堅〜大手食品メーカー</span></div>
           </div>
         </div>
 
         <div class="demo-end-cta-box">
-          <div class="demo-nav-row" style="margin-top:8px;justify-content:center;flex-wrap:wrap;gap:12px">
+          <div class="demo-nav-row" style="margin-top:0;justify-content:center;gap:12px;flex-wrap:wrap">
             <button class="demo-btn-sec" data-action="demo-restart">← 別のデモを見る</button>
             <button class="demo-btn-cta" data-action="demo-end">30日間 無料で試す →</button>
           </div>
-          <div style="text-align:center;margin-top:14px">
-            <a href="mailto:info@foodpilot.jp" style="font-size:12px;color:#64748b;text-decoration:underline;cursor:pointer">
-              資料請求・導入相談はこちら（無料）
-            </a>
+          <div style="text-align:center;margin-top:10px;font-size:11px;color:#64748b">
+            プランは無料体験後に選択できます
           </div>
         </div>
       </div>

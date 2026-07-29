@@ -5953,23 +5953,31 @@ body.fp-demo-active [class*='spec-body'] {
 .demo-end-insight-sub { font-size: 13px; color: #e2e8f0; margin: 0; line-height: 1.6; }
 
 .demo-end-plan-row {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%;
 }
-@media (max-width: 480px) { .demo-end-plan-row { grid-template-columns: 1fr; } }
+.demo-end-plan-row--3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 560px) { .demo-end-plan-row, .demo-end-plan-row--3 { grid-template-columns: 1fr; } }
 .demo-end-plan-card {
-  background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.25);
-  border-radius: 12px; padding: 16px;
+  background: rgba(34,197,94,.07); border: 1px solid rgba(34,197,94,.22);
+  border-radius: 12px; padding: 14px 12px; text-align: center;
 }
-.demo-end-plan-card--paid {
-  background: rgba(99,102,241,.08); border-color: rgba(99,102,241,.25);
+.demo-end-plan-card--dev {
+  background: rgba(99,102,241,.08); border-color: rgba(99,102,241,.3);
 }
+.demo-end-plan-card--ent {
+  background: rgba(245,158,11,.07); border-color: rgba(245,158,11,.25);
+}
+.demo-end-plan-icon { font-size: 22px; margin-bottom: 6px; }
+.demo-end-plan-name { font-size: 13px; font-weight: 800; color: #f1f5f9; margin-bottom: 4px; }
+.demo-end-plan-price { font-size: 12px; font-weight: 700; color: #4ade80; margin-bottom: 6px; }
+.demo-end-plan-card--dev .demo-end-plan-price { color: #818cf8; }
+.demo-end-plan-card--ent .demo-end-plan-price { color: #fbbf24; }
+.demo-end-plan-desc { font-size: 11px; color: #94a3b8; line-height: 1.6; }
 .demo-end-plan-free-badge {
   font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   background: rgba(34,197,94,.2); color: #4ade80; border-radius: 6px;
   padding: 3px 8px; display: inline-block; margin-bottom: 8px;
 }
-.demo-end-plan-name { font-size: 16px; font-weight: 800; color: #f1f5f9; margin-bottom: 6px; }
-.demo-end-plan-desc { font-size: 12px; color: #94a3b8; line-height: 1.6; }
 
 /* ── デモ選択：ライフサイクル図 ─────────────────────────────────────────── */
 .demo-select-lifecycle {

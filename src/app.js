@@ -2837,7 +2837,7 @@ function demoEndHtml() {
             <div class="demo-end-plan-icon">📦</div>
             <div class="demo-end-plan-name">Manage</div>
             <div class="demo-end-plan-price">¥4,980 〜 / 月</div>
-            <div class="demo-end-plan-desc">商品管理を効率化<br><span style="color:#64748b;font-size:10px">豆腐屋・菓子店・小規模メーカー</span></div>
+            <div class="demo-end-plan-desc">商品管理を効率化<br><span style="color:#64748b;font-size:10px">商品を仕入れ・製造して販売する会社</span></div>
           </div>
           <div class="demo-end-plan-card demo-end-plan-card--dev">
             <div class="demo-end-plan-icon">🧪</div>

@@ -2837,13 +2837,13 @@ function demoEndHtml() {
             <div class="demo-end-plan-icon">📦</div>
             <div class="demo-end-plan-name">Manage</div>
             <div class="demo-end-plan-price">¥4,980 〜 / 月</div>
-            <div class="demo-end-plan-desc">商品管理を効率化<br><span style="color:#64748b;font-size:10px">商品を仕入れ・製造して販売する会社</span></div>
+            <div class="demo-end-plan-desc">商品管理を効率化<br><span style="color:#64748b;font-size:10px">商品を仕入れて管理・販売する会社</span></div>
           </div>
           <div class="demo-end-plan-card demo-end-plan-card--dev">
             <div class="demo-end-plan-icon">🧪</div>
             <div class="demo-end-plan-name">Manage + Develop</div>
             <div class="demo-end-plan-price">¥9,800 〜 / 月</div>
-            <div class="demo-end-plan-desc">商品開発から発売後まで<br><span style="color:#64748b;font-size:10px">OEM・製菓・開発部門がある企業</span></div>
+            <div class="demo-end-plan-desc">商品開発から発売後まで<br><span style="color:#64748b;font-size:10px">自社で商品開発もする会社</span></div>
           </div>
           <div class="demo-end-plan-card demo-end-plan-card--ent">
             <div class="demo-end-plan-icon">🏢</div>

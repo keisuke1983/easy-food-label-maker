@@ -118,16 +118,23 @@ const SIZE_PRESETS = [
   { label: "自由サイズ", w: "90", h: "", margin: "3", fs: "7.5" },
 ];
 const PLANS = {
-  trial30: { label: "無料トライアル",    price: "無料（30日間）", limit: Infinity, note: "全機能・商品数無制限" },
-  free:    { label: "フリー",            price: "0円/月",         limit: 3,        note: "3商品まで永続無料" },
-  starter: { label: "スタンダード",      price: "1,980円/月",     limit: 10,       note: "10商品まで・全機能利用可" },
-  pro:     { label: "エキスパート",      price: "4,980円/月",     limit: Infinity, note: "商品数無制限・全機能利用可" },
-  // 旧モニタープラン（後方互換性のため残す）
-  trial:   { label: "お試し（モニター）", price: "無料",           limit: Infinity, note: "全機能無制限（モニター期間中）" },
+  trial30:  { label: "無料トライアル",       price: "無料（30日間）", limit: Infinity, note: "全機能・商品数無制限", modules: ["manage","develop"] },
+  free:     { label: "フリー",               price: "0円/月",         limit: 3,        note: "3商品まで永続無料",   modules: ["manage"] },
+  manage:   { label: "Manage",               price: "¥4,980〜/月",    limit: Infinity, note: "商品を仕入れて管理・販売する会社", modules: ["manage"] },
+  develop:  { label: "Manage + Develop",     price: "¥9,800〜/月",    limit: Infinity, note: "自社で商品開発もする会社", modules: ["manage","develop"] },
+  enterprise:{ label: "Enterprise",          price: "¥19,800〜/月",   limit: Infinity, note: "中堅〜大手食品メーカー", modules: ["manage","develop"] },
+  // 旧プラン（後方互換性のため残す）
+  starter:  { label: "Manage",               price: "¥4,980〜/月",    limit: Infinity, note: "商品を仕入れて管理・販売する会社", modules: ["manage"] },
+  pro:      { label: "Manage + Develop",     price: "¥9,800〜/月",    limit: Infinity, note: "自社で商品開発もする会社", modules: ["manage","develop"] },
+  trial:    { label: "お試し（モニター）",   price: "無料",           limit: Infinity, note: "全機能無制限（モニター期間中）", modules: ["manage","develop"] },
 };
 
 // Stripe Payment Links（Stripeダッシュボードで作成後にURLを差し替えてください）
 const STRIPE_LINKS = {
+  manage:     "https://buy.stripe.com/PLACEHOLDER_MANAGE",
+  develop:    "https://buy.stripe.com/PLACEHOLDER_DEVELOP",
+  enterprise: "https://buy.stripe.com/PLACEHOLDER_ENTERPRISE",
+  // 旧プランリンク（後方互換性）
   starter: "https://buy.stripe.com/PLACEHOLDER_STARTER",
   pro:     "https://buy.stripe.com/PLACEHOLDER_PRO",
 };

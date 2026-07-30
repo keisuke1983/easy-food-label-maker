@@ -3167,16 +3167,21 @@ function planHtml() {
     : "";
 
   // 有料プランカード（free・trial30 は除外）
-  const paidPlans = [["starter", PLANS.starter], ["pro", PLANS.pro]];
-  const paidCards = paidPlans.map(([id, p]) => {
-    const isActive = eff === id;
-    const isPopular = id === "pro";
+  const paidPlans = [
+    ["manage",      PLANS.manage,      "📦"],
+    ["develop",     PLANS.develop,     "🧪"],
+    ["enterprise",  PLANS.enterprise,  "🏢"],
+  ];
+  const effNorm = (eff === "starter") ? "manage" : (eff === "pro") ? "develop" : eff;
+  const paidCards = paidPlans.map(([id, p, ico]) => {
+    const isActive = effNorm === id;
+    const isPopular = id === "develop";
     const buyBtn = !isActive
-      ? `<button class="plan-buy-btn" data-action="stripe-checkout" data-plan="${id}">購入する →</button>`
+      ? `<button class="plan-buy-btn" data-action="stripe-checkout" data-plan="${id}">${id === "enterprise" ? "お問い合わせ →" : "購入する →"}</button>`
       : `<span class="plan-check">✓ 使用中</span>`;
     return `<div class="plan-card${isActive ? " selected" : ""}${isPopular ? " popular" : ""}">
       ${isPopular ? `<span class="popular-badge">人気</span>` : ""}
-      <strong class="plan-name">${p.label}</strong>
+      <strong class="plan-name">${ico} ${p.label}</strong>
       <em class="plan-price">${p.price}</em>
       <small class="plan-note">${p.note}</small>
       ${buyBtn}

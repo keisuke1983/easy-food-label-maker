@@ -3464,7 +3464,7 @@ function sidebarHtml() {
   const currentRole = teamMembers.find(m => m.name === currentUserName)?.role || "";
   const roleLabel = { admin: "管理者", editor: "編集者", reviewer: "確認者" }[currentRole] || "";
   const userChip = currentUserName
-    ? `<div class="sidebar-user-chip">👤 <span>${escapeHtml(currentUserName)}</span>${roleLabel ? `<span class="sidebar-user-role">${roleLabel}</span>` : ""}</div>`
+    ? `<div class="sidebar-user-chip clickable" data-nav="settings-nav">👤 <span>${escapeHtml(currentUserName)}</span>${roleLabel ? `<span class="sidebar-user-role">${roleLabel}</span>` : ""}</div>`
     : `<div class="sidebar-user-chip muted" data-nav="settings-nav">👤 ユーザーを設定する</div>`;
   return `<nav class="sidebar${sidebarOpen?" open":""}">
     <div class="sidebar-hd">
